@@ -1,5 +1,0 @@
-[tasks.nix]
-script = [
-    "cargo build",
-    "cp target/debug/red ~/bin"
-]
