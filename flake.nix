@@ -7,7 +7,6 @@
   in {
     devShells.${system}.default = pkgs.mkShell {
       packages = with pkgs; [
-
         clang-tools
         wayland-scanner
         pkg-config
@@ -16,6 +15,10 @@
         wayland
         wayland-protocols
       ];
+
+      shellHook = ''
+        pkg-config --cflags libdrm | tr ' ' '\n' > compile_flags.txt
+      '';
     };
   };
 }

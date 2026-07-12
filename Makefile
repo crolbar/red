@@ -18,7 +18,10 @@ xdg-shell-protocol.c: $(XDG_SHELL_XML)
 red: main.c xdg-shell-protocol.c xdg-shell-protocol.h
 	$(CC) $(CFLAGS) -o $@ main.c xdg-shell-protocol.c $(LDLIBS)
 
+drm: drm.c
+	$(CC) $(CFLAGS) -o drm drm.c $(LDLIBS)
+
 clean:
 	rm -f tinycompositor xdg-shell-protocol.c xdg-shell-protocol.h *.o
 
-.PHONY: all clean
+.PHONY: all clean drm
