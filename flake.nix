@@ -14,6 +14,7 @@
 
         libdrm
         libinput
+        seatd
         wayland
       ];
 

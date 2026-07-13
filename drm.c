@@ -1,7 +1,11 @@
 #include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+
+#include <linux/kd.h>
+#include <sys/ioctl.h>
 
 #include "input.c"
 
@@ -13,11 +17,57 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
+#include <libseat.h>
+#include <syslog.h>
+
+struct cdrm_data
+{
+    int active;
+    int drm_fd;
+    int tty_fd;
+};
+
+static void
+handle_enable(struct libseat* backend, void* data)
+{
+    (void)backend;
+    struct cdrm_data* cdrm_data = (struct cdrm_data*)data;
+    cdrm_data->active++;
+    openlog("red", LOG_PID, LOG_USER);
+    syslog(LOG_INFO, "running enable");
+
+    if (drmSetMaster(cdrm_data->drm_fd)) {
+        fprintf(stderr, "drmSetMaster failed: %s\n", strerror(errno));
+        syslog(LOG_INFO, "drmSetMaster failed: %s\n", strerror(errno));
+    }
+
+    closelog();
+}
+
+static void
+handle_disable(struct libseat* backend, void* data)
+{
+    openlog("red", LOG_PID, LOG_USER);
+    syslog(LOG_INFO, "running disable");
+    closelog();
+
+    (void)backend;
+    struct cdrm_data* cdrm_data = (struct cdrm_data*)data;
+    cdrm_data->active--;
+
+    drmDropMaster(cdrm_data->drm_fd);
+
+    libseat_disable_seat(backend);
+}
+
 int
 main(int argc, char** argv)
 {
     // libinput device
     struct libinput* li = init_input();
+
+    openlog("red", LOG_PID, LOG_USER);
+    syslog(LOG_INFO, "startnig");
 
     // drm device
     if (argc < 2) {
@@ -40,6 +90,40 @@ main(int argc, char** argv)
         }
         printf("Using Driver: %s\n", ver->name);
         drmFreeVersion(ver);
+    }
+
+    // libseat
+    struct libseat* ls;
+    struct cdrm_data data = { .active = 0, .drm_fd = fd };
+    struct libseat_seat_listener listener = {
+        .enable_seat = handle_enable,
+        .disable_seat = handle_disable,
+    };
+    {
+        libseat_set_log_level(LIBSEAT_LOG_LEVEL_DEBUG);
+
+        ls = libseat_open_seat(&listener, &data);
+        fprintf(stderr,
+                "libseat_open_seat(listener: %p, userdata: %p) = %p\n",
+                (void*)&listener,
+                (void*)&data,
+                (void*)ls);
+        if (ls == NULL) {
+            fprintf(
+              stderr, "libseat_open_seat() failed: %s\n", strerror(errno));
+            return -1;
+        }
+
+        while (data.active == 0) {
+            fprintf(stderr, "waiting for activation...\n");
+            if (libseat_dispatch(ls, -1) == -1) {
+                libseat_close_seat(ls);
+                fprintf(
+                  stderr, "libseat_dispatch() failed: %s\n", strerror(errno));
+                return -1;
+            }
+        }
+        fprintf(stderr, "active!\n");
     }
 
     int width;
@@ -139,22 +223,58 @@ main(int argc, char** argv)
         // memset(pixels, 0x33, size);
     }
 
-    if (drmModeSetCrtc(fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode)) {
-        fprintf(stderr, "failed set crtc\n");
-        return 1;
-    }
+    struct pollfd fds[2];
 
+    fds[0].fd = libinput_get_fd(li);
+    fds[0].events = POLLIN;
+
+    fds[1].fd = libseat_get_fd(ls);
+    fds[1].events = POLLIN;
+
+    int was_active = 0;
     int running = 1;
-    struct pollfd fds = { .fd = libinput_get_fd(li), .events = POLLIN };
     while (running) {
-        poll(&fds, 1, -1);
-        if (input_check_close(li)) {
-            running = 0;
+        if (data.active && !was_active) {
+            // just came back from disabled -> enabled
+            if (drmModeSetCrtc(fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode))
+                fprintf(stderr, "failed re-set crtc: %s\n", strerror(errno));
+
+            // setting back to xlate to detect ctrl+alt+f*. libseat is setting
+            // this to K_OFF disableing our keyboard
+            {
+                int tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+                if (tty_fd < 0) {
+                    perror("open");
+                }
+
+                if (ioctl(tty_fd, KDSKBMODE, K_XLATE) < 0) {
+                    perror("KDSKBMODE K_XLATE");
+                    return -1;
+                }
+            }
+        }
+        was_active = data.active;
+
+        poll(fds, 2, -1);
+
+        if (fds[1].revents & POLLIN) {
+            while (libseat_dispatch(ls, 0) > 0)
+                ;
+        }
+
+        if (fds[0].revents & POLLIN) {
+            if (input_check_close(li)) {
+                running = 0;
+            }
         }
     }
 
     printf("Closing section...\n");
 
+    close(fd);
     libinput_unref(li);
+    libseat_close_seat(ls);
+
+    closelog();
     return 0;
 }
