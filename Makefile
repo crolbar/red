@@ -1,7 +1,8 @@
 CC      ?= gcc
 CFLAGS  += -Wall -Wextra -Wno-unused-parameter -g \
-           $(shell pkg-config --cflags wayland-server libdrm)
-LDLIBS  += $(shell pkg-config --libs wayland-server libdrm)
+           $(shell pkg-config --cflags wayland-server libdrm libinput)
+LDLIBS  += -ludev \
+	$(shell pkg-config --libs wayland-server libdrm libinput)
 
 WAYLAND_PROTOCOLS_DIR = $(shell pkg-config --variable=pkgdatadir wayland-protocols)
 XDG_SHELL_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/xdg-shell/xdg-shell.xml

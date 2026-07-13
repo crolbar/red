@@ -3,7 +3,10 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "input.c"
+
 #include <drm.h>
+#include <libinput.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -11,9 +14,18 @@
 #include <xf86drmMode.h>
 
 int
-main()
+main(int argc, char** argv)
 {
-    int fd = open("/dev/dri/card1", O_RDWR | O_CLOEXEC);
+    // libinput device
+    struct libinput* li = init_input();
+
+    // drm device
+    if (argc < 2) {
+        printf("no gpu selected\n");
+        return 0;
+    }
+    int fd = open(argv[1], O_RDWR | O_CLOEXEC);
+    // int fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
     if (fd < 0) {
         perror("open");
         return 1;
@@ -105,42 +117,44 @@ main()
         }
     }
 
-    memset(pixels, 0x33, size);
+    // draw something
+    {
+        for (int i = 0; i < height; i++) {
+            uint8_t* row = pixels + i * pitch;
+
+            for (int j = 0; j < (int)pitch; j += 4) {
+                uint8_t* pixel = row + j;
+
+                pixel[2] = 0x66;
+                pixel[0] = 0x22;
+                pixel[1] = 0x22;
+                pixel[3] = 0;
+            }
+        }
+        for (int y = 0; y < height - 40; y++) {
+            for (int x = 0; x < width - 40; x++) {
+                memset(pixels + ((y + 20) * pitch) + ((x + 20) * 4), 0x23, 4);
+            }
+        }
+        // memset(pixels, 0x33, size);
+    }
 
     if (drmModeSetCrtc(fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode)) {
         fprintf(stderr, "failed set crtc\n");
         return 1;
     }
 
-    int b = true;
-    while (true) {
-        if (b) {
-            for (int i = 0; i < height; i++) {
-                uint8_t* row = pixels + i * pitch;
-
-                for (int j = 0; j < pitch; j += 4) {
-                    uint8_t* pixel = row + j;
-
-                    pixel[2] = 0x66;
-                    pixel[0] = 0x22;
-                    pixel[1] = 0x22;
-                    pixel[3] = 0;
-                }
-            }
-
-            for (int y = 0; y < height-40; y++) {
-                for (int x = 0; x < width-40; x++) {
-                    memset(pixels + ((y+20) * pitch) + ((x+20) * 4), 0x23, 4);
-                }
-            }
-            // memset(pixels, 0x28, size);
-        } else {
-            memset(pixels, 0x53, size);
+    int running = 1;
+    struct pollfd fds = { .fd = libinput_get_fd(li), .events = POLLIN };
+    while (running) {
+        poll(&fds, 1, -1);
+        if (input_check_close(li)) {
+            running = 0;
         }
-
-        // b = !b;
-        usleep(2000000*200);
     }
 
+    printf("Closing section...\n");
+
+    libinput_unref(li);
     return 0;
 }

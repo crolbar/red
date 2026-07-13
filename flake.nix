@@ -10,10 +10,11 @@
         clang-tools
         wayland-scanner
         pkg-config
+        wayland-protocols
 
         libdrm
+        libinput
         wayland
-        wayland-protocols
       ];
 
       shellHook = ''
