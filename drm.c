@@ -11,63 +11,185 @@
 
 #include <drm.h>
 #include <libinput.h>
+#include <linux/vt.h>
+#include <poll.h>
+#include <signal.h>
+#include <sys/signalfd.h>
+
+#include <syslog.h>
+
 #include <string.h>
 #include <sys/mman.h>
-#include <unistd.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
-#include <libseat.h>
-#include <syslog.h>
-
-struct cdrm_data
+int
+vt_set_mode(int fd, struct vt_mode mode)
 {
-    int active;
-    int drm_fd;
-    int tty_fd;
-};
-
-static void
-handle_enable(struct libseat* backend, void* data)
-{
-    (void)backend;
-    struct cdrm_data* cdrm_data = (struct cdrm_data*)data;
-    cdrm_data->active++;
-    openlog("red", LOG_PID, LOG_USER);
-    syslog(LOG_INFO, "running enable");
-
-    if (drmSetMaster(cdrm_data->drm_fd)) {
-        fprintf(stderr, "drmSetMaster failed: %s\n", strerror(errno));
-        syslog(LOG_INFO, "drmSetMaster failed: %s\n", strerror(errno));
+    if (ioctl(fd, VT_SETMODE, &mode) == -1) {
+        fprintf(stderr,
+                "failed setting vt mode for %s: %s\n",
+                mode.relsig != 0 ? "enable" : "disable",
+                strerror(errno));
+        return -1;
     }
-
-    closelog();
+    return 0;
 }
 
-static void
-handle_disable(struct libseat* backend, void* data)
+int
+vt_start(int fd)
 {
-    openlog("red", LOG_PID, LOG_USER);
-    syslog(LOG_INFO, "running disable");
-    closelog();
+    if (vt_set_mode(fd,
+                    (struct vt_mode){
+                      .mode = VT_PROCESS,
+                      .waitv = 0,
+                      .relsig = SIGUSR1,
+                      .acqsig = SIGUSR2,
+                      .frsig = 0,
+                    }) == -1) {
+        return -1;
+    };
 
-    (void)backend;
-    struct cdrm_data* cdrm_data = (struct cdrm_data*)data;
-    cdrm_data->active--;
+    if (ioctl(fd, KDSKBMODE, K_OFF) == -1) {
+        fprintf(
+          stderr, "failed settintg KD keyboard off: %s\n", strerror(errno));
+        return -1;
+    }
 
-    drmDropMaster(cdrm_data->drm_fd);
+    if (ioctl(fd, KDSETMODE, KD_GRAPHICS) == -1) {
+        fprintf(
+          stderr, "failed setting kd mode to graphics: %s", strerror(errno));
+        return -1;
+    }
 
-    libseat_disable_seat(backend);
+    return 0;
+}
+
+int
+vt_stop(int fd)
+{
+    if (vt_set_mode(fd,
+                    (struct vt_mode){
+                      .mode = VT_AUTO,
+                      .waitv = 0,
+                      .relsig = 0,
+                      .acqsig = 0,
+                      .frsig = 0,
+                    }) == -1) {
+        return -1;
+    };
+
+    if (ioctl(fd, KDSKBMODE, K_UNICODE) == -1) {
+        fprintf(
+          stderr, "failed settintg KD keyboard unicode: %s\n", strerror(errno));
+        return -1;
+    }
+
+    if (ioctl(fd, KDSETMODE, KD_TEXT) == -1) {
+        fprintf(stderr, "failed setting kd mode to text: %s", strerror(errno));
+        return -1;
+    }
+
+    return 0;
+}
+
+int
+init_signals()
+{
+    sigset_t mask;
+
+    sigemptyset(&mask);
+
+    // TODO: turn this off?
+    sigaddset(&mask, SIGUSR1);
+    sigaddset(&mask, SIGUSR2);
+    sigaddset(&mask, SIGINT);
+    sigaddset(&mask, SIGTERM);
+
+    if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1) {
+        perror("sigprocmask");
+        return -1;
+    }
+
+    int signal_fd = signalfd(-1, &mask, SFD_CLOEXEC);
+    if (signal_fd == -1) {
+        perror("signalfd");
+        return -1;
+    }
+
+    return signal_fd;
+}
+
+// TODO remove active
+int
+handle_signal(int sfd, int tty_fd, int drm_fd, int* active)
+{
+    struct signalfd_siginfo si;
+
+    ssize_t n = read(sfd, &si, sizeof(si));
+
+    if (n != sizeof(si)) {
+        perror("read signalfd");
+        return -1;
+    }
+
+    switch (si.ssi_signo) {
+        case SIGUSR1:
+
+            openlog("red", LOG_PID, LOG_USER);
+            syslog(LOG_INFO, "received release\n");
+            closelog();
+
+            drmDropMaster(drm_fd);
+            if (ioctl(tty_fd, VT_RELDISP, 1) == -1) {
+                // log_errorf("Could not ack VT release: %s", strerror(errno));
+                return -1;
+            }
+            *active = false;
+            break;
+
+        case SIGUSR2:
+            openlog("red", LOG_PID, LOG_USER);
+            syslog(LOG_INFO, "received aquire\n");
+            closelog();
+
+            drmSetMaster(drm_fd);
+            if (ioctl(tty_fd, VT_RELDISP, VT_ACKACQ) == -1) {
+                // log_errorf("Could not ack VT acquire: %s", strerror(errno));
+                return -1;
+            }
+            *active = true;
+            break;
+
+        case SIGINT:
+            printf("received SIGINT\n");
+            break;
+
+        case SIGTERM:
+            printf("received SIGTERM\n");
+            break;
+    }
+
+    return 0;
 }
 
 int
 main(int argc, char** argv)
 {
+    int signal_fd = init_signals();
+
+    int tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+    if (tty_fd < 0) {
+        perror("open tty:\n");
+        return -1;
+    }
+
+    if (vt_start(tty_fd) == -1) {
+        return 1;
+    }
+
     // libinput device
     struct libinput* li = init_input();
-
-    openlog("red", LOG_PID, LOG_USER);
-    syslog(LOG_INFO, "startnig");
 
     // drm device
     if (argc < 2) {
@@ -90,40 +212,6 @@ main(int argc, char** argv)
         }
         printf("Using Driver: %s\n", ver->name);
         drmFreeVersion(ver);
-    }
-
-    // libseat
-    struct libseat* ls;
-    struct cdrm_data data = { .active = 0, .drm_fd = fd };
-    struct libseat_seat_listener listener = {
-        .enable_seat = handle_enable,
-        .disable_seat = handle_disable,
-    };
-    {
-        libseat_set_log_level(LIBSEAT_LOG_LEVEL_DEBUG);
-
-        ls = libseat_open_seat(&listener, &data);
-        fprintf(stderr,
-                "libseat_open_seat(listener: %p, userdata: %p) = %p\n",
-                (void*)&listener,
-                (void*)&data,
-                (void*)ls);
-        if (ls == NULL) {
-            fprintf(
-              stderr, "libseat_open_seat() failed: %s\n", strerror(errno));
-            return -1;
-        }
-
-        while (data.active == 0) {
-            fprintf(stderr, "waiting for activation...\n");
-            if (libseat_dispatch(ls, -1) == -1) {
-                libseat_close_seat(ls);
-                fprintf(
-                  stderr, "libseat_dispatch() failed: %s\n", strerror(errno));
-                return -1;
-            }
-        }
-        fprintf(stderr, "active!\n");
     }
 
     int width;
@@ -223,58 +311,56 @@ main(int argc, char** argv)
         // memset(pixels, 0x33, size);
     }
 
+    if (drmModeSetCrtc(fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode))
+        fprintf(stderr, "failed set crtc: %s\n", strerror(errno));
+
     struct pollfd fds[2];
 
     fds[0].fd = libinput_get_fd(li);
     fds[0].events = POLLIN;
-
-    fds[1].fd = libseat_get_fd(ls);
+    fds[1].fd = signal_fd;
     fds[1].events = POLLIN;
 
-    int was_active = 0;
+    openlog("red", LOG_PID, LOG_USER);
+    syslog(LOG_INFO, "starting\n");
+    closelog();
+
     int running = 1;
+    int active = 1;
     while (running) {
-        if (data.active && !was_active) {
-            // just came back from disabled -> enabled
-            if (drmModeSetCrtc(fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode))
-                fprintf(stderr, "failed re-set crtc: %s\n", strerror(errno));
-
-            // setting back to xlate to detect ctrl+alt+f*. libseat is setting
-            // this to K_OFF disableing our keyboard
-            {
-                int tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
-                if (tty_fd < 0) {
-                    perror("open");
-                }
-
-                if (ioctl(tty_fd, KDSKBMODE, K_XLATE) < 0) {
-                    perror("KDSKBMODE K_XLATE");
-                    return -1;
-                }
-            }
-        }
-        was_active = data.active;
-
         poll(fds, 2, -1);
 
-        if (fds[1].revents & POLLIN) {
-            while (libseat_dispatch(ls, 0) > 0)
-                ;
+        if (fds[0].revents & POLLIN) {
+            if (input_check_close(li, tty_fd)) {
+                running = 0;
+            }
         }
 
-        if (fds[0].revents & POLLIN) {
-            if (input_check_close(li)) {
+        if (fds[1].revents & POLLIN) {
+            int prev_active = active;
+            if (handle_signal(signal_fd, tty_fd, fd, &active) == -1) {
                 running = 0;
+                return 1;
+            }
+
+            // redraw on aquire
+            if (active && prev_active != active) {
+                if (drmModeSetCrtc(
+                      fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode))
+                    fprintf(
+                      stderr, "failed re-set crtc: %s\n", strerror(errno));
             }
         }
     }
 
     printf("Closing section...\n");
 
-    close(fd);
-    libinput_unref(li);
-    libseat_close_seat(ls);
+    if (vt_stop(tty_fd) == -1) {
+        return 1;
+    }
 
-    closelog();
+    close(fd);
+    close(signal_fd);
+    libinput_unref(li);
     return 0;
 }

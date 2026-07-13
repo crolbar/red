@@ -1,6 +1,8 @@
 #include <fcntl.h>
 #include <libinput.h>
 #include <libudev.h>
+#include <linux/input.h>
+#include <linux/vt.h>
 #include <poll.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -42,7 +44,7 @@ init_input()
 };
 
 int
-input_check_close(struct libinput* li)
+input_check_close(struct libinput* li, int tty_fd)
 {
     struct libinput_event* event;
     libinput_dispatch(li);
@@ -63,6 +65,22 @@ input_check_close(struct libinput* li)
                 return 1;
             }
 
+            // TODO CTRL+ALT+FN
+            if (key == KEY_F1 && !press) {
+                if (ioctl(tty_fd, VT_ACTIVATE, 1) == -1) {
+                    return -1;
+                }
+            }
+            if (key == KEY_F2 && !press) {
+                if (ioctl(tty_fd, VT_ACTIVATE, 2) == -1) {
+                    return -1;
+                }
+            }
+            if (key == KEY_F3 && !press) {
+                if (ioctl(tty_fd, VT_ACTIVATE, 3) == -1) {
+                    return -1;
+                }
+            }
             // printf("key: %d (%d)\n", key, press);
         }
 
