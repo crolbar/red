@@ -1,4 +1,6 @@
+#include "drm.h"
 #include "log.h"
+#include <errno.h>
 #include <fcntl.h>
 #include <libinput.h>
 #include <libudev.h>
@@ -6,6 +8,7 @@
 #include <linux/vt.h>
 #include <poll.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 static int
@@ -38,19 +41,28 @@ init_input()
 
     udev = udev_new();
     li = libinput_udev_create_context(&li_interface, NULL, udev);
-    libinput_udev_assign_seat(li, "seat0");
-    libinput_dispatch(li);
+    if (!li) {
+        return NULL;
+    }
+    if (libinput_udev_assign_seat(li, "seat0") == -1) {
+        return NULL;
+    }
+    if (libinput_dispatch(li)) {
+        ROG_ERR("%s", strerror(errno));
+        return NULL;
+    }
 
     return li;
 };
 
 int
-input_check_close(struct libinput* li, int tty_fd)
+input_check_close(struct redstate* rs)
 {
     struct libinput_event* event;
-    libinput_dispatch(li);
-    while ((event = libinput_get_event(li)) != NULL) {
+    libinput_dispatch(rs->li);
+    int tty_fd = rs->tty_fd;
 
+    while ((event = libinput_get_event(rs->li)) != NULL) {
         enum libinput_event_type event_type = libinput_event_get_type(event);
 
         if (event_type == LIBINPUT_EVENT_KEYBOARD_KEY) {
@@ -86,7 +98,7 @@ input_check_close(struct libinput* li, int tty_fd)
         }
 
         libinput_event_destroy(event);
-        libinput_dispatch(li);
+        libinput_dispatch(rs->li);
     }
     return 0;
 }

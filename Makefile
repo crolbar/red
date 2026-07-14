@@ -20,7 +20,7 @@ red: main.c xdg-shell-protocol.c xdg-shell-protocol.h
 	$(CC) $(CFLAGS) -o $@ main.c xdg-shell-protocol.c $(LDLIBS)
 
 drm: drm.c
-	$(CC) $(CFLAGS) -o drm drm.c input.c log.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o drm drm.c input.c log.c signals.c vt.c $(LDLIBS)
 
 clean:
 	rm -f tinycompositor xdg-shell-protocol.c xdg-shell-protocol.h *.o

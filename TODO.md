@@ -1,4 +1,4 @@
 - [x]logging
-- [ ]refac signals (handles, signals.c...)
-- [ ]vt.c
-- [ ]state struct
+- [x]refac signals (handles, signals.c...)
+- [x]vt.c
+- [x]state struct
