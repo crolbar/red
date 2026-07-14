@@ -1,0 +1,4 @@
+- [ ]logging
+- [ ]refac signals (handles, signals.c...)
+- [ ]vt.c
+- [ ]state struct

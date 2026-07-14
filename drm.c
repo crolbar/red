@@ -100,7 +100,6 @@ init_signals()
 
     sigemptyset(&mask);
 
-    // TODO: turn this off?
     sigaddset(&mask, SIGUSR1);
     sigaddset(&mask, SIGUSR2);
     sigaddset(&mask, SIGINT);
@@ -125,7 +124,6 @@ int
 handle_signal(int sfd, int tty_fd, int drm_fd, int* active)
 {
     struct signalfd_siginfo si;
-
     ssize_t n = read(sfd, &si, sizeof(si));
 
     if (n != sizeof(si)) {
@@ -162,11 +160,15 @@ handle_signal(int sfd, int tty_fd, int drm_fd, int* active)
             break;
 
         case SIGINT:
-            printf("received SIGINT\n");
+            openlog("red", LOG_PID, LOG_USER);
+            syslog(LOG_INFO, "received SIGINT\n");
+            closelog();
             break;
 
         case SIGTERM:
-            printf("received SIGTERM\n");
+            openlog("red", LOG_PID, LOG_USER);
+            syslog(LOG_INFO, "received SIGTERM\n");
+            closelog();
             break;
     }
 
@@ -192,12 +194,7 @@ main(int argc, char** argv)
     struct libinput* li = init_input();
 
     // drm device
-    if (argc < 2) {
-        printf("no gpu selected\n");
-        return 0;
-    }
-    int fd = open(argv[1], O_RDWR | O_CLOEXEC);
-    // int fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+    int fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
     if (fd < 0) {
         perror("open");
         return 1;
@@ -314,51 +311,51 @@ main(int argc, char** argv)
     if (drmModeSetCrtc(fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode))
         fprintf(stderr, "failed set crtc: %s\n", strerror(errno));
 
-    struct pollfd fds[2];
+    // loop
+    {
+        struct pollfd fds[2];
 
-    fds[0].fd = libinput_get_fd(li);
-    fds[0].events = POLLIN;
-    fds[1].fd = signal_fd;
-    fds[1].events = POLLIN;
+        fds[0].fd = libinput_get_fd(li);
+        fds[0].events = POLLIN;
+        fds[1].fd = signal_fd;
+        fds[1].events = POLLIN;
 
-    openlog("red", LOG_PID, LOG_USER);
-    syslog(LOG_INFO, "starting\n");
-    closelog();
+        openlog("red", LOG_PID, LOG_USER);
+        syslog(LOG_INFO, "starting\n");
+        closelog();
 
-    int running = 1;
-    int active = 1;
-    while (running) {
-        poll(fds, 2, -1);
+        int running = 1;
+        int active = 1;
+        while (running) {
+            poll(fds, 2, -1);
 
-        if (fds[0].revents & POLLIN) {
-            if (input_check_close(li, tty_fd)) {
-                running = 0;
-            }
-        }
-
-        if (fds[1].revents & POLLIN) {
-            int prev_active = active;
-            if (handle_signal(signal_fd, tty_fd, fd, &active) == -1) {
-                running = 0;
-                return 1;
+            if (fds[0].revents & POLLIN) {
+                if (input_check_close(li, tty_fd)) {
+                    running = 0;
+                }
             }
 
-            // redraw on aquire
-            if (active && prev_active != active) {
-                if (drmModeSetCrtc(
-                      fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode))
-                    fprintf(
-                      stderr, "failed re-set crtc: %s\n", strerror(errno));
+            if (fds[1].revents & POLLIN) {
+                int prev_active = active;
+                if (handle_signal(signal_fd, tty_fd, fd, &active) == -1) {
+                    running = 0;
+                    return 1;
+                }
+
+                // redraw on aquire
+                if (active && prev_active != active) {
+                    if (drmModeSetCrtc(
+                          fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode))
+                        fprintf(
+                          stderr, "failed re-set crtc: %s\n", strerror(errno));
+                }
             }
         }
     }
 
     printf("Closing section...\n");
 
-    if (vt_stop(tty_fd) == -1) {
-        return 1;
-    }
-
+    vt_stop(tty_fd);
     close(fd);
     close(signal_fd);
     libinput_unref(li);
