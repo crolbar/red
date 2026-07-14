@@ -1,3 +1,4 @@
+#include <drm/drm_fourcc.h>
 #include <errno.h> // IWYU pragma: keep
 #include <libinput.h>
 #include <linux/kd.h>
@@ -11,12 +12,19 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
+#include <gbm.h>
+
 #include "drm.h"
 #include "input.h"
 #include "log.h"
 #include "signals.h"
 #include "vt.h"
 
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+#include <gbm.h>
 
 int
 main(int argc, char** argv)
@@ -137,83 +145,248 @@ main(int argc, char** argv)
         drmModeFreeResources(res);
     }
 
+    // gbm device
     {
-        if (drmModeCreateDumbBuffer(drm->fd,
-                                    drm->width,
-                                    drm->height,
-                                    32,
-                                    0,
-                                    &drm->handle,
-                                    &drm->pitch,
-                                    &drm->size) < 0) {
-            ROG_ERR("failed create dumb buffer");
+        drm->gbm_dev = gbm_create_device(drm->fd);
+        if (!drm->gbm_dev) {
+            ROG_ERR("failed to create gbm device");
             ret = 1;
             goto end;
         }
     }
+    ROG("created gbm device");
+
+    // gbm bo
+    {
+        drm->gbm_bo = gbm_bo_create(drm->gbm_dev,
+                                    drm->width,
+                                    drm->height,
+                                    GBM_FORMAT_XRGB8888,
+                                    GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
+        if (!drm->gbm_bo) {
+            ROG_ERR("failed to create bo");
+            ret = 1;
+            goto end;
+        }
+    }
+    ROG("created gbm bo");
+
+    // egl display
+    {
+        PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display =
+          (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress(
+            "eglGetPlatformDisplayEXT");
+
+        if (!get_platform_display) {
+            ROG_ERR("did not found proc address of getPlatformDisplay");
+            ret = 1;
+            goto end;
+        }
+
+        drm->egl_display =
+          get_platform_display(EGL_PLATFORM_GBM_KHR, drm->gbm_dev, NULL);
+        if (drm->egl_display == EGL_NO_DISPLAY) {
+            ROG_ERR("failed to get egl display: %x", eglGetError());
+            ret = 1;
+            goto end;
+        }
+
+        EGLint major, minor;
+        if (!eglInitialize(drm->egl_display, &major, &minor)) {
+            ROG_ERR("failed to init egl: %x", eglGetError());
+            ret = 1;
+            goto end;
+        }
+    }
+    ROG("created egl display");
+
+    // egl context
+    {
+        // TODO broken?
+        EGLint attrs[] = {
+            EGL_CONTEXT_MAJOR_VERSION,
+            2,
+            // EGL_CONTEXT_MINOR_VERSION,
+            // 2,
+            EGL_NONE,
+        };
+
+        drm->egl_context = eglCreateContext(
+          drm->egl_display, EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, attrs);
+        if (drm->egl_context == EGL_NO_CONTEXT) {
+            ROG_ERR("failed to create egl context: %x", eglGetError());
+            ret = 1;
+            goto end;
+        }
+
+        if (!eglMakeCurrent(drm->egl_display,
+                            EGL_NO_SURFACE,
+                            EGL_NO_SURFACE,
+                            drm->egl_context)) {
+            ROG_ERR("eglMakeCurrent failed: %x", eglGetError());
+            ret = 1;
+            goto end;
+        }
+
+        ROG("GL_VERSION: %s", glGetString(GL_VERSION));
+    }
+    ROG("created egl context");
+
+    // egl image
+    EGLImageKHR image;
+    {
+        int fd = gbm_bo_get_fd(drm->gbm_bo);
+        uint32_t stride = gbm_bo_get_stride(drm->gbm_bo);
+        uint32_t offset = gbm_bo_get_offset(drm->gbm_bo, 0);
+        uint64_t modifier = gbm_bo_get_modifier(drm->gbm_bo);
+        uint32_t width = gbm_bo_get_width(drm->gbm_bo);
+        uint32_t height = gbm_bo_get_height(drm->gbm_bo);
+        uint32_t format = gbm_bo_get_format(drm->gbm_bo);
+
+        ROG("creating image w: %d, h: %d", width, height);
+
+        // TODO modifiers
+        EGLint attribs[] = { EGL_WIDTH,
+                             width,
+                             EGL_HEIGHT,
+                             height,
+                             EGL_LINUX_DRM_FOURCC_EXT,
+                             format,
+                             EGL_DMA_BUF_PLANE0_FD_EXT,
+                             fd,
+                             EGL_DMA_BUF_PLANE0_OFFSET_EXT,
+                             offset,
+                             EGL_DMA_BUF_PLANE0_PITCH_EXT,
+                             stride,
+                             EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,
+                             (EGLint)(modifier & 0xFFFFFFFF),
+                             EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT,
+                             (EGLint)(modifier >> 32),
+                             EGL_NONE };
+
+        PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR =
+          (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
+
+        if (!eglCreateImageKHR) {
+            ROG_ERR("did not found proc address of eglCreateImageKHR");
+            ret = 1;
+            goto end;
+        }
+
+        image = eglCreateImageKHR(drm->egl_display,
+                                  EGL_NO_CONTEXT,
+                                  EGL_LINUX_DMA_BUF_EXT,
+                                  NULL,
+                                  attribs);
+        if (image == EGL_NO_IMAGE_KHR) {
+            ROG_ERR("failed to create egl image: %x", eglGetError());
+            ret = 1;
+            goto end;
+        }
+    }
+    ROG("created egl image");
+
+    // gl render buffer
+    GLuint renderbuffer;
+    {
+        glGenRenderbuffers(1, &renderbuffer);
+        glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+
+        PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC
+        glEGLImageTargetRenderbufferStorageOES =
+          (PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC)eglGetProcAddress(
+            "glEGLImageTargetRenderbufferStorageOES");
+
+        if (!glEGLImageTargetRenderbufferStorageOES) {
+            ROG_ERR("did not found proc address of "
+                    "glEGLImageTargetRenderbufferStorageOES");
+            ret = 1;
+            goto end;
+        }
+
+        glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER,
+                                               (GLeglImageOES)image);
+
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    }
+
+    // gl frame buffer
+    GLuint framebuffer;
+    {
+        glGenFramebuffers(1, &framebuffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+
+        glFramebufferRenderbuffer(
+          GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
+
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) !=
+            GL_FRAMEBUFFER_COMPLETE) {
+            GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            ROG_ERR("glCheckFramebufferStatus failed: %x, status: %x",
+                    glGetError(),
+                    status);
+            ret = 1;
+            goto end;
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+    ROG("created render && frame buffers")
+
+    // draw
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glViewport(0, 0, drm->width, drm->height);
+        glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glFinish();
+    }
 
     {
-        if (drmModeAddFB(drm->fd,
-                         drm->width,
-                         drm->height,
-                         24,
-                         32,
-                         drm->pitch,
-                         drm->handle,
-                         &drm->buf_id)) {
+        uint32_t handles[4] = { 0 };
+        uint32_t pitches[4] = { 0 };
+        uint32_t offsets[4] = { 0 };
+        // uint64_t modifiers[4] = { 0 };
+
+        handles[0] = gbm_bo_get_handle(drm->gbm_bo).u32;
+        pitches[0] = gbm_bo_get_stride(drm->gbm_bo);
+        offsets[0] = gbm_bo_get_offset(drm->gbm_bo, 0);
+        // modifiers[0] = gbm_bo_get_modifier(drm->gbm_bo);
+        uint32_t format = gbm_bo_get_format(drm->gbm_bo);
+
+        // TODO fix this modifiers
+        // if (drmModeAddFB2WithModifiers(
+        //       drm->fd,
+        //       drm->width,
+        //       drm->height,
+        //       format,
+        //       handles,
+        //       pitches,
+        //       offsets,
+        //       modifiers,
+        //       &drm->fb_id,
+        //       DRM_MODE_FB_MODIFIERS // flag telling the kernel modifiers[] is
+        //                             // valid
+        //       )) {
+        if (drmModeAddFB2(drm->fd,
+                          drm->width,
+                          drm->height,
+                          format,
+                          handles,
+                          pitches,
+                          offsets,
+                          &drm->fb_id,
+                          0)) {
             ROG_ERR("failed mode add fb");
             ret = 1;
             goto end;
         }
     }
 
-    if (drmModeMapDumbBuffer(drm->fd, drm->handle, &drm->offset)) {
-        ROG_ERR("failed map dumb buffer");
-        ret = 1;
-        goto end;
-    }
-
-    {
-        drm->pixels = mmap(0,
-                           drm->size,
-                           PROT_READ | PROT_WRITE,
-                           MAP_SHARED,
-                           drm->fd,
-                           drm->offset);
-        if (drm->pixels == MAP_FAILED) {
-            ROG_ERR("failed mmmap");
-            ret = 1;
-            goto end;
-        }
-    }
-
-    // draw something
-    {
-        for (int i = 0; i < drm->height; i++) {
-            uint8_t* row = drm->pixels + i * drm->pitch;
-
-            for (int j = 0; j < (int)drm->pitch; j += 4) {
-                uint8_t* pixel = row + j;
-
-                pixel[2] = 0x66;
-                pixel[0] = 0x22;
-                pixel[1] = 0x22;
-                pixel[3] = 0;
-            }
-        }
-        for (int y = 0; y < drm->height - 40; y++) {
-            for (int x = 0; x < drm->width - 40; x++) {
-                memset(drm->pixels + ((y + 20) * drm->pitch) + ((x + 20) * 4),
-                       0x23,
-                       4);
-            }
-        }
-        // memset(pixels, 0x33, size);
-    }
-
     if (drmModeSetCrtc(drm->fd,
                        drm->crtc_id,
-                       drm->buf_id,
+                       drm->fb_id,
                        0,
                        0,
                        &drm->conn_id,
@@ -265,7 +438,7 @@ main(int argc, char** argv)
                 if (rs->active && prev_active != rs->active) {
                     if (drmModeSetCrtc(drm->fd,
                                        drm->crtc_id,
-                                       drm->buf_id,
+                                       drm->fb_id,
                                        0,
                                        0,
                                        &drm->conn_id,

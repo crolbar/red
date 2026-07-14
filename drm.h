@@ -1,5 +1,6 @@
 #pragma once
 
+#include <EGL/egl.h>
 #include <stdint.h>
 #include <xf86drmMode.h>
 
@@ -13,15 +14,12 @@ struct drmstate
     uint32_t conn_id;
     drmModeModeInfo mode;
 
-    uint32_t handle;
-    uint32_t pitch;
-    uint64_t size;
+    struct gbm_device* gbm_dev;
+    struct gbm_bo* gbm_bo; // current front buffer object
 
-    uint32_t buf_id;
-
-    uint64_t offset;
-
-    uint8_t* pixels;
+    EGLDisplay egl_display;
+    EGLContext egl_context;
+    uint32_t fb_id; // replaces buf_id name if you like
 };
 
 struct redstate

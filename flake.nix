@@ -6,15 +6,18 @@
     pkgs = import inputs.nixpkgs {inherit system;};
   in {
     devShells.${system}.default = pkgs.mkShell {
-      packages = with pkgs; [
+      nativeBuildInputs = with pkgs; [
         clang-tools
         wayland-scanner
         pkg-config
         wayland-protocols
+      ];
 
+      buildInputs = with pkgs; [
+        libglvnd
+        libgbm
         libdrm
         libinput
-        seatd
         wayland
       ];
 
