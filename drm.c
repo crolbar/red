@@ -1,34 +1,26 @@
-#include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdint.h>
-#include <stdio.h>
-
-#include <linux/kd.h>
-#include <sys/ioctl.h>
-
-#include "input.c"
-
-#include <drm.h>
+#include <errno.h> // IWYU pragma: keep
 #include <libinput.h>
+#include <linux/kd.h>
 #include <linux/vt.h>
 #include <poll.h>
 #include <signal.h>
-#include <sys/signalfd.h>
-
-#include <syslog.h>
-
+#include <stdio.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/signalfd.h>
+#include <sys/stat.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+
+#include "input.h"
+#include "log.h"
 
 int
 vt_set_mode(int fd, struct vt_mode mode)
 {
     if (ioctl(fd, VT_SETMODE, &mode) == -1) {
-        fprintf(stderr,
-                "failed setting vt mode for %s: %s\n",
+        ROG_ERR("failed setting vt mode for %s: %s",
                 mode.relsig != 0 ? "enable" : "disable",
                 strerror(errno));
         return -1;
@@ -51,14 +43,12 @@ vt_start(int fd)
     };
 
     if (ioctl(fd, KDSKBMODE, K_OFF) == -1) {
-        fprintf(
-          stderr, "failed settintg KD keyboard off: %s\n", strerror(errno));
+        ROG_ERR("failed settintg kd keyboard to off: %s", strerror(errno));
         return -1;
     }
 
     if (ioctl(fd, KDSETMODE, KD_GRAPHICS) == -1) {
-        fprintf(
-          stderr, "failed setting kd mode to graphics: %s", strerror(errno));
+        ROG_ERR("failed setting kd mode to graphics: %s", strerror(errno));
         return -1;
     }
 
@@ -80,13 +70,12 @@ vt_stop(int fd)
     };
 
     if (ioctl(fd, KDSKBMODE, K_UNICODE) == -1) {
-        fprintf(
-          stderr, "failed settintg KD keyboard unicode: %s\n", strerror(errno));
+        ROG_ERR("failed settintg kd keyboard to unicode: %s", strerror(errno));
         return -1;
     }
 
     if (ioctl(fd, KDSETMODE, KD_TEXT) == -1) {
-        fprintf(stderr, "failed setting kd mode to text: %s", strerror(errno));
+        ROG_ERR("failed setting kd mode to text: %s", strerror(errno));
         return -1;
     }
 
@@ -106,13 +95,13 @@ init_signals()
     sigaddset(&mask, SIGTERM);
 
     if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1) {
-        perror("sigprocmask");
+        ROG_ERR("sigprocmask: %s", strerror(errno));
         return -1;
     }
 
     int signal_fd = signalfd(-1, &mask, SFD_CLOEXEC);
     if (signal_fd == -1) {
-        perror("signalfd");
+        ROG_ERR("signalfd: %s", strerror(errno));
         return -1;
     }
 
@@ -133,42 +122,41 @@ handle_signal(int sfd, int tty_fd, int drm_fd, int* active)
 
     switch (si.ssi_signo) {
         case SIGUSR1:
+            ROG_INFO("Releasing drm_master and vt_display");
 
-            openlog("red", LOG_PID, LOG_USER);
-            syslog(LOG_INFO, "received release\n");
-            closelog();
+            if (drmDropMaster(drm_fd) == -1) {
+                ROG_ERR("Could not drop master: %s", strerror(errno));
+                return -1;
+            }
 
-            drmDropMaster(drm_fd);
             if (ioctl(tty_fd, VT_RELDISP, 1) == -1) {
-                // log_errorf("Could not ack VT release: %s", strerror(errno));
+                ROG_ERR("Could not ack VT release: %s", strerror(errno));
                 return -1;
             }
             *active = false;
             break;
 
         case SIGUSR2:
-            openlog("red", LOG_PID, LOG_USER);
-            syslog(LOG_INFO, "received aquire\n");
-            closelog();
+            ROG_INFO("Acquiring drm_master and vt_display");
 
-            drmSetMaster(drm_fd);
+            if (drmSetMaster(drm_fd) == -1) {
+                ROG_ERR("Could not set master: %s", strerror(errno));
+                return -1;
+            }
+
             if (ioctl(tty_fd, VT_RELDISP, VT_ACKACQ) == -1) {
-                // log_errorf("Could not ack VT acquire: %s", strerror(errno));
+                ROG_ERR("Could not ack VT acquire: %s", strerror(errno));
                 return -1;
             }
             *active = true;
             break;
 
         case SIGINT:
-            openlog("red", LOG_PID, LOG_USER);
-            syslog(LOG_INFO, "received SIGINT\n");
-            closelog();
+            ROG_INFO("recived int");
             break;
 
         case SIGTERM:
-            openlog("red", LOG_PID, LOG_USER);
-            syslog(LOG_INFO, "received SIGTERM\n");
-            closelog();
+            ROG_INFO("recived term");
             break;
     }
 
@@ -178,36 +166,54 @@ handle_signal(int sfd, int tty_fd, int drm_fd, int* active)
 int
 main(int argc, char** argv)
 {
-    int signal_fd = init_signals();
+    ROG_INIT();
+    int ret = 0;
 
-    int tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+    int fd = -1; // drmfd
+    int tty_fd = -1;
+    struct libinput* li = NULL;
+    int signal_fd = -1;
+    int vt_enabled = 0;
+
+    signal_fd = init_signals();
+    if (signal_fd < 0) {
+        ret = -1;
+        goto end;
+    }
+
+    tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
     if (tty_fd < 0) {
-        perror("open tty:\n");
-        return -1;
+        ROG_ERR("open tty: %s", strerror(errno));
+        ret = 1;
+        goto end;
     }
 
     if (vt_start(tty_fd) == -1) {
-        return 1;
+        ret = 1;
+        goto end;
     }
+    vt_enabled = 1;
 
     // libinput device
-    struct libinput* li = init_input();
+    li = init_input();
 
     // drm device
-    int fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+    ROG_INFO("Opening /dev/dri/card0, first connected connector..");
+    fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
     if (fd < 0) {
         perror("open");
-        return 1;
+        ret = 1;
+        goto end;
     }
 
     {
         drmVersion* ver = drmGetVersion(fd);
         if (!ver) {
-            fprintf(stderr, "drmGetVersion failed\n");
-            close(fd);
-            return 1;
+            ROG_ERR("drmGetVersion failed");
+            ret = 1;
+            goto end;
         }
-        printf("Using Driver: %s\n", ver->name);
+        ROG_INFO("Using Driver: %s", ver->name);
         drmFreeVersion(ver);
     }
 
@@ -219,7 +225,8 @@ main(int argc, char** argv)
     {
         drmModeResPtr res = drmModeGetResources(fd);
         if (!res) {
-            return 1;
+            ret = 1;
+            goto end;
         }
 
         drmModeConnector* conn = NULL;
@@ -248,7 +255,7 @@ main(int argc, char** argv)
 
         width = conn->modes[0].hdisplay;
         height = conn->modes[0].vdisplay;
-        printf("Rendering at: %dx%d\n", width, height);
+        ROG_INFO("Rendering at: %dx%d", width, height);
         drmModeFreeConnector(conn);
         drmModeFreeResources(res);
     }
@@ -259,30 +266,34 @@ main(int argc, char** argv)
     {
         if (drmModeCreateDumbBuffer(
               fd, width, height, 32, 0, &handle, &pitch, &size) < 0) {
-            fprintf(stderr, "failed create dumb buffer\n");
-            return 1;
+            ROG_ERR("failed create dumb buffer");
+            ret = 1;
+            goto end;
         }
     }
 
     uint32_t buf_id;
     {
         if (drmModeAddFB(fd, width, height, 24, 32, pitch, handle, &buf_id)) {
-            fprintf(stderr, "failed mode add fb\n");
-            return 1;
+            ROG_ERR("failed mode add fb");
+            ret = 1;
+            goto end;
         }
     }
 
     uint64_t offset;
     if (drmModeMapDumbBuffer(fd, handle, &offset)) {
-        fprintf(stderr, "failed map dumb buffer\n");
-        return 1;
+        ROG_ERR("failed map dumb buffer");
+        ret = 1;
+        goto end;
     }
 
     uint8_t* pixels;
     {
         pixels = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, offset);
         if (pixels == MAP_FAILED) {
-            return 1;
+            ret = 1;
+            goto end;
         }
     }
 
@@ -309,7 +320,7 @@ main(int argc, char** argv)
     }
 
     if (drmModeSetCrtc(fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode))
-        fprintf(stderr, "failed set crtc: %s\n", strerror(errno));
+        ROG_ERR("failed set crtc: %s", strerror(errno));
 
     // loop
     {
@@ -320,9 +331,7 @@ main(int argc, char** argv)
         fds[1].fd = signal_fd;
         fds[1].events = POLLIN;
 
-        openlog("red", LOG_PID, LOG_USER);
-        syslog(LOG_INFO, "starting\n");
-        closelog();
+        ROG_INFO("Starting loop...");
 
         int running = 1;
         int active = 1;
@@ -338,26 +347,32 @@ main(int argc, char** argv)
             if (fds[1].revents & POLLIN) {
                 int prev_active = active;
                 if (handle_signal(signal_fd, tty_fd, fd, &active) == -1) {
-                    running = 0;
-                    return 1;
+                    ret = 1;
+                    goto end;
                 }
 
                 // redraw on aquire
                 if (active && prev_active != active) {
                     if (drmModeSetCrtc(
                           fd, crtc_id, buf_id, 0, 0, &conn_id, 1, &mode))
-                        fprintf(
-                          stderr, "failed re-set crtc: %s\n", strerror(errno));
+                        ROG_ERR("failed re-set crtc: %s", strerror(errno));
                 }
             }
         }
     }
 
-    printf("Closing section...\n");
+end:
+    ROG_WARN("Closing..");
 
-    vt_stop(tty_fd);
-    close(fd);
-    close(signal_fd);
-    libinput_unref(li);
-    return 0;
+    if (fd != -1)
+        close(fd);
+    if (tty_fd != -1 && vt_enabled)
+        vt_stop(tty_fd);
+    if (signal_fd != -1)
+        close(signal_fd);
+    if (li)
+        libinput_unref(li);
+
+    ROG_PRINT_CLOSE();
+    return ret;
 }

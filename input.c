@@ -1,3 +1,4 @@
+#include "log.h"
 #include <fcntl.h>
 #include <libinput.h>
 #include <libudev.h>
@@ -61,7 +62,7 @@ input_check_close(struct libinput* li, int tty_fd)
 
             // q
             if (key == 16 && !press) {
-                printf("q pressed. quiting..\n");
+                ROG_INFO("detected 'Q'");
                 return 1;
             }
 
@@ -81,7 +82,7 @@ input_check_close(struct libinput* li, int tty_fd)
                     return -1;
                 }
             }
-            // printf("key: %d (%d)\n", key, press);
+            // ROG("key: %d (%d)", key, press);
         }
 
         libinput_event_destroy(event);
