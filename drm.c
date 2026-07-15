@@ -1,34 +1,38 @@
 #include <drm/drm_fourcc.h>
 #include <errno.h> // IWYU pragma: keep
 #include <libinput.h>
-#include <linux/kd.h>
-#include <linux/vt.h>
 #include <poll.h>
 #include <string.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
 #include <sys/signalfd.h>
-#include <sys/stat.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
-#include <gbm.h>
-
 #include "config.h"
 #include "drm.h"
+#include "gbm.h"
 #include "input.h"
 #include "log.h"
+#include "render.h"
 #include "signals.h"
 #include "vt.h"
 
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
-#include <GLES3/gl32.h>
-#include <gbm.h>
-
 #define NO_VT
+
+static void
+page_flip_handler(int fd,
+                  unsigned int sequence,
+                  unsigned int tv_sec,
+                  unsigned int tv_usec,
+                  void* user_data)
+{
+    struct redstate* rs = user_data;
+    rs->drm->page_flip_ready = true;
+}
+
+static drmEventContext drmevctx = {
+    .version = DRM_EVENT_CONTEXT_VERSION,
+    .page_flip_handler = page_flip_handler,
+};
 
 int
 main(int argc, char** argv)
@@ -39,6 +43,7 @@ main(int argc, char** argv)
     struct drmstate* drm;
     drm = malloc(sizeof(*drm));
     drm->fd = -1;
+    drm->used_rb = 0;
 
     struct redstate* rs;
     rs = malloc(sizeof(*rs));
@@ -48,6 +53,9 @@ main(int argc, char** argv)
     rs->li = NULL;
     rs->active = 1;
     rs->should_quit = 0;
+    rs->drm->page_flip_ready = true;
+    rs->rect_x = 0.0;
+    rs->rect_y = 0.0;
 
     // signals
     {
@@ -60,6 +68,7 @@ main(int argc, char** argv)
     }
 
     // setup VT
+    // TODO: make init_vt
     int vt_enabled;
 #ifdef NO_VT
     if (false)
@@ -92,6 +101,7 @@ main(int argc, char** argv)
     }
 
     // drm device
+    // TODO: init_drm
     ROG_INFO("Opening %s, first connected connector..", cfg.dri_dev);
     {
         int fd = open(cfg.dri_dev, O_RDWR | O_CLOEXEC);
@@ -154,281 +164,55 @@ main(int argc, char** argv)
 
     // gbm device
     {
-        drm->gbm_dev = gbm_create_device(drm->fd);
+        drm->gbm_dev = init_gbm(drm->fd);
         if (!drm->gbm_dev) {
-            ROG_ERR("failed to create gbm device");
+            ret = 1;
+            goto end;
+        }
+
+        drm->glProc = init_gl_proc();
+        if (!drm->glProc) {
             ret = 1;
             goto end;
         }
     }
-    ROG("created gbm device");
 
-    // gbm bo
+    // egl display/context
     {
-        drm->gbm_bo = gbm_bo_create(drm->gbm_dev,
-                                    drm->width,
-                                    drm->height,
-                                    GBM_FORMAT_XRGB8888,
-                                    GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
-        if (!drm->gbm_bo) {
-            ROG_ERR("failed to create bo");
-            ret = 1;
-            goto end;
-        }
-
-        uint64_t modifier = gbm_bo_get_modifier(drm->gbm_bo);
-        if (!modifier) {
-            ROG_ERR("failed to bo get modifier");
-            ret = 1;
-            goto end;
-        }
-        drm->gbm_has_modifier = modifier != DRM_FORMAT_MOD_INVALID;
-    }
-    ROG("created gbm bo");
-
-    // egl display
-    {
-        PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display =
-          (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress(
-            "eglGetPlatformDisplayEXT");
-
-        if (!get_platform_display) {
-            ROG_ERR("did not found proc address of getPlatformDisplay");
-            ret = 1;
-            goto end;
-        }
-
-        drm->egl_display =
-          get_platform_display(EGL_PLATFORM_GBM_KHR, drm->gbm_dev, NULL);
-        if (drm->egl_display == EGL_NO_DISPLAY) {
-            ROG_ERR("failed to get egl display: %x", eglGetError());
-            ret = 1;
-            goto end;
-        }
-
-        EGLint major, minor;
-        if (!eglInitialize(drm->egl_display, &major, &minor)) {
-            ROG_ERR("failed to init egl: %x", eglGetError());
+        if (init_egl(drm)) {
             ret = 1;
             goto end;
         }
     }
-    ROG("created egl display");
 
-    // egl context
-    {
-        if (eglBindAPI(EGL_OPENGL_ES_API) == EGL_FALSE) {
-            ROG_ERR("failed to bind opengl es api: %x", eglGetError());
-            ret = 1;
-            goto end;
-        };
-
-        EGLint attrs[] = {
-            EGL_CONTEXT_MAJOR_VERSION,
-            3,
-            EGL_CONTEXT_MINOR_VERSION,
-            2,
-            EGL_NONE,
-        };
-
-        drm->egl_context = eglCreateContext(
-          drm->egl_display, EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, attrs);
-        if (drm->egl_context == EGL_NO_CONTEXT) {
-            ROG_ERR("failed to create egl context: %x", eglGetError());
-            ret = 1;
-            goto end;
-        }
-
-        if (!eglMakeCurrent(drm->egl_display,
-                            EGL_NO_SURFACE,
-                            EGL_NO_SURFACE,
-                            drm->egl_context)) {
-            ROG_ERR("eglMakeCurrent failed: %x", eglGetError());
-            ret = 1;
-            goto end;
-        }
-
-        ROG("GL_VERSION: %s", glGetString(GL_VERSION));
+    drm->rb0 = init_buffer(drm);
+    if (!drm->rb0) {
+        ret = 1;
+        goto end;
     }
-    ROG("created egl context");
-
-    // egl image
-    EGLImageKHR image;
-    {
-        int fd = gbm_bo_get_fd(drm->gbm_bo);
-        uint32_t stride = gbm_bo_get_stride(drm->gbm_bo);
-        uint32_t offset = gbm_bo_get_offset(drm->gbm_bo, 0);
-        uint64_t modifier = gbm_bo_get_modifier(drm->gbm_bo);
-        uint32_t width = gbm_bo_get_width(drm->gbm_bo);
-        uint32_t height = gbm_bo_get_height(drm->gbm_bo);
-        uint32_t format = gbm_bo_get_format(drm->gbm_bo);
-
-        ROG("creating egl image w: %d, h: %d", width, height);
-
-        int i = 0;
-        EGLint attribs[32];
-
-        {
-            attribs[i++] = EGL_WIDTH;
-            attribs[i++] = width;
-            attribs[i++] = EGL_HEIGHT;
-            attribs[i++] = height;
-            attribs[i++] = EGL_LINUX_DRM_FOURCC_EXT;
-            attribs[i++] = format;
-
-            attribs[i++] = EGL_DMA_BUF_PLANE0_FD_EXT;
-            attribs[i++] = fd;
-            attribs[i++] = EGL_DMA_BUF_PLANE0_OFFSET_EXT;
-            attribs[i++] = offset;
-            attribs[i++] = EGL_DMA_BUF_PLANE0_PITCH_EXT;
-            attribs[i++] = stride;
-
-            if (drm->gbm_has_modifier) {
-                attribs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT;
-                attribs[i++] = (EGLint)(modifier & 0xFFFFFFFF);
-                attribs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT;
-                attribs[i++] = (EGLint)(modifier >> 32);
-            }
-
-            attribs[i++] = EGL_NONE;
-        }
-
-        PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR =
-          (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
-
-        if (!eglCreateImageKHR) {
-            ROG_ERR("did not found proc address of eglCreateImageKHR");
-            ret = 1;
-            goto end;
-        }
-
-        image = eglCreateImageKHR(drm->egl_display,
-                                  EGL_NO_CONTEXT,
-                                  EGL_LINUX_DMA_BUF_EXT,
-                                  NULL,
-                                  attribs);
-        if (image == EGL_NO_IMAGE_KHR) {
-            ROG_ERR("failed to create egl image: %x", eglGetError());
-            ret = 1;
-            goto end;
-        }
+    drm->rb1 = init_buffer(drm);
+    if (!drm->rb1) {
+        ret = 1;
+        goto end;
     }
-    ROG("created egl image");
-
-    // gl render buffer
-    GLuint renderbuffer;
-    {
-        glGenRenderbuffers(1, &renderbuffer);
-        glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
-
-        PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC
-        glEGLImageTargetRenderbufferStorageOES =
-          (PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC)eglGetProcAddress(
-            "glEGLImageTargetRenderbufferStorageOES");
-
-        if (!glEGLImageTargetRenderbufferStorageOES) {
-            ROG_ERR("did not found proc address of "
-                    "glEGLImageTargetRenderbufferStorageOES");
-            ret = 1;
-            goto end;
-        }
-
-        glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER,
-                                               (GLeglImageOES)image);
-
-        glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    }
-
-    // gl frame buffer
-    GLuint framebuffer;
-    {
-        glGenFramebuffers(1, &framebuffer);
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-
-        glFramebufferRenderbuffer(
-          GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
-
-        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) !=
-            GL_FRAMEBUFFER_COMPLETE) {
-            GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-            ROG_ERR("glCheckFramebufferStatus failed: %x, status: %x",
-                    glGetError(),
-                    status);
-            ret = 1;
-            goto end;
-        }
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
-    ROG("created render && frame buffers")
-
-    // draw
-    {
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-        glViewport(0, 0, drm->width, drm->height);
-        glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glFinish();
-    }
-
-    {
-        uint32_t handles[4] = { 0 };
-        uint32_t pitches[4] = { 0 };
-        uint32_t offsets[4] = { 0 };
-        uint64_t modifiers[4] = { 0 };
-
-        handles[0] = gbm_bo_get_handle(drm->gbm_bo).u32;
-        pitches[0] = gbm_bo_get_stride(drm->gbm_bo);
-        offsets[0] = gbm_bo_get_offset(drm->gbm_bo, 0);
-        modifiers[0] = gbm_bo_get_modifier(drm->gbm_bo);
-        uint32_t format = gbm_bo_get_format(drm->gbm_bo);
-
-        if (drm->gbm_has_modifier) {
-            if (drmModeAddFB2WithModifiers(drm->fd,
-                                           drm->width,
-                                           drm->height,
-                                           format,
-                                           handles,
-                                           pitches,
-                                           offsets,
-                                           modifiers,
-                                           &drm->fb_id,
-                                           DRM_MODE_FB_MODIFIERS)) {
-                ROG_ERR("failed mode add fb");
-                ret = 1;
-                goto end;
-            }
-        } else {
-            if (drmModeAddFB2(drm->fd,
-                              drm->width,
-                              drm->height,
-                              format,
-                              handles,
-                              pitches,
-                              offsets,
-                              &drm->fb_id,
-                              0)) {
-                ROG_ERR("failed mode add fb");
-                ret = 1;
-                goto end;
-            }
-        }
-    }
-
-    if (drmModeSetCrtc(drm->fd,
-                       drm->crtc_id,
-                       drm->fb_id,
-                       0,
-                       0,
-                       &drm->conn_id,
-                       1,
-                       &drm->mode))
-        ROG_ERR("failed set crtc: %s", strerror(errno));
 
     // loop
     {
-        struct pollfd fds[2];
+        {
+            int pipefd[2];
+
+            if (pipe(pipefd) == -1) {
+                ROG_ERR("failed to create pipe: %s", strerror(errno));
+                ret = 1;
+                goto end;
+            }
+
+            rs->rrender_fd = pipefd[0];
+            rs->wrender_fd = pipefd[1];
+        }
+        render_triggerI(rs->wrender_fd);
+
+        struct pollfd fds[4];
 
         int li_fd = libinput_get_fd(rs->li);
         if (li_fd < 0) {
@@ -440,11 +224,15 @@ main(int argc, char** argv)
         fds[0].events = POLLIN;
         fds[1].fd = rs->sig_fd;
         fds[1].events = POLLIN;
+        fds[2].fd = rs->rrender_fd;
+        fds[2].events = POLLIN;
+        fds[3].fd = drm->fd;
+        fds[3].events = POLLIN;
 
         ROG_INFO("Starting loop...");
 
         while (!rs->should_quit) {
-            if (poll(fds, 2, -1) == -1) {
+            if (poll(fds, 4, -1) == -1) {
                 ROG_ERR("poll fds error");
                 ret = 1;
                 goto end;
@@ -468,15 +256,62 @@ main(int argc, char** argv)
 
                 // redraw on aquire
                 if (rs->active && prev_active != rs->active) {
+                    render_triggerI(rs->wrender_fd);
                     if (drmModeSetCrtc(drm->fd,
                                        drm->crtc_id,
-                                       drm->fb_id,
+                                       (drm->used_rb) ? drm->rb1->buf_id
+                                                      : drm->rb0->buf_id,
                                        0,
                                        0,
                                        &drm->conn_id,
                                        1,
                                        &drm->mode))
                         ROG_ERR("failed re-set crtc: %s", strerror(errno));
+                }
+            }
+
+            if (fds[3].revents & POLLIN) {
+                drmHandleEvent(drm->fd, &drmevctx);
+            }
+
+            // render
+            if (fds[2].revents & POLLIN) {
+                // TODO better
+                if (!rs->drm->page_flip_ready)
+                    continue;
+
+                int r = should_render_trigger(rs->rrender_fd);
+                if (!r) {
+                    continue;
+                }
+
+                redbuffer* rb = get_buffer(drm);
+                // ROG("rendering to buf %d, %d", rs->drm->used_rb, r)
+
+                render_frame(rs, rb);
+
+                if (r == RENDER_TRIGGER_FLIP) {
+                    rs->drm->page_flip_ready = false;
+                    if (drmModePageFlip(drm->fd,
+                                        drm->crtc_id,
+                                        rb->buf_id,
+                                        DRM_MODE_PAGE_FLIP_EVENT,
+                                        rs)) {
+                        ROG_ERR("page flip failed: %s", strerror(errno));
+                        ret = 1;
+                        goto end;
+                    }
+
+                } else if (r == RENDER_TRIGGER_INIT) {
+                    if (drmModeSetCrtc(drm->fd,
+                                       drm->crtc_id,
+                                       rb->buf_id,
+                                       0,
+                                       0,
+                                       &drm->conn_id,
+                                       1,
+                                       &drm->mode))
+                        ROG_ERR("failed set crtc: %s", strerror(errno));
                 }
             }
         }

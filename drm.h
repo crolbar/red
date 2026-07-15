@@ -1,8 +1,27 @@
 #pragma once
 
 #include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 #include <stdint.h>
 #include <xf86drmMode.h>
+
+typedef struct redbuffer
+{
+    uint32_t buf_id;
+    struct gbm_bo* gbm_bo;
+    EGLImageKHR egl_image;
+    GLuint rbo, fbo;
+} redbuffer;
+
+struct glProc
+{
+    PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
+    PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR;
+    PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC
+      glEGLImageTargetRenderbufferStorageOES;
+};
 
 struct drmstate
 {
@@ -14,13 +33,18 @@ struct drmstate
     uint32_t conn_id;
     drmModeModeInfo mode;
 
-    struct gbm_device* gbm_dev;
-    struct gbm_bo* gbm_bo; // current front buffer object
-    bool gbm_has_modifier;
+    struct glProc* glProc;
 
+    struct gbm_device* gbm_dev;
+    struct redbuffer* rb0;
+    struct redbuffer* rb1;
+    int used_rb; // indicates which buffer is displayed
+
+    bool page_flip_ready; // are we ready to render next frame
+
+    bool gbm_has_modifier;
     EGLDisplay egl_display;
     EGLContext egl_context;
-    uint32_t fb_id; // replaces buf_id name if you like
 };
 
 struct redstate
@@ -30,7 +54,13 @@ struct redstate
     int tty_fd;
     int sig_fd;
 
+    int rrender_fd; // read 1, and trigger render
+    int wrender_fd; // write 1, to trigger render
+
     int active; // VT is active
 
     int should_quit;
+
+    double rect_x;
+    double rect_y;
 };

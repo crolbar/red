@@ -1,15 +1,13 @@
 #include "drm.h"
 #include "log.h"
+#include "render.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <libinput.h>
-#include <libudev.h>
 #include <linux/input.h>
 #include <linux/vt.h>
-#include <poll.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 
 static int
 li_open_restricted(const char* path, int flags, void* user_data)
@@ -72,10 +70,13 @@ input_check_close(struct redstate* rs)
             uint32_t key = libinput_event_keyboard_get_key(kbe);
             int press = libinput_event_keyboard_get_key_state(kbe);
 
-            // q
-            if (key == 16 && !press) {
+            if (key == KEY_Q && !press) {
                 ROG_INFO("detected 'Q'");
                 return 1;
+            }
+
+            if (key == KEY_R && !press) {
+                render_trigger(rs->wrender_fd);
             }
 
             // TODO CTRL+ALT+FN
@@ -95,6 +96,29 @@ input_check_close(struct redstate* rs)
                 }
             }
             // ROG("key: %d (%d)", key, press);
+        }
+
+        if (event_type == LIBINPUT_EVENT_POINTER_MOTION) {
+            struct libinput_event_pointer* me =
+              libinput_event_get_pointer_event(event);
+
+            double dx = libinput_event_pointer_get_dx_unaccelerated(me);
+            double dy = libinput_event_pointer_get_dy_unaccelerated(me);
+
+            rs->rect_x += dx * 0.4;
+            rs->rect_y += dy * 0.4;
+
+            if (rs->rect_x > rs->drm->width)
+                rs->rect_x = rs->drm->width;
+            if (rs->rect_x < 0)
+                rs->rect_x = 0;
+
+            if (rs->rect_y > rs->drm->height)
+                rs->rect_y = rs->drm->height;
+            if (rs->rect_y < 0)
+                rs->rect_y = 0;
+
+            render_trigger(rs->wrender_fd);
         }
 
         libinput_event_destroy(event);
