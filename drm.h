@@ -16,6 +16,7 @@ struct drmstate
 
     struct gbm_device* gbm_dev;
     struct gbm_bo* gbm_bo; // current front buffer object
+    bool gbm_has_modifier;
 
     EGLDisplay egl_display;
     EGLContext egl_context;

@@ -14,6 +14,7 @@
 
 #include <gbm.h>
 
+#include "config.h"
 #include "drm.h"
 #include "input.h"
 #include "log.h"
@@ -24,7 +25,10 @@
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <GLES3/gl32.h>
 #include <gbm.h>
+
+#define NO_VT
 
 int
 main(int argc, char** argv)
@@ -57,6 +61,9 @@ main(int argc, char** argv)
 
     // setup VT
     int vt_enabled;
+#ifdef NO_VT
+    if (false)
+#endif
     {
         int tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
         if (tty_fd < 0) {
@@ -85,9 +92,9 @@ main(int argc, char** argv)
     }
 
     // drm device
-    ROG_INFO("Opening /dev/dri/card0, first connected connector..");
+    ROG_INFO("Opening %s, first connected connector..", cfg.dri_dev);
     {
-        int fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+        int fd = open(cfg.dri_dev, O_RDWR | O_CLOEXEC);
         if (fd < 0) {
             ROG_ERR("failed oppening drm device: %s", strerror(errno));
             ret = 1;
@@ -168,6 +175,14 @@ main(int argc, char** argv)
             ret = 1;
             goto end;
         }
+
+        uint64_t modifier = gbm_bo_get_modifier(drm->gbm_bo);
+        if (!modifier) {
+            ROG_ERR("failed to bo get modifier");
+            ret = 1;
+            goto end;
+        }
+        drm->gbm_has_modifier = modifier != DRM_FORMAT_MOD_INVALID;
     }
     ROG("created gbm bo");
 
@@ -202,12 +217,17 @@ main(int argc, char** argv)
 
     // egl context
     {
-        // TODO broken?
+        if (eglBindAPI(EGL_OPENGL_ES_API) == EGL_FALSE) {
+            ROG_ERR("failed to bind opengl es api: %x", eglGetError());
+            ret = 1;
+            goto end;
+        };
+
         EGLint attrs[] = {
             EGL_CONTEXT_MAJOR_VERSION,
+            3,
+            EGL_CONTEXT_MINOR_VERSION,
             2,
-            // EGL_CONTEXT_MINOR_VERSION,
-            // 2,
             EGL_NONE,
         };
 
@@ -243,26 +263,35 @@ main(int argc, char** argv)
         uint32_t height = gbm_bo_get_height(drm->gbm_bo);
         uint32_t format = gbm_bo_get_format(drm->gbm_bo);
 
-        ROG("creating image w: %d, h: %d", width, height);
+        ROG("creating egl image w: %d, h: %d", width, height);
 
-        // TODO modifiers
-        EGLint attribs[] = { EGL_WIDTH,
-                             width,
-                             EGL_HEIGHT,
-                             height,
-                             EGL_LINUX_DRM_FOURCC_EXT,
-                             format,
-                             EGL_DMA_BUF_PLANE0_FD_EXT,
-                             fd,
-                             EGL_DMA_BUF_PLANE0_OFFSET_EXT,
-                             offset,
-                             EGL_DMA_BUF_PLANE0_PITCH_EXT,
-                             stride,
-                             EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,
-                             (EGLint)(modifier & 0xFFFFFFFF),
-                             EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT,
-                             (EGLint)(modifier >> 32),
-                             EGL_NONE };
+        int i = 0;
+        EGLint attribs[32];
+
+        {
+            attribs[i++] = EGL_WIDTH;
+            attribs[i++] = width;
+            attribs[i++] = EGL_HEIGHT;
+            attribs[i++] = height;
+            attribs[i++] = EGL_LINUX_DRM_FOURCC_EXT;
+            attribs[i++] = format;
+
+            attribs[i++] = EGL_DMA_BUF_PLANE0_FD_EXT;
+            attribs[i++] = fd;
+            attribs[i++] = EGL_DMA_BUF_PLANE0_OFFSET_EXT;
+            attribs[i++] = offset;
+            attribs[i++] = EGL_DMA_BUF_PLANE0_PITCH_EXT;
+            attribs[i++] = stride;
+
+            if (drm->gbm_has_modifier) {
+                attribs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT;
+                attribs[i++] = (EGLint)(modifier & 0xFFFFFFFF);
+                attribs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT;
+                attribs[i++] = (EGLint)(modifier >> 32);
+            }
+
+            attribs[i++] = EGL_NONE;
+        }
 
         PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR =
           (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
@@ -347,40 +376,43 @@ main(int argc, char** argv)
         uint32_t handles[4] = { 0 };
         uint32_t pitches[4] = { 0 };
         uint32_t offsets[4] = { 0 };
-        // uint64_t modifiers[4] = { 0 };
+        uint64_t modifiers[4] = { 0 };
 
         handles[0] = gbm_bo_get_handle(drm->gbm_bo).u32;
         pitches[0] = gbm_bo_get_stride(drm->gbm_bo);
         offsets[0] = gbm_bo_get_offset(drm->gbm_bo, 0);
-        // modifiers[0] = gbm_bo_get_modifier(drm->gbm_bo);
+        modifiers[0] = gbm_bo_get_modifier(drm->gbm_bo);
         uint32_t format = gbm_bo_get_format(drm->gbm_bo);
 
-        // TODO fix this modifiers
-        // if (drmModeAddFB2WithModifiers(
-        //       drm->fd,
-        //       drm->width,
-        //       drm->height,
-        //       format,
-        //       handles,
-        //       pitches,
-        //       offsets,
-        //       modifiers,
-        //       &drm->fb_id,
-        //       DRM_MODE_FB_MODIFIERS // flag telling the kernel modifiers[] is
-        //                             // valid
-        //       )) {
-        if (drmModeAddFB2(drm->fd,
-                          drm->width,
-                          drm->height,
-                          format,
-                          handles,
-                          pitches,
-                          offsets,
-                          &drm->fb_id,
-                          0)) {
-            ROG_ERR("failed mode add fb");
-            ret = 1;
-            goto end;
+        if (drm->gbm_has_modifier) {
+            if (drmModeAddFB2WithModifiers(drm->fd,
+                                           drm->width,
+                                           drm->height,
+                                           format,
+                                           handles,
+                                           pitches,
+                                           offsets,
+                                           modifiers,
+                                           &drm->fb_id,
+                                           DRM_MODE_FB_MODIFIERS)) {
+                ROG_ERR("failed mode add fb");
+                ret = 1;
+                goto end;
+            }
+        } else {
+            if (drmModeAddFB2(drm->fd,
+                              drm->width,
+                              drm->height,
+                              format,
+                              handles,
+                              pitches,
+                              offsets,
+                              &drm->fb_id,
+                              0)) {
+                ROG_ERR("failed mode add fb");
+                ret = 1;
+                goto end;
+            }
         }
     }
 
@@ -456,8 +488,11 @@ end:
     if (rs->drm->fd != -1)
         close(rs->drm->fd);
 
-    if (rs->tty_fd != -1 && vt_enabled)
-        vt_stop(rs->tty_fd);
+#ifdef NO_VT
+    if (false)
+#endif
+        if (rs->tty_fd != -1 && vt_enabled)
+            vt_stop(rs->tty_fd);
 
     if (rs->sig_fd != -1)
         close(rs->sig_fd);

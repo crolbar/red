@@ -3,5 +3,5 @@
 - [x]vt.c
 - [x]state struct
 
-- [ ]modifiers on fbs
+- [x]modifiers on fbs
 - [ ]gl error catching

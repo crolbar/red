@@ -18,6 +18,7 @@
         libgbm
         libdrm
         libinput
+
         wayland
       ];
 
