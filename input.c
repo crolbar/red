@@ -118,7 +118,8 @@ input_check_close(struct redstate* rs)
             if (rs->rect_y < 0)
                 rs->rect_y = 0;
 
-            render_trigger(rs->wrender_fd);
+            if (rs->drm->page_flip_ready)
+                render_trigger(rs->wrender_fd);
         }
 
         libinput_event_destroy(event);

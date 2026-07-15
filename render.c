@@ -188,8 +188,8 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     glClear(GL_COLOR_BUFFER_BIT);
 
     {
-        float rect_w = 24.0f;
-        float rect_h = 24.0f;
+        float rect_w = 240.0f;
+        float rect_h = 240.0f;
         float rect_x = rs->rect_x;
         float rect_y = height - rs->rect_y;
         if (rect_x + rect_w >= width)

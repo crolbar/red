@@ -16,7 +16,7 @@
 #include "signals.h"
 #include "vt.h"
 
-// #define NO_VT
+#define NO_VT
 
 static void
 page_flip_handler(int fd,
@@ -239,6 +239,11 @@ main(int argc, char** argv)
                 goto end;
             }
 
+            // page flip ready
+            if (fds[3].revents & POLLIN) {
+                drmHandleEvent(drm->fd, &drmevctx);
+            }
+
             // input event
             if (fds[0].revents & POLLIN) {
                 if (input_check_close(rs)) {
@@ -258,21 +263,7 @@ main(int argc, char** argv)
                 // redraw on aquire
                 if (rs->active && prev_active != rs->active) {
                     render_triggerI(rs->wrender_fd);
-                    if (drmModeSetCrtc(drm->fd,
-                                       drm->crtc_id,
-                                       (drm->used_rb) ? drm->rb1->buf_id
-                                                      : drm->rb0->buf_id,
-                                       0,
-                                       0,
-                                       &drm->conn_id,
-                                       1,
-                                       &drm->mode))
-                        ROG_ERR("failed re-set crtc: %s", strerror(errno));
                 }
-            }
-
-            if (fds[3].revents & POLLIN) {
-                drmHandleEvent(drm->fd, &drmevctx);
             }
 
             // render
