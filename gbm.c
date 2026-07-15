@@ -200,17 +200,17 @@ init_buffer(struct drmstate* drm)
         modifiers[0] = gbm_bo_get_modifier(bo);
         uint32_t format = gbm_bo_get_format(bo);
 
-        if (drmModeAddFB2WithModifiers(drm->fd,
-                                       drm->width,
-                                       drm->height,
-                                       format,
-                                       handles,
-                                       pitches,
-                                       offsets,
-                                       (drm->gbm_has_modifier) ? modifiers
-                                                               : NULL,
-                                       &buf_id,
-                                       DRM_MODE_FB_MODIFIERS)) {
+        if (drmModeAddFB2WithModifiers(
+              drm->fd,
+              drm->width,
+              drm->height,
+              format,
+              handles,
+              pitches,
+              offsets,
+              (drm->gbm_has_modifier) ? modifiers : NULL,
+              &buf_id,
+              (drm->gbm_has_modifier) ? DRM_MODE_FB_MODIFIERS : 0)) {
             ROG_ERR("failed to submit buffer drmModeAddFB2");
             goto fail;
         }

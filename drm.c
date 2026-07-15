@@ -16,7 +16,7 @@
 #include "signals.h"
 #include "vt.h"
 
-#define NO_VT
+// #define NO_VT
 
 static void
 page_flip_handler(int fd,
@@ -44,6 +44,7 @@ main(int argc, char** argv)
     drm = malloc(sizeof(*drm));
     drm->fd = -1;
     drm->used_rb = 0;
+    drm->gbm_has_modifier = false;
 
     struct redstate* rs;
     rs = malloc(sizeof(*rs));
