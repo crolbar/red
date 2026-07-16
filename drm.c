@@ -245,13 +245,6 @@ main(int argc, char** argv)
                 drmHandleEvent(drm->fd, &drmevctx);
             }
 
-            // input event
-            if (fds[0].revents & POLLIN) {
-                if (input_check_close(rs)) {
-                    goto end;
-                }
-            }
-
             // signal
             if (fds[1].revents & POLLIN) {
                 int prev_active = rs->active;
@@ -267,8 +260,18 @@ main(int argc, char** argv)
                 }
             }
 
+            // input event
+            if (fds[0].revents & POLLIN) {
+                if (input_check_close(rs)) {
+                    goto end;
+                }
+            }
+
             // render
             if (fds[2].revents & POLLIN) {
+                if (!rs->active)
+                    continue;
+
                 // TODO better
                 if (!rs->drm->page_flip_ready)
                     continue;

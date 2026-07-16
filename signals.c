@@ -1,4 +1,5 @@
 #include <errno.h> // IWYU pragma: keep
+#include <libinput.h>
 #include <linux/vt.h>
 #include <signal.h>
 #include <stdio.h>
@@ -61,6 +62,14 @@ handle_signal(struct redstate* rs)
                 ROG_ERR("Could not ack VT release: %s", strerror(errno));
                 return -1;
             }
+
+            libinput_suspend(rs->li);
+            // after resume we should get only device_add events
+            struct libinput_event* ev;
+            while ((ev = libinput_get_event(rs->li))) {
+                libinput_event_destroy(ev);
+            }
+
             rs->active = 0;
             break;
 
@@ -76,6 +85,12 @@ handle_signal(struct redstate* rs)
                 ROG_ERR("Could not ack VT acquire: %s", strerror(errno));
                 return -1;
             }
+
+            if (libinput_resume(rs->li)) {
+                ROG_ERR("Could not resume libinput context");
+                return -1;
+            }
+
             rs->active = 1;
             break;
 
@@ -90,4 +105,3 @@ handle_signal(struct redstate* rs)
 
     return 0;
 }
-
