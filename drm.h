@@ -20,7 +20,7 @@ struct glProc
     PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
     PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR;
     PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC
-      glEGLImageTargetRenderbufferStorageOES;
+    glEGLImageTargetRenderbufferStorageOES;
 };
 
 struct drmstate
@@ -60,6 +60,10 @@ struct redstate
     int active; // VT is active
 
     int should_quit;
+
+    struct timespec* _time_start;
+    double last_frame_time;
+    double frame_latency;
 
     double rect_x;
     double rect_y;

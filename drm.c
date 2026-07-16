@@ -4,6 +4,7 @@
 #include <poll.h>
 #include <string.h>
 #include <sys/signalfd.h>
+#include <time.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
@@ -27,12 +28,23 @@ page_flip_handler(int fd,
 {
     struct redstate* rs = user_data;
     rs->drm->page_flip_ready = true;
+    render_trigger(rs->wrender_fd);
 }
 
 static drmEventContext drmevctx = {
     .version = DRM_EVENT_CONTEXT_VERSION,
     .page_flip_handler = page_flip_handler,
 };
+
+double
+time_get_now(struct redstate* rs)
+{
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+
+    return (tp.tv_sec - rs->_time_start->tv_sec) +
+           (tp.tv_nsec - rs->_time_start->tv_nsec) / 1e9;
+}
 
 int
 main(int argc, char** argv)
@@ -57,6 +69,11 @@ main(int argc, char** argv)
     rs->drm->page_flip_ready = true;
     rs->rect_x = 0.0;
     rs->rect_y = 0.0;
+
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    rs->_time_start = &tp;
+    rs->last_frame_time = time_get_now(rs);
 
     // signals
     {
@@ -139,7 +156,10 @@ main(int argc, char** argv)
             drmModeConnector* _conn =
               drmModeGetConnector(drm->fd, res->connectors[i]);
 
-            if (!_conn || _conn->connection != DRM_MODE_CONNECTED) {
+            if (!_conn)
+                continue;
+
+            if (_conn->connection != DRM_MODE_CONNECTED) {
                 drmModeFreeConnector(_conn);
                 continue;
             }
@@ -148,7 +168,23 @@ main(int argc, char** argv)
             break;
         }
 
+        if (!conn) {
+            ROG_ERR("failed to find a connected monitor. is monitor connected "
+                    "to gpu %s",
+                    cfg.dri_dev);
+            ret = 1;
+            goto end;
+        }
+
         drmModeEncoder* encoder = drmModeGetEncoder(drm->fd, conn->encoder_id);
+        if (!encoder) {
+            ROG_ERR(
+              "failed to get current encoder. is monitor connected to gpu %s",
+              cfg.dri_dev);
+            ret = 1;
+            goto end;
+        }
+
         drm->crtc_id = encoder->crtc_id;
         drmModeFreeEncoder(encoder);
 
@@ -156,9 +192,12 @@ main(int argc, char** argv)
 
         drm->mode = conn->modes[0];
 
-        drm->width = conn->modes[0].hdisplay;
-        drm->height = conn->modes[0].vdisplay;
-        ROG_INFO("Rendering at: %dx%d", drm->width, drm->height);
+        drm->width = drm->mode.hdisplay;
+        drm->height = drm->mode.vdisplay;
+        ROG_INFO("Rendering at: %dx%d@%d",
+                 drm->width,
+                 drm->height,
+                 drm->mode.vrefresh);
         drmModeFreeConnector(conn);
         drmModeFreeResources(res);
     }
@@ -232,7 +271,6 @@ main(int argc, char** argv)
 
         ROG_INFO("Starting loop...");
 
-        // TODO: stop all events exept signals on non active vt
         while (!rs->should_quit) {
             if (poll(fds, 4, -1) == -1) {
                 ROG_ERR("poll fds error");
@@ -272,21 +310,26 @@ main(int argc, char** argv)
                 if (!rs->active)
                     continue;
 
-                // TODO better
-                if (!rs->drm->page_flip_ready)
-                    continue;
-
                 int r = should_render_trigger(rs->rrender_fd);
                 if (!r) {
                     continue;
                 }
 
+                {
+                    double now = time_get_now(rs);
+                    double dt = (now - rs->last_frame_time) * 1000;
+                    rs->last_frame_time = now;
+                    rs->frame_latency = dt;
+                }
+
                 redbuffer* rb = get_buffer(drm);
-                // ROG("rendering to buf %d, %d", rs->drm->used_rb, r)
 
                 render_frame(rs, rb);
 
                 if (r == RENDER_TRIGGER_FLIP) {
+                    // shouldn't happen
+                    if (!rs->drm->page_flip_ready)
+                        continue;
                     rs->drm->page_flip_ready = false;
                     if (drmModePageFlip(drm->fd,
                                         drm->crtc_id,
@@ -308,6 +351,7 @@ main(int argc, char** argv)
                                        1,
                                        &drm->mode))
                         ROG_ERR("failed set crtc: %s", strerror(errno));
+                    render_trigger(rs->wrender_fd);
                 }
             }
         }

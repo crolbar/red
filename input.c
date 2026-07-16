@@ -79,10 +79,6 @@ input_check_close(struct redstate* rs)
                 return 1;
             }
 
-            if (key == KEY_R && !press) {
-                render_trigger(rs->wrender_fd);
-            }
-
             // TODO CTRL+ALT+FN
             if (key == KEY_F1 && !press) {
                 if (ioctl(tty_fd, VT_ACTIVATE, 1) == -1) {
@@ -121,9 +117,6 @@ input_check_close(struct redstate* rs)
                 rs->rect_y = rs->drm->height;
             if (rs->rect_y < 0)
                 rs->rect_y = 0;
-
-            if (rs->drm->page_flip_ready)
-                render_trigger(rs->wrender_fd);
         }
 
         libinput_event_destroy(event);
