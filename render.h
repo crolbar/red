@@ -1,5 +1,6 @@
 #pragma once
 
+#include "red.h"
 #include "drm.h"
 
 int

@@ -1,6 +1,6 @@
 #include "drm.h"
 #include "log.h"
-#include "render.h"
+#include "red.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <libinput.h>

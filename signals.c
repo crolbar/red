@@ -10,6 +10,7 @@
 #include <xf86drm.h>
 
 #include "drm.h"
+#include "red.h"
 #include "log.h"
 
 int

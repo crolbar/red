@@ -12,7 +12,7 @@ struct glProc*
 init_gl_proc();
 
 struct redbuffer*
-init_buffer(struct drmstate* drm);
+init_drm_buffer(struct drmstate* drm);
 
 struct redbuffer*
 get_buffer(struct drmstate* drm);

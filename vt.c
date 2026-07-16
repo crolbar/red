@@ -2,6 +2,7 @@
 #include <linux/kd.h>
 #include <linux/vt.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 
@@ -71,4 +72,19 @@ vt_stop(int fd)
     }
 
     return 0;
+}
+
+int
+init_vt()
+{
+    int tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+    if (tty_fd < 0) {
+        ROG_ERR("open tty: %s", strerror(errno));
+        return -1;
+    }
+
+    if (vt_start(tty_fd) == -1) {
+        return -1;
+    }
+    return tty_fd;
 }

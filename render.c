@@ -1,3 +1,4 @@
+#include "red.h"
 #include "drm.h"
 #include "log.h"
 #include "render.h"

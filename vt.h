@@ -10,3 +10,6 @@ vt_start(int fd);
 
 int
 vt_stop(int fd);
+
+int
+init_vt();

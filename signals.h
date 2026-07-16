@@ -1,6 +1,6 @@
 #pragma once
 
-#include "drm.h"
+#include "red.h"
 
 int
 handle_signal(struct redstate* rs);

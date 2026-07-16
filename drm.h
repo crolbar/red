@@ -1,5 +1,6 @@
 #pragma once
 
+#include "red.h"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
@@ -32,6 +33,7 @@ struct drmstate
     int crtc_id;
     uint32_t conn_id;
     drmModeModeInfo mode;
+	drmModeModeInfoPtr modes;
 
     struct glProc* glProc;
 
@@ -47,24 +49,14 @@ struct drmstate
     EGLContext egl_context;
 };
 
-struct redstate
-{
-    struct drmstate* drm;
-    struct libinput* li;
-    int tty_fd;
-    int sig_fd;
+struct drmstate*
+init_drm();
 
-    int rrender_fd; // read 1, and trigger render
-    int wrender_fd; // write 1, to trigger render
+void
+drm_handle_event(struct drmstate* drm);
 
-    int active; // VT is active
+int
+drm_set_crct(struct drmstate* drm, uint32_t buf_id);
 
-    int should_quit;
-
-    struct timespec* _time_start;
-    double last_frame_time;
-    double frame_latency;
-
-    double rect_x;
-    double rect_y;
-};
+int
+drm_flip(struct drmstate* drm, uint32_t buf_id, struct redstate* rs);

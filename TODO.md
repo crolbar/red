@@ -1,7 +1,6 @@
 # 16
 - [x]figure out frames
-- [ ]drm.c
-- [ ]fixup TODOs
+- [x]drm.c
 - [ ]wayland client
 
 - [x]logging

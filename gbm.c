@@ -124,7 +124,7 @@ _create_egl_image(struct drmstate* drm, struct gbm_bo* bo)
 
 // using drm->width, drm->height
 struct redbuffer*
-init_buffer(struct drmstate* drm)
+init_drm_buffer(struct drmstate* drm)
 {
     struct glProc* p = drm->glProc;
 

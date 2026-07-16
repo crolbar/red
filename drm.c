@@ -1,23 +1,19 @@
 #include <drm/drm_fourcc.h>
 #include <errno.h> // IWYU pragma: keep
+#include <fcntl.h>
 #include <libinput.h>
 #include <poll.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/signalfd.h>
-#include <time.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
 #include "config.h"
 #include "drm.h"
-#include "gbm.h"
-#include "input.h"
 #include "log.h"
+#include "red.h"
 #include "render.h"
-#include "signals.h"
-#include "vt.h"
-
-#define NO_VT
 
 static void
 page_flip_handler(int fd,
@@ -36,345 +32,188 @@ static drmEventContext drmevctx = {
     .page_flip_handler = page_flip_handler,
 };
 
-double
-time_get_now(struct redstate* rs)
+void
+drm_handle_event(struct drmstate* drm)
 {
-    struct timespec tp;
-    clock_gettime(CLOCK_MONOTONIC, &tp);
-
-    return (tp.tv_sec - rs->_time_start->tv_sec) +
-           (tp.tv_nsec - rs->_time_start->tv_nsec) / 1e9;
+    drmHandleEvent(drm->fd, &drmevctx);
 }
 
 int
-main(int argc, char** argv)
+drm_flip(struct drmstate* drm, uint32_t buf_id, struct redstate* rs)
 {
-    ROG_INIT();
-    int ret = 0;
+    // shouldn't happen
+    if (!drm->page_flip_ready) {
+        ROG_ERR("calling drm flip when prev flip is not finished");
+        return 1;
+    }
+
+    drm->page_flip_ready = false;
+
+    if (drmModePageFlip(
+          drm->fd, drm->crtc_id, buf_id, DRM_MODE_PAGE_FLIP_EVENT, rs)) {
+        ROG_ERR("page flip failed: %s", strerror(errno));
+        return 1;
+    }
+    return 0;
+}
+
+int
+drm_set_crct(struct drmstate* drm, uint32_t buf_id)
+{
+    if (drmModeSetCrtc(
+          drm->fd, drm->crtc_id, buf_id, 0, 0, &drm->conn_id, 1, &drm->mode)) {
+        ROG_ERR("failed set crtc: %s", strerror(errno));
+        return 1;
+    }
+    return 0;
+}
+
+char*
+get_first_dri_dev()
+{
+    char* fmt = "/dev/dri/card%d";
+    for (int i = 0; i <= 50; i++) {
+        int l = snprintf(NULL, 0, fmt, i);
+        char* path = malloc(l + 1);
+        sprintf(path, fmt, i);
+        struct stat sb;
+        if (stat(path, &sb) != 0) {
+            continue;
+        }
+
+        {
+            int fd = open(path, O_RDWR | O_CLOEXEC);
+            if (fd < 0) {
+                ROG_ERR("failed oppening drm device: %s", strerror(errno));
+                return "";
+            }
+            if (drmIsMaster(fd) == 0) {
+                close(fd);
+                ROG_WARN("found dri dev %s, but its used, skipping it.", path);
+                continue;
+            }
+            close(fd);
+        }
+        return path;
+    }
+    return "";
+}
+
+void
+print_driver_version(int fd)
+{
+    drmVersion* ver = drmGetVersion(fd);
+    if (!ver) {
+        ROG_ERR("drmGetVersion failed");
+        return;
+    }
+    ROG_INFO("Using Driver: %s", ver->name);
+    drmFreeVersion(ver);
+}
+
+drmModeConnector*
+get_connector(int fd)
+{
+    drmModeResPtr res = drmModeGetResources(fd);
+    if (!res) {
+        ROG_ERR("failed to get drmModResources");
+        return NULL;
+    }
+    int count = res->count_connectors;
+    uint32_t* conns = res->connectors;
+
+    // get first found connected connector
+    for (int i = 0; i < count; i++) {
+        drmModeConnector* conn = drmModeGetConnector(fd, conns[i]);
+        if (!conn)
+            continue;
+
+        if (conn->connection != DRM_MODE_CONNECTED) {
+            drmModeFreeConnector(conn);
+            continue;
+        }
+
+        drmModeFreeResources(res);
+        return conn;
+    }
+
+    drmModeFreeResources(res);
+    return NULL;
+}
+
+struct drmstate*
+init_drm()
+{
+    int fd = -1;
+    int crtc_id = -1;
+    drmModeConnector* conn = NULL;
+
+    char* dri_dev_path;
+    if (strcmp(cfg.dri_dev, "auto") == 0) {
+        dri_dev_path = get_first_dri_dev();
+        if (!dri_dev_path) {
+            goto fail;
+        }
+    } else {
+        dri_dev_path = cfg.dri_dev;
+    }
+
+    ROG_INFO("Using dri device: %s", dri_dev_path);
+    fd = open(dri_dev_path, O_RDWR | O_CLOEXEC);
+    if (fd < 0) {
+        ROG_ERR("failed oppening drm device: %s", strerror(errno));
+        goto fail;
+    }
+    print_driver_version(fd);
+
+    conn = get_connector(fd);
+    if (!conn) {
+        ROG_ERR("failed to find a connected monitor. is monitor connected "
+                "to gpu %s",
+                cfg.dri_dev);
+        return NULL;
+    }
+
+    drmModeEncoder* encoder = drmModeGetEncoder(fd, conn->encoder_id);
+    if (!encoder) {
+        ROG_ERR("failed to get current encoder. is monitor connected to gpu %s",
+                cfg.dri_dev);
+        goto fail;
+    }
+    crtc_id = encoder->crtc_id;
+    drmModeFreeEncoder(encoder);
 
     struct drmstate* drm;
     drm = malloc(sizeof(*drm));
-    drm->fd = -1;
+    if (!drm) {
+        goto fail;
+    }
+
+    drm->fd = fd;
     drm->used_rb = 0;
     drm->gbm_has_modifier = false;
+    drm->page_flip_ready = true;
+    drm->fd = fd;
+    drm->modes = conn->modes;
+    drm->mode = conn->modes[0];
+    drm->width = drm->mode.hdisplay;
+    drm->height = drm->mode.vdisplay;
+    drm->crtc_id = crtc_id;
+    drm->conn_id = conn->connector_id;
 
-    struct redstate* rs;
-    rs = malloc(sizeof(*rs));
-    rs->drm = drm;
-    rs->sig_fd = -1;
-    rs->tty_fd = -1;
-    rs->li = NULL;
-    rs->active = 1;
-    rs->should_quit = 0;
-    rs->drm->page_flip_ready = true;
-    rs->rect_x = 0.0;
-    rs->rect_y = 0.0;
+    ROG_INFO(
+      "Rendering at: %dx%d@%d", drm->width, drm->height, drm->mode.vrefresh);
 
-    struct timespec tp;
-    clock_gettime(CLOCK_MONOTONIC, &tp);
-    rs->_time_start = &tp;
-    rs->last_frame_time = time_get_now(rs);
+    drmModeFreeConnector(conn);
 
-    // signals
-    {
-        int signal_fd = init_signals();
-        if (signal_fd < 0) {
-            ret = -1;
-            goto end;
-        }
-        rs->sig_fd = signal_fd;
-    }
+    return drm;
+fail:
 
-    // setup VT
-    // TODO: make init_vt
-    int vt_enabled;
-#ifdef NO_VT
-    if (false)
-#endif
-    {
-        int tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
-        if (tty_fd < 0) {
-            ROG_ERR("open tty: %s", strerror(errno));
-            ret = 1;
-            goto end;
-        }
+    ROG("fail")
 
-        if (vt_start(tty_fd) == -1) {
-            ret = 1;
-            goto end;
-        }
-        vt_enabled = 1;
-        rs->tty_fd = tty_fd;
-    }
-
-    // libinput
-    {
-        struct libinput* li = init_input();
-        if (!li) {
-            ROG_ERR("failed to init libinput");
-            ret = 1;
-            goto end;
-        }
-        rs->li = li;
-    }
-
-    // drm device
-    // TODO: init_drm
-    ROG_INFO("Opening %s, first connected connector..", cfg.dri_dev);
-    {
-        int fd = open(cfg.dri_dev, O_RDWR | O_CLOEXEC);
-        if (fd < 0) {
-            ROG_ERR("failed oppening drm device: %s", strerror(errno));
-            ret = 1;
-            goto end;
-        }
-        rs->drm->fd = fd;
-    }
-
-    {
-        drmVersion* ver = drmGetVersion(drm->fd);
-        if (!ver) {
-            ROG_ERR("drmGetVersion failed");
-            ret = 1;
-            goto end;
-        }
-        ROG_INFO("Using Driver: %s", ver->name);
-        drmFreeVersion(ver);
-    }
-
-    {
-        drmModeResPtr res = drmModeGetResources(drm->fd);
-        if (!res) {
-            ret = 1;
-            goto end;
-        }
-
-        drmModeConnector* conn = NULL;
-
-        // get first found connected connector
-        for (int i = 0; i < res->count_connectors; i++) {
-            drmModeConnector* _conn =
-              drmModeGetConnector(drm->fd, res->connectors[i]);
-
-            if (!_conn)
-                continue;
-
-            if (_conn->connection != DRM_MODE_CONNECTED) {
-                drmModeFreeConnector(_conn);
-                continue;
-            }
-
-            conn = _conn;
-            break;
-        }
-
-        if (!conn) {
-            ROG_ERR("failed to find a connected monitor. is monitor connected "
-                    "to gpu %s",
-                    cfg.dri_dev);
-            ret = 1;
-            goto end;
-        }
-
-        drmModeEncoder* encoder = drmModeGetEncoder(drm->fd, conn->encoder_id);
-        if (!encoder) {
-            ROG_ERR(
-              "failed to get current encoder. is monitor connected to gpu %s",
-              cfg.dri_dev);
-            ret = 1;
-            goto end;
-        }
-
-        drm->crtc_id = encoder->crtc_id;
-        drmModeFreeEncoder(encoder);
-
-        drm->conn_id = conn->connector_id;
-
-        drm->mode = conn->modes[0];
-
-        drm->width = drm->mode.hdisplay;
-        drm->height = drm->mode.vdisplay;
-        ROG_INFO("Rendering at: %dx%d@%d",
-                 drm->width,
-                 drm->height,
-                 drm->mode.vrefresh);
+    if (fd)
+        close(fd);
+    if (conn)
         drmModeFreeConnector(conn);
-        drmModeFreeResources(res);
-    }
-
-    // gbm device
-    {
-        drm->gbm_dev = init_gbm(drm->fd);
-        if (!drm->gbm_dev) {
-            ret = 1;
-            goto end;
-        }
-
-        drm->glProc = init_gl_proc();
-        if (!drm->glProc) {
-            ret = 1;
-            goto end;
-        }
-    }
-
-    // egl display/context
-    {
-        if (init_egl(drm)) {
-            ret = 1;
-            goto end;
-        }
-    }
-
-    drm->rb0 = init_buffer(drm);
-    if (!drm->rb0) {
-        ret = 1;
-        goto end;
-    }
-    drm->rb1 = init_buffer(drm);
-    if (!drm->rb1) {
-        ret = 1;
-        goto end;
-    }
-
-    // loop
-    {
-        {
-            int pipefd[2];
-
-            if (pipe(pipefd) == -1) {
-                ROG_ERR("failed to create pipe: %s", strerror(errno));
-                ret = 1;
-                goto end;
-            }
-
-            rs->rrender_fd = pipefd[0];
-            rs->wrender_fd = pipefd[1];
-        }
-        render_triggerI(rs->wrender_fd);
-
-        struct pollfd fds[4];
-
-        int li_fd = libinput_get_fd(rs->li);
-        if (li_fd < 0) {
-            ROG_ERR("failed get libinput fd: %s", strerror(errno));
-            ret = 1;
-            goto end;
-        }
-        fds[0].fd = li_fd;
-        fds[0].events = POLLIN;
-        fds[1].fd = rs->sig_fd;
-        fds[1].events = POLLIN;
-        fds[2].fd = rs->rrender_fd;
-        fds[2].events = POLLIN;
-        fds[3].fd = drm->fd;
-        fds[3].events = POLLIN;
-
-        ROG_INFO("Starting loop...");
-
-        while (!rs->should_quit) {
-            if (poll(fds, 4, -1) == -1) {
-                ROG_ERR("poll fds error");
-                ret = 1;
-                goto end;
-            }
-
-            // page flip ready
-            if (fds[3].revents & POLLIN) {
-                drmHandleEvent(drm->fd, &drmevctx);
-            }
-
-            // signal
-            if (fds[1].revents & POLLIN) {
-                int prev_active = rs->active;
-
-                if (handle_signal(rs) == -1) {
-                    ret = 1;
-                    goto end;
-                }
-
-                // redraw on aquire
-                if (rs->active && prev_active != rs->active) {
-                    render_triggerI(rs->wrender_fd);
-                }
-            }
-
-            // input event
-            if (fds[0].revents & POLLIN) {
-                if (input_check_close(rs)) {
-                    goto end;
-                }
-            }
-
-            // render
-            if (fds[2].revents & POLLIN) {
-                if (!rs->active)
-                    continue;
-
-                int r = should_render_trigger(rs->rrender_fd);
-                if (!r) {
-                    continue;
-                }
-
-                {
-                    double now = time_get_now(rs);
-                    double dt = (now - rs->last_frame_time) * 1000;
-                    rs->last_frame_time = now;
-                    rs->frame_latency = dt;
-                }
-
-                redbuffer* rb = get_buffer(drm);
-
-                render_frame(rs, rb);
-
-                if (r == RENDER_TRIGGER_FLIP) {
-                    // shouldn't happen
-                    if (!rs->drm->page_flip_ready)
-                        continue;
-                    rs->drm->page_flip_ready = false;
-                    if (drmModePageFlip(drm->fd,
-                                        drm->crtc_id,
-                                        rb->buf_id,
-                                        DRM_MODE_PAGE_FLIP_EVENT,
-                                        rs)) {
-                        ROG_ERR("page flip failed: %s", strerror(errno));
-                        ret = 1;
-                        goto end;
-                    }
-
-                } else if (r == RENDER_TRIGGER_INIT) {
-                    if (drmModeSetCrtc(drm->fd,
-                                       drm->crtc_id,
-                                       rb->buf_id,
-                                       0,
-                                       0,
-                                       &drm->conn_id,
-                                       1,
-                                       &drm->mode))
-                        ROG_ERR("failed set crtc: %s", strerror(errno));
-                    render_trigger(rs->wrender_fd);
-                }
-            }
-        }
-    }
-
-end:
-    ROG_WARN("Closing..");
-
-    if (rs->drm->fd != -1)
-        close(rs->drm->fd);
-
-#ifdef NO_VT
-    if (false)
-#endif
-        if (rs->tty_fd != -1 && vt_enabled)
-            vt_stop(rs->tty_fd);
-
-    if (rs->sig_fd != -1)
-        close(rs->sig_fd);
-
-    if (rs->li)
-        libinput_unref(rs->li);
-
-    ROG_PRINT_CLOSE();
-    return ret;
+    return NULL;
 }
