@@ -10,8 +10,8 @@
 #include <xf86drm.h>
 
 #include "drm.h"
-#include "red.h"
 #include "log.h"
+#include "red.h"
 
 int
 init_signals()
@@ -42,8 +42,13 @@ init_signals()
 int
 handle_signal(struct redstate* rs)
 {
+    // TODO: better later
+    if (!rs->drm->page_flip_ready) {
+        rs->drm->stop_flipping = true;
+        return 0;
+    }
     struct signalfd_siginfo si;
-    ssize_t n = read(rs->sig_fd, &si, sizeof(si));
+    ssize_t                 n = read(rs->sig_fd, &si, sizeof(si));
 
     if (n != sizeof(si)) {
         perror("read signalfd");
@@ -92,7 +97,8 @@ handle_signal(struct redstate* rs)
                 return -1;
             }
 
-            rs->active = 1;
+            rs->drm->stop_flipping = false;
+            rs->active             = 1;
             break;
 
         case SIGINT:

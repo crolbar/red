@@ -1,5 +1,6 @@
 SRC = red.c \
 		drm.c \
+		drmProps.c \
 		input.c \
 		log.c \
 		signals.c \

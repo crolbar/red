@@ -22,16 +22,17 @@ main(int argc, char** argv)
     int ret = 0;
 
     struct redstate* rs;
-    rs = malloc(sizeof(*rs));
-    rs->sig_fd = -1;
-    rs->tty_fd = -1;
-    rs->li = NULL;
-    rs->active = 1;
-    rs->should_quit = 0;
-    rs->rect_x = 0.0;
-    rs->rect_y = 0.0;
-    rs->time_start = time_get_now();
-    rs->last_frame_time = time_get_elapsed_sec(rs->time_start);
+    rs                    = malloc(sizeof(*rs));
+    rs->sig_fd            = -1;
+    rs->tty_fd            = -1;
+    rs->li                = NULL;
+    rs->drm               = NULL;
+    rs->active            = 1;
+    rs->should_quit       = 0;
+    rs->rect_x            = 0.0;
+    rs->rect_y            = 0.0;
+    rs->time_start        = time_get_now();
+    rs->last_frame_time   = time_get_elapsed_sec(rs->time_start);
     rs->is_wayland_client = false;
     if (!getenv("RED_DONT_SPAWN_CLIENT"))
         if (getenv("WAYLAND_DISPLAY") ||
@@ -141,13 +142,13 @@ main(int argc, char** argv)
             ret = 1;
             goto end;
         }
-        fds[0].fd = li_fd;
+        fds[0].fd     = li_fd;
         fds[0].events = POLLIN;
-        fds[1].fd = rs->sig_fd;
+        fds[1].fd     = rs->sig_fd;
         fds[1].events = POLLIN;
-        fds[2].fd = rs->rrender_fd;
+        fds[2].fd     = rs->rrender_fd;
         fds[2].events = POLLIN;
-        fds[3].fd = drm->fd;
+        fds[3].fd     = drm->fd;
         fds[3].events = POLLIN;
 
         ROG_INFO("Starting loop...");
@@ -197,10 +198,10 @@ main(int argc, char** argv)
                 }
 
                 {
-                    double now = time_get_elapsed_sec(rs->time_start);
-                    double dt = (now - rs->last_frame_time) * 1000;
+                    double now          = time_get_elapsed_sec(rs->time_start);
+                    double dt           = (now - rs->last_frame_time) * 1000;
                     rs->last_frame_time = now;
-                    rs->frame_latency = dt;
+                    rs->frame_latency   = dt;
                 }
 
                 redbuffer* rb = get_buffer(drm);
@@ -223,7 +224,7 @@ main(int argc, char** argv)
 end:
     ROG_WARN("Closing..");
 
-    if (rs->drm->fd != -1)
+    if (rs->drm && rs->drm->fd != -1)
         close(rs->drm->fd);
 
     if (rs->tty_fd != -1)
