@@ -38,6 +38,10 @@ init_input()
     struct udev* udev;
 
     udev = udev_new();
+    if (!udev) {
+        ROG_ERR("failed to create udev");
+        return NULL;
+    }
     li = libinput_udev_create_context(&li_interface, NULL, udev);
     if (!li) {
         return NULL;

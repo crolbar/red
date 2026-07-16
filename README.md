@@ -1,3 +1,8 @@
+# Requirements
+
+- user in `input` group
+
+
 # Resources
 
 - drm `https://commandlinux.com/man-page/man7/drm-kms/`

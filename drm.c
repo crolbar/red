@@ -232,6 +232,7 @@ main(int argc, char** argv)
 
         ROG_INFO("Starting loop...");
 
+        // TODO: stop all events exept signals on non active vt
         while (!rs->should_quit) {
             if (poll(fds, 4, -1) == -1) {
                 ROG_ERR("poll fds error");
