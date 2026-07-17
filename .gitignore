@@ -1,7 +1,7 @@
 /target
 compile_flags.txt
 red
-xdg-shell-protocol*
+*protocol*
 red
 drm
 m

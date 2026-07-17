@@ -8,7 +8,7 @@
         Currently using it to use my other gpu thats not used by anything
         while in a wayland compositor. Outputting directly on the monitor connected.
 
-    
+
 */
 
 redconfig cfg = (redconfig){
@@ -18,4 +18,11 @@ redconfig cfg = (redconfig){
       setting to `auto` will find the first card in /dev/dri
     */
     .dri_dev = "auto",
+    /*
+      /dev/dri/renderD128, /dev/dri/renderD129
+
+      setting to `auto` will find the first render node in /dev/dri
+      starting at 128 searching forward
+    */
+    .dri_render_dev = "auto",
 };

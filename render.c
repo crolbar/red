@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include "wayland-backend-client.h"
 
 static GLuint g_rect_program = 0;
 static GLuint g_rect_vao = 0;
@@ -179,8 +180,8 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     assert(rs);
     assert(rb);
 
-    int width = rs->drm->width;
-    int height = rs->drm->height;
+    int width = rs->wl->width;
+    int height = rs->wl->height;
 
     glBindFramebuffer(GL_FRAMEBUFFER, rb->fbo);
 

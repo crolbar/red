@@ -1,9 +1,12 @@
 #include "drm.h"
 #include "gbm.h"
+#include "linux-dmabuf-protocol.h"
 #include "log.h"
+#include "wayland-backend-client.h"
 #include <drm/drm_fourcc.h>
 #include <gbm.h>
 #include <stdlib.h>
+#include <wayland-client-protocol.h>
 
 struct gbm_device*
 init_gbm(int drm_fd)
@@ -16,21 +19,23 @@ init_gbm(int drm_fd)
     return gbm_dev;
 }
 
+// NOTE: pass pointers to egl_display and context
 int
-init_egl(struct drmstate* drm)
+init_egl(struct gbm_device* gbm_dev,
+         struct glProc*     p,
+         EGLDisplay*        egl_display,
+         EGLContext*        egl_context)
 {
-    struct glProc* p = drm->glProc;
-
     EGLint major, minor;
     {
-        drm->egl_display =
-          p->eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, drm->gbm_dev, NULL);
-        if (drm->egl_display == EGL_NO_DISPLAY) {
+        *egl_display =
+          p->eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, gbm_dev, NULL);
+        if (*egl_display == EGL_NO_DISPLAY) {
             ROG_ERR("failed to get egl display: %x", eglGetError());
             return 1;
         }
 
-        if (!eglInitialize(drm->egl_display, &major, &minor)) {
+        if (!eglInitialize(*egl_display, &major, &minor)) {
             ROG_ERR("failed to init egl: %x", eglGetError());
             return 1;
         }
@@ -50,17 +55,15 @@ init_egl(struct drmstate* drm)
             EGL_NONE,
         };
 
-        drm->egl_context = eglCreateContext(
-          drm->egl_display, EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, attrs);
-        if (drm->egl_context == EGL_NO_CONTEXT) {
+        *egl_context = eglCreateContext(
+          *egl_display, EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, attrs);
+        if (*egl_context == EGL_NO_CONTEXT) {
             ROG_ERR("failed to create egl context: %x", eglGetError());
             return 1;
         }
 
-        if (!eglMakeCurrent(drm->egl_display,
-                            EGL_NO_SURFACE,
-                            EGL_NO_SURFACE,
-                            drm->egl_context)) {
+        if (!eglMakeCurrent(
+              *egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, *egl_context)) {
             ROG_ERR("eglMakeCurrent failed: %x", eglGetError());
             return 1;
         }
@@ -72,19 +75,22 @@ init_egl(struct drmstate* drm)
 }
 
 EGLImageKHR
-_create_egl_image(struct drmstate* drm, struct gbm_bo* bo)
+_create_egl_image(EGLDisplay     egl_display,
+                  struct gbm_bo* bo,
+                  struct glProc* p,
+                  int            gbm_has_modifier)
 {
-    int fd = gbm_bo_get_fd(bo);
-    uint32_t stride = gbm_bo_get_stride(bo);
-    uint32_t offset = gbm_bo_get_offset(bo, 0);
+    int      fd       = gbm_bo_get_fd(bo);
+    uint32_t stride   = gbm_bo_get_stride(bo);
+    uint32_t offset   = gbm_bo_get_offset(bo, 0);
     uint64_t modifier = gbm_bo_get_modifier(bo);
-    uint32_t width = gbm_bo_get_width(bo);
-    uint32_t height = gbm_bo_get_height(bo);
-    uint32_t format = gbm_bo_get_format(bo);
+    uint32_t width    = gbm_bo_get_width(bo);
+    uint32_t height   = gbm_bo_get_height(bo);
+    uint32_t format   = gbm_bo_get_format(bo);
 
-    ROG("creating egl image w: %d, h: %d", width, height);
+    // ROG("creating egl image w: %d, h: %d", width, height);
 
-    int i = 0;
+    int    i = 0;
     EGLint attribs[32];
 
     {
@@ -102,7 +108,7 @@ _create_egl_image(struct drmstate* drm, struct gbm_bo* bo)
         attribs[i++] = EGL_DMA_BUF_PLANE0_PITCH_EXT;
         attribs[i++] = stride;
 
-        if (drm->gbm_has_modifier) {
+        if (gbm_has_modifier) {
             attribs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT;
             attribs[i++] = (EGLint)(modifier & 0xFFFFFFFF);
             attribs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT;
@@ -112,8 +118,8 @@ _create_egl_image(struct drmstate* drm, struct gbm_bo* bo)
         attribs[i++] = EGL_NONE;
     }
 
-    EGLImageKHR image = drm->glProc->eglCreateImageKHR(
-      drm->egl_display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attribs);
+    EGLImageKHR image = p->eglCreateImageKHR(
+      egl_display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attribs);
     if (image == EGL_NO_IMAGE_KHR) {
         ROG_ERR("failed to create egl image: %x", eglGetError());
         return NULL;
@@ -122,12 +128,117 @@ _create_egl_image(struct drmstate* drm, struct gbm_bo* bo)
     return image;
 }
 
+struct redbuffer*
+init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
+{
+    struct gbm_bo* bo = gbm_bo_create(cws->gbm_dev,
+                                      cws->width,
+                                      cws->height,
+                                      GBM_FORMAT_XRGB8888,
+                                      GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR);
+    if (!bo) {
+        ROG_ERR("failed to create gbm_bo");
+        goto fail;
+    }
+
+    // modifier
+    int gbm_has_modifier = 0;
+    {
+        uint64_t modifier = gbm_bo_get_modifier(bo);
+        if (!modifier) {
+            ROG_ERR("failed to bo get modifier");
+            goto fail;
+        }
+        gbm_has_modifier = modifier != DRM_FORMAT_MOD_INVALID;
+    }
+
+    // connect buffer to opengl
+    EGLImageKHR egl_image = NULL;
+    GLuint      fbo = 0, rbo = 0;
+    {
+        egl_image =
+          _create_egl_image(cws->egl_display, bo, p, gbm_has_modifier);
+        if (!egl_image) {
+            goto fail;
+        }
+
+        glGenRenderbuffers(1, &rbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+
+        // attaching egl image to glRenderbuffer
+        p->glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER,
+                                                  (GLeglImageOES)egl_image);
+
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+        glGenFramebuffers(1, &fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+        // attach render buffer to framebuffer object
+        glFramebufferRenderbuffer(
+          GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rbo);
+
+        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            ROG_ERR("glCheckFramebufferStatus failed: %x, status: %x",
+                    glGetError(),
+                    status);
+            goto fail;
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    struct wl_buffer* wl_buffer = NULL;
+    {
+        int      bo_fd    = gbm_bo_get_fd(bo);
+        uint32_t stride   = gbm_bo_get_stride(bo);
+        uint32_t offset   = gbm_bo_get_offset(bo, 0);
+        uint64_t modifier = gbm_bo_get_modifier(bo);
+        uint32_t width    = gbm_bo_get_width(bo);
+        uint32_t height   = gbm_bo_get_height(bo);
+        uint32_t format   = gbm_bo_get_format(bo);
+
+        struct zwp_linux_buffer_params_v1* params =
+          zwp_linux_dmabuf_v1_create_params(cws->zwp_linux_dmabuf);
+        zwp_linux_buffer_params_v1_add(params,
+                                       bo_fd,
+                                       0,
+                                       offset,
+                                       stride,
+                                       modifier >> 32,
+                                       modifier & 0xffffffff);
+
+        wl_buffer = zwp_linux_buffer_params_v1_create_immed(
+          params, width, height, format, 0);
+        if (!wl_buffer) {
+            ROG_ERR("faled to create immed wl_buffer");
+            goto fail;
+        }
+
+        zwp_linux_buffer_params_v1_destroy(params);
+        close(bo_fd);
+    }
+
+    struct redbuffer* rb;
+    rb               = malloc(sizeof(*rb));
+    rb->fbo          = fbo;
+    rb->rbo          = rbo;
+    rb->gbm_bo       = bo;
+    rb->egl_image    = egl_image;
+    rb->wl_buffer    = wl_buffer;
+    rb->free         = 1;
+    rb->needs_resize = 0;
+
+    return rb;
+fail:
+    return NULL;
+}
+
 // using drm->width, drm->height
 struct redbuffer*
-init_drm_buffer(struct drmstate* drm)
+init_drm_buffer(struct drmstate* drm, struct glProc* p)
 {
-    struct glProc* p = drm->glProc;
-
     struct gbm_bo* bo =
       gbm_bo_create(drm->gbm_dev,
                     drm->width,
@@ -152,9 +263,10 @@ init_drm_buffer(struct drmstate* drm)
 
     // connect buffer to opengl
     EGLImageKHR egl_image = NULL;
-    GLuint fbo = 0, rbo = 0;
+    GLuint      fbo = 0, rbo = 0;
     {
-        egl_image = _create_egl_image(drm, bo);
+        egl_image =
+          _create_egl_image(drm->egl_display, bo, p, drm->gbm_has_modifier);
         if (!egl_image) {
             goto fail;
         }
@@ -189,15 +301,15 @@ init_drm_buffer(struct drmstate* drm)
     // connect buffer to drm
     uint32_t buf_id;
     {
-        uint32_t handles[4] = { 0 };
-        uint32_t pitches[4] = { 0 };
-        uint32_t offsets[4] = { 0 };
+        uint32_t handles[4]   = { 0 };
+        uint32_t pitches[4]   = { 0 };
+        uint32_t offsets[4]   = { 0 };
         uint64_t modifiers[4] = { 0 };
 
-        handles[0] = gbm_bo_get_handle(bo).u32;
-        pitches[0] = gbm_bo_get_stride(bo);
-        offsets[0] = gbm_bo_get_offset(bo, 0);
-        modifiers[0] = gbm_bo_get_modifier(bo);
+        handles[0]      = gbm_bo_get_handle(bo).u32;
+        pitches[0]      = gbm_bo_get_stride(bo);
+        offsets[0]      = gbm_bo_get_offset(bo, 0);
+        modifiers[0]    = gbm_bo_get_modifier(bo);
         uint32_t format = gbm_bo_get_format(bo);
 
         if (drmModeAddFB2WithModifiers(
@@ -217,12 +329,14 @@ init_drm_buffer(struct drmstate* drm)
     }
 
     struct redbuffer* rb;
-    rb = malloc(sizeof(*rb));
-    rb->fbo = fbo;
-    rb->rbo = rbo;
-    rb->gbm_bo = bo;
-    rb->egl_image = egl_image;
-    rb->buf_id = buf_id;
+    rb               = malloc(sizeof(*rb));
+    rb->fbo          = fbo;
+    rb->rbo          = rbo;
+    rb->gbm_bo       = bo;
+    rb->egl_image    = egl_image;
+    rb->buf_id       = buf_id;
+    rb->free         = 1;
+    rb->needs_resize = 0;
 
     return rb;
 fail:
@@ -232,12 +346,12 @@ fail:
 
 // returns the unused buffer
 struct redbuffer*
-get_buffer(struct drmstate* drm)
+get_buffer(struct redstate* rs)
 {
-    drm->used_rb = 1 - drm->used_rb;
-    if (drm->used_rb)
-        return drm->rb1;
-    return drm->rb0;
+    rs->used_rb = 1 - rs->used_rb;
+    if (rs->used_rb)
+        return rs->rb1;
+    return rs->rb0;
 }
 
 struct glProc*

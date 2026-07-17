@@ -9,14 +9,6 @@
 #include <stdint.h>
 #include <xf86drmMode.h>
 
-typedef struct redbuffer
-{
-    uint32_t       buf_id;
-    struct gbm_bo* gbm_bo;
-    EGLImageKHR    egl_image;
-    GLuint         rbo, fbo;
-} redbuffer;
-
 struct glProc
 {
     PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
@@ -39,12 +31,8 @@ struct drmstate
     drmModeModeInfoPtr modes;
 
     struct drmprops* props;
-    struct glProc*  glProc;
 
     struct gbm_device* gbm_dev;
-    struct redbuffer*  rb0;
-    struct redbuffer*  rb1;
-    int                used_rb; // indicates which buffer is displayed
 
     bool page_flip_ready; // are we ready to render next frame
     bool stop_flipping;
@@ -57,8 +45,14 @@ struct drmstate
 struct drmstate*
 init_drm();
 
+int
+init_drm_render();
+
 void
 drm_handle_event(struct drmstate* drm);
+
+int
+drm_handle_render_trigger(struct redstate* rs, uint32_t buf_id, int r);
 
 int
 drm_set_crct(struct drmstate* drm, uint32_t buf_id);

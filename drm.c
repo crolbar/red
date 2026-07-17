@@ -62,6 +62,7 @@ drm_flip(struct drmstate* drm, uint32_t buf_id, struct redstate* rs)
         ROG_ERR("failed commit a page flip: %s", strerror(errno));
         return 1;
     }
+    drmModeAtomicFree(req);
     return 0;
 }
 
@@ -106,6 +107,22 @@ drm_set_crct(struct drmstate* drm, uint32_t buf_id)
     }
 
     drmModeAtomicFree(req);
+
+    return 0;
+}
+
+int
+drm_handle_render_trigger(struct redstate* rs, uint32_t buf_id, int r)
+{
+    if (r == RENDER_TRIGGER_FLIP) {
+        if (drm_flip(rs->drm, buf_id, rs))
+            return 1;
+
+    } else if (r == RENDER_TRIGGER_INIT) {
+        if (drm_set_crct(rs->drm, buf_id))
+            return 1;
+        render_trigger(rs->wrender_fd);
+    }
 
     return 0;
 }
@@ -257,6 +274,15 @@ get_connector(int fd)
     return NULL;
 }
 
+// wayland backend uses render dri node
+// int
+// init_drm_render()
+// {
+// fail:
+//     ROG_ERR("init_drm_render failed");
+//     return -1;
+// }
+
 struct drmstate*
 init_drm()
 {
@@ -325,7 +351,6 @@ init_drm()
     }
 
     drm->fd               = fd;
-    drm->used_rb          = 0;
     drm->gbm_has_modifier = false;
     drm->page_flip_ready  = true;
     drm->stop_flipping    = false;

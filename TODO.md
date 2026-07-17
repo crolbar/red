@@ -1,7 +1,7 @@
-# 16
 - [x]figure out frames
 - [x]drm.c
-- [ ]wayland client
+- [x]wayland client
+- [ ]backends (drm, wayland)
 
 - [x]logging
 - [x]refac signals (handles, signals.c...)

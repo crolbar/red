@@ -1,6 +1,7 @@
 #include "drm.h"
 #include "log.h"
 #include "red.h"
+#include "wayland-backend-client.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <libinput.h>
@@ -27,7 +28,7 @@ li_close_restricted(int fd, void* user_data)
 }
 
 static struct libinput_interface li_interface = {
-    .open_restricted = li_open_restricted,
+    .open_restricted  = li_open_restricted,
     .close_restricted = li_close_restricted,
 };
 
@@ -35,7 +36,7 @@ struct libinput*
 init_input()
 {
     struct libinput* li;
-    struct udev* udev;
+    struct udev*     udev;
 
     udev = udev_new();
     if (!udev) {
@@ -71,28 +72,30 @@ input_check_close(struct redstate* rs)
             struct libinput_event_keyboard* kbe =
               libinput_event_get_keyboard_event(event);
 
-            uint32_t key = libinput_event_keyboard_get_key(kbe);
-            int press = libinput_event_keyboard_get_key_state(kbe);
+            uint32_t key   = libinput_event_keyboard_get_key(kbe);
+            int      press = libinput_event_keyboard_get_key_state(kbe);
 
             if (key == KEY_Q && !press) {
                 ROG_INFO("detected 'Q'");
-                return 1;
+                rs->should_quit = true;
             }
 
             // TODO CTRL+ALT+FN
-            if (key == KEY_F1 && !press) {
-                if (ioctl(tty_fd, VT_ACTIVATE, 1) == -1) {
-                    return -1;
+            if (!rs->is_wayland_client) {
+                if (key == KEY_F1 && !press) {
+                    if (ioctl(tty_fd, VT_ACTIVATE, 1) == -1) {
+                        return -1;
+                    }
                 }
-            }
-            if (key == KEY_F2 && !press) {
-                if (ioctl(tty_fd, VT_ACTIVATE, 2) == -1) {
-                    return -1;
+                if (key == KEY_F2 && !press) {
+                    if (ioctl(tty_fd, VT_ACTIVATE, 2) == -1) {
+                        return -1;
+                    }
                 }
-            }
-            if (key == KEY_F3 && !press) {
-                if (ioctl(tty_fd, VT_ACTIVATE, 3) == -1) {
-                    return -1;
+                if (key == KEY_F3 && !press) {
+                    if (ioctl(tty_fd, VT_ACTIVATE, 3) == -1) {
+                        return -1;
+                    }
                 }
             }
             // ROG("key: %d (%d)", key, press);
@@ -108,13 +111,23 @@ input_check_close(struct redstate* rs)
             rs->rect_x += dx * 0.4;
             rs->rect_y += dy * 0.4;
 
-            if (rs->rect_x > rs->drm->width)
-                rs->rect_x = rs->drm->width;
+            // if (rs->rect_x > rs->drm->width)
+            //     rs->rect_x = rs->drm->width;
+            // if (rs->rect_x < 0)
+            //     rs->rect_x = 0;
+
+            // if (rs->rect_y > rs->drm->height)
+            //     rs->rect_y = rs->drm->height;
+            // if (rs->rect_y < 0)
+            //     rs->rect_y = 0;
+
+            if (rs->rect_x > rs->wl->width)
+                rs->rect_x = rs->wl->width;
             if (rs->rect_x < 0)
                 rs->rect_x = 0;
 
-            if (rs->rect_y > rs->drm->height)
-                rs->rect_y = rs->drm->height;
+            if (rs->rect_y > rs->wl->height)
+                rs->rect_y = rs->wl->height;
             if (rs->rect_y < 0)
                 rs->rect_y = 0;
         }

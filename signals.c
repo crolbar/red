@@ -43,10 +43,10 @@ int
 handle_signal(struct redstate* rs)
 {
     // TODO: better later
-    if (!rs->drm->page_flip_ready) {
-        rs->drm->stop_flipping = true;
-        return 0;
-    }
+    // if (!rs->drm->page_flip_ready) {
+    //     rs->drm->stop_flipping = true;
+    //     return 0;
+    // }
     struct signalfd_siginfo si;
     ssize_t                 n = read(rs->sig_fd, &si, sizeof(si));
 

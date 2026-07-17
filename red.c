@@ -1,4 +1,7 @@
+#include <EGL/egl.h>
+#include <assert.h>
 #include <errno.h> // IWYU pragma: keep
+#include <gbm.h>
 #include <libinput.h>
 #include <poll.h>
 #include <stdlib.h>
@@ -14,6 +17,7 @@
 #include "signals.h"
 #include "time.h"
 #include "vt.h"
+#include "wayland-backend-client.h"
 
 int
 main(int argc, char** argv)
@@ -27,6 +31,7 @@ main(int argc, char** argv)
     rs->tty_fd            = -1;
     rs->li                = NULL;
     rs->drm               = NULL;
+    rs->wl                = NULL;
     rs->active            = 1;
     rs->should_quit       = 0;
     rs->rect_x            = 0.0;
@@ -34,6 +39,7 @@ main(int argc, char** argv)
     rs->time_start        = time_get_now();
     rs->last_frame_time   = time_get_elapsed_sec(rs->time_start);
     rs->is_wayland_client = false;
+    rs->used_rb           = 0;
     if (!getenv("RED_DONT_SPAWN_CLIENT"))
         if (getenv("WAYLAND_DISPLAY") ||
             strcmp(getenv("XDG_SESSION_TYPE"), "wayland") == 0) {
@@ -42,15 +48,16 @@ main(int argc, char** argv)
         }
 
     // drm device
-    struct drmstate* drm;
-    {
-        drm = init_drm();
-        if (!drm) {
-            ret = 1;
-            goto end;
-        }
-        rs->drm = drm;
-    }
+    // struct drmstate* drm;
+    // if (!rs->is_wayland_client) //
+    // {
+    //     drm = init_drm();
+    //     if (!drm) {
+    //         ret = 1;
+    //         goto end;
+    //     }
+    //     rs->drm = drm;
+    // }
 
     // signals
     {
@@ -62,8 +69,9 @@ main(int argc, char** argv)
         rs->sig_fd = signal_fd;
     }
 
+    // VT
     if (!getenv("RED_DONT_SPAWN_CLIENT"))
-        if (!rs->is_wayland_client) // setup VT
+        if (!rs->is_wayland_client) //
         {
             int tty_fd = init_vt();
             if (tty_fd == -1) {
@@ -84,38 +92,89 @@ main(int argc, char** argv)
         rs->li = li;
     }
 
-    // gbm device
     {
-        drm->gbm_dev = init_gbm(drm->fd);
-        if (!drm->gbm_dev) {
-            ret = 1;
-            goto end;
-        }
-
-        drm->glProc = init_gl_proc();
-        if (!drm->glProc) {
+        rs->glProc = init_gl_proc();
+        if (!rs->glProc) {
             ret = 1;
             goto end;
         }
     }
+
+    // gbm device
+    // {
+    //     drm->gbm_dev = init_gbm(drm->fd);
+    //     if (!drm->gbm_dev) {
+    //         ret = 1;
+    //         goto end;
+    //     }
+
+    //     drm->glProc = init_gl_proc();
+    //     if (!drm->glProc) {
+    //         ret = 1;
+    //         goto end;
+    //     }
+    // }
 
     // egl display/context
+    // {
+    //     if (init_egl(drm)) {
+    //         ret = 1;
+    //         goto end;
+    //     }
+    // }
+
+    // drm->rb0 = init_drm_buffer(drm);
+    // if (!drm->rb0) {
+    //     ret = 1;
+    //     goto end;
+    // }
+    // drm->rb1 = init_drm_buffer(drm);
+    // if (!drm->rb1) {
+    //     ret = 1;
+    //     goto end;
+    // }
+
     {
-        if (init_egl(drm)) {
+        struct client_wayland_state* cws = init_wayland(rs);
+        if (!cws)
+            goto end;
+        rs->wl = cws;
+
+        // TODO
+        rs->wl->egl_display = NULL;
+        rs->wl->egl_context = NULL;
+        rs->wl->gbm_dev     = NULL;
+    }
+
+    {
+
+        int fd = open("/dev/dri/renderD128", O_RDWR | O_CLOEXEC);
+        if (fd < 0) {
+            ROG_ERR("failed oppening drm device: %s", strerror(errno));
+            return 1;
+        }
+
+        struct gbm_device* gbm_dev = init_gbm(fd);
+        if (!gbm_dev) {
+            goto end;
+        }
+        rs->wl->gbm_dev = gbm_dev;
+
+        if (init_egl(rs->wl->gbm_dev,
+                     rs->glProc,
+                     &rs->wl->egl_display,
+                     &rs->wl->egl_context)) {
             ret = 1;
             goto end;
         }
-    }
 
-    drm->rb0 = init_drm_buffer(drm);
-    if (!drm->rb0) {
-        ret = 1;
-        goto end;
-    }
-    drm->rb1 = init_drm_buffer(drm);
-    if (!drm->rb1) {
-        ret = 1;
-        goto end;
+        rs->rb0 = init_wl_buffer(rs->wl, rs->glProc);
+        rs->rb1 = init_wl_buffer(rs->wl, rs->glProc);
+
+        wl_buffer_add_listener(
+          rs->rb0->wl_buffer, &wl_buffer_listener, rs->rb0);
+        wl_buffer_add_listener(
+          rs->rb1->wl_buffer, &wl_buffer_listener, rs->rb1);
     }
 
     // loop
@@ -148,22 +207,38 @@ main(int argc, char** argv)
         fds[1].events = POLLIN;
         fds[2].fd     = rs->rrender_fd;
         fds[2].events = POLLIN;
-        fds[3].fd     = drm->fd;
-        fds[3].events = POLLIN;
 
+        // if (!rs->is_wayland_client) {
+        //     fds[3].fd     = drm->fd;
+        //     fds[3].events = POLLIN;
+        // }
+        if (rs->is_wayland_client) {
+            int fd = wl_display_get_fd(rs->wl->wl_display);
+            if (fd < 0) {
+                ROG_ERR("falied to get wl display fd");
+                ret = 1;
+                goto end;
+            }
+
+            fds[3].fd     = fd;
+            fds[3].events = POLLIN;
+        }
+        wl_display_roundtrip(rs->wl->wl_display);
         ROG_INFO("Starting loop...");
 
         while (!rs->should_quit) {
+            while (wl_display_prepare_read(rs->wl->wl_display) != 0)
+                wl_display_dispatch_pending(rs->wl->wl_display);
+            wl_display_flush(rs->wl->wl_display);
+
             if (poll(fds, 4, -1) == -1) {
                 ROG_ERR("poll fds error");
                 ret = 1;
                 goto end;
             }
 
-            // page flip ready
-            if (fds[3].revents & POLLIN) {
-                drm_handle_event(drm);
-            }
+            wl_display_read_events(rs->wl->wl_display);
+            wl_display_dispatch_pending(rs->wl->wl_display);
 
             // signal
             if (fds[1].revents & POLLIN) {
@@ -183,8 +258,18 @@ main(int argc, char** argv)
             // input event
             if (fds[0].revents & POLLIN) {
                 if (input_check_close(rs)) {
+                    ret = 1;
                     goto end;
                 }
+            }
+
+            // page flip ready
+            // if (!rs->is_wayland_client)
+            //     if (fds[3].revents & POLLIN) {
+            //         drm_handle_event(drm);
+            //     }
+            if (fds[3].revents & POLLIN) {
+                // render_frame(rs, NULL);
             }
 
             // render
@@ -204,19 +289,29 @@ main(int argc, char** argv)
                     rs->frame_latency   = dt;
                 }
 
-                redbuffer* rb = get_buffer(drm);
+                redbuffer* rb = get_buffer(rs);
+                // this rerender should be triggered by frame done
+                // which should happen a whole lot after wl_buffer.release
+                assert(rb->free);
+
+                if (rb->needs_resize) {
+                    wl_buffer_destroy(rb->wl_buffer);
+                    glDeleteFramebuffers(1, &rb->fbo);
+                    glDeleteRenderbuffers(1, &rb->rbo);
+                    eglDestroyImage(rs->wl->egl_display, rb->egl_image);
+                    gbm_bo_destroy(rb->gbm_bo);
+
+                    *rb = *init_wl_buffer(rs->wl, rs->glProc);
+                    wl_buffer_add_listener(
+                      rb->wl_buffer, &wl_buffer_listener, rb);
+                }
 
                 render_frame(rs, rb);
 
-                if (r == RENDER_TRIGGER_FLIP) {
-                    if (drm_flip(drm, rb->buf_id, rs))
-                        goto end;
-
-                } else if (r == RENDER_TRIGGER_INIT) {
-                    if (drm_set_crct(drm, rb->buf_id))
-                        goto end;
-                    render_trigger(rs->wrender_fd);
-                }
+                commit_buffer_wayland(rs, rb);
+                // if (!rs->is_wayland_client)
+                //     if (drm_handle_render_trigger(rs, rb->buf_id, r))
+                //         goto end;
             }
         }
     }
@@ -238,8 +333,10 @@ end:
 
     free(rs->time_start);
 
-    if (drm)
-        free(drm);
+    // if (drm)
+    //     free(drm);
+    if (rs->wl)
+        free(rs->wl);
 
     if (rs)
         free(rs);
