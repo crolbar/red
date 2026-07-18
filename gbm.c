@@ -124,6 +124,7 @@ _create_egl_image(EGLDisplay     egl_display,
         ROG_ERR("failed to create egl image: %x", eglGetError());
         return NULL;
     }
+    close(fd);
 
     return image;
 }
@@ -131,6 +132,10 @@ _create_egl_image(EGLDisplay     egl_display,
 struct redbuffer*
 init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
 {
+    EGLImageKHR       egl_image = EGL_NO_IMAGE_KHR;
+    GLuint            fbo = 0, rbo = 0;
+    struct wl_buffer* wl_buffer = NULL;
+
     struct gbm_bo* bo = gbm_bo_create(cws->gbm_dev,
                                       cws->width,
                                       cws->height,
@@ -145,16 +150,10 @@ init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
     int gbm_has_modifier = 0;
     {
         uint64_t modifier = gbm_bo_get_modifier(bo);
-        if (!modifier) {
-            ROG_ERR("failed to bo get modifier");
-            goto fail;
-        }
-        gbm_has_modifier = modifier != DRM_FORMAT_MOD_INVALID;
+        gbm_has_modifier  = modifier != DRM_FORMAT_MOD_INVALID;
     }
 
     // connect buffer to opengl
-    EGLImageKHR egl_image = NULL;
-    GLuint      fbo = 0, rbo = 0;
     {
         egl_image =
           _create_egl_image(cws->egl_display, bo, p, gbm_has_modifier);
@@ -189,7 +188,6 @@ init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    struct wl_buffer* wl_buffer = NULL;
     {
         int      bo_fd    = gbm_bo_get_fd(bo);
         uint32_t stride   = gbm_bo_get_stride(bo);
@@ -209,15 +207,22 @@ init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
                                        modifier >> 32,
                                        modifier & 0xffffffff);
 
+        if (wl_display_get_error(cws->wl_display) != 0) {
+            ROG_ERR("wayland connection is dead, bailing out");
+            return NULL;
+        }
         wl_buffer = zwp_linux_buffer_params_v1_create_immed(
           params, width, height, format, 0);
+
+        wl_display_flush(cws->wl_display);
+
+        zwp_linux_buffer_params_v1_destroy(params);
+        close(bo_fd);
+
         if (!wl_buffer) {
             ROG_ERR("faled to create immed wl_buffer");
             goto fail;
         }
-
-        zwp_linux_buffer_params_v1_destroy(params);
-        close(bo_fd);
     }
 
     struct redbuffer* rb;
@@ -232,6 +237,16 @@ init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
 
     return rb;
 fail:
+    if (wl_buffer)
+        wl_buffer_destroy(wl_buffer);
+    if (fbo)
+        glDeleteFramebuffers(1, &fbo);
+    if (rbo)
+        glDeleteRenderbuffers(1, &rbo);
+    if (egl_image)
+        eglDestroyImage(cws->egl_display, egl_image);
+    if (bo)
+        gbm_bo_destroy(bo);
     return NULL;
 }
 

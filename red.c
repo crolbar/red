@@ -301,7 +301,15 @@ main(int argc, char** argv)
                     eglDestroyImage(rs->wl->egl_display, rb->egl_image);
                     gbm_bo_destroy(rb->gbm_bo);
 
-                    *rb = *init_wl_buffer(rs->wl, rs->glProc);
+                    struct redbuffer* new_buf =
+                      init_wl_buffer(rs->wl, rs->glProc);
+                    if (!new_buf) {
+                        ret = 1;
+                        goto end;
+                    }
+
+                    *rb = *new_buf;
+                    free(new_buf);
                     wl_buffer_add_listener(
                       rb->wl_buffer, &wl_buffer_listener, rb);
                 }
