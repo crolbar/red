@@ -5,7 +5,7 @@
 struct timespec*
 time_get_now()
 {
-    struct timespec *tp;
+    struct timespec* tp;
     tp = malloc(sizeof(*tp));
     clock_gettime(CLOCK_MONOTONIC, tp);
     return tp;

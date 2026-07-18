@@ -27,11 +27,14 @@ CFLAGS  += -Wall -Wextra -Wno-unused-parameter -g \
            $(shell pkg-config --cflags $(DEPS))
 LDLIBS  += $(shell pkg-config --libs $(DEPS))
 
+PREFIX ?= /usr/local
+BINS ?= red
+
 WAYLAND_PROTOCOLS_DIR = $(shell pkg-config --variable=pkgdatadir wayland-protocols)
 XDG_SHELL_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/xdg-shell/xdg-shell.xml
 LINUX_DMABUF_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/linux-dmabuf/linux-dmabuf-v1.xml
 
-all: red
+all: $(BINS)
 
 xdg-shell-client-protocol.h: $(XDG_SHELL_XML)
 	wayland-scanner client-header $< $@
@@ -43,10 +46,13 @@ linux-dmabuf-protocol.h: $(LINUX_DMABUF_XML)
 linux-dmabuf-protocol.c: $(LINUX_DMABUF_XML)
 	wayland-scanner private-code $< $@
 
-PRO_SRC=linux-dmabuf-protocol.c  xdg-shell-protocol.c
+PRO_SRC=linux-dmabuf-protocol.c  xdg-shell-protocol.c xdg-shell-client-protocol.h linux-dmabuf-protocol.h
 
-red: $(SRC) $(PRO_SRC) xdg-shell-client-protocol.h linux-dmabuf-protocol.h
+$(BINS): $(SRC) $(PRO_SRC)
 	$(CC) $(CFLAGS) -o $@ $(SRC) $(PRO_SRC) $(LDLIBS)
+
+install: all
+	install -D -t $(DESTDIR)$(PREFIX)/bin $(BINS)
 
 clean:
 	rm -f red *protocol.c *protocol.h *.o

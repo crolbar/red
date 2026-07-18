@@ -213,6 +213,7 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     return 0;
 }
 
+// called when page flip is done
 void
 redraw(struct redstate* rs)
 {
@@ -235,6 +236,7 @@ redraw(struct redstate* rs)
         }
 
     render_frame(rs, rb);
+
     rs->backend->push_buffer(rs, rb);
     return;
 }

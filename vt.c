@@ -25,11 +25,11 @@ vt_start(int fd)
 {
     if (vt_set_mode(fd,
                     (struct vt_mode){
-                      .mode = VT_PROCESS,
-                      .waitv = 0,
+                      .mode   = VT_PROCESS,
+                      .waitv  = 0,
                       .relsig = SIGUSR1,
                       .acqsig = SIGUSR2,
-                      .frsig = 0,
+                      .frsig  = 0,
                     }) == -1) {
         return -1;
     };
@@ -52,11 +52,11 @@ vt_stop(int fd)
 {
     if (vt_set_mode(fd,
                     (struct vt_mode){
-                      .mode = VT_AUTO,
-                      .waitv = 0,
+                      .mode   = VT_AUTO,
+                      .waitv  = 0,
                       .relsig = 0,
                       .acqsig = 0,
-                      .frsig = 0,
+                      .frsig  = 0,
                     }) == -1) {
         return -1;
     };

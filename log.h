@@ -26,7 +26,7 @@ close_log_file();
 void
 log_log_file(const char* level,
              const char* file,
-             int line,
+             int         line,
              const char* func,
              const char* fmt,
              ...);

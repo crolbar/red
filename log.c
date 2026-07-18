@@ -13,7 +13,7 @@ static FILE* log_file = NULL;
 void
 log_log_file(const char* level,
              const char* file,
-             int line,
+             int         line,
              const char* func,
              const char* fmt,
              ...)
@@ -21,9 +21,9 @@ log_log_file(const char* level,
     if (!log_file)
         return;
 
-    time_t now = time(NULL);
+    time_t     now     = time(NULL);
     struct tm* tm_info = localtime(&now);
-    char time_buf[20];
+    char       time_buf[20];
     strftime(time_buf, sizeof(time_buf), "%H:%M:%S", tm_info);
 
     if (strcmp(level, "INFO") == 0)
@@ -57,9 +57,9 @@ int
 create_state_dir()
 {
     char* home = getenv("HOME");
-    char* fmt = "%s/.local/state/red";
+    char* fmt  = "%s/.local/state/red";
 
-    int len = snprintf(NULL, 0, fmt, home);
+    int   len  = snprintf(NULL, 0, fmt, home);
     char* path = malloc(len + 1);
     if (!path) {
         return 1;
@@ -91,7 +91,7 @@ open_log_file()
     // char* fmt = "%s/.local/state/red/log-%d";
     char* fmt = "%s/.local/state/red/log";
 
-    int len = snprintf(NULL, 0, fmt, home
+    int   len  = snprintf(NULL, 0, fmt, home
                        // , time(NULL)
     );
     char* path = malloc(len + 1);

@@ -1,5 +1,3 @@
-#include "backend-wayland-client.h"
-#include "drm.h"
 #include "log.h"
 #include "red.h"
 #include <errno.h>
@@ -7,7 +5,6 @@
 #include <libinput.h>
 #include <linux/input.h>
 #include <linux/vt.h>
-#include <stdio.h>
 #include <string.h>
 
 static int
@@ -15,7 +12,7 @@ li_open_restricted(const char* path, int flags, void* user_data)
 {
     int fd = open(path, flags);
     if (fd < 0) {
-        perror("open");
+        ROG_ERR("open err: %s", strerror(errno));
         return -1;
     }
     return fd;
@@ -77,7 +74,7 @@ input_check_close(struct redstate* rs)
 
             if (key == KEY_Q && !press) {
                 ROG_INFO("detected 'Q'");
-                rs->should_quit = true;
+                // rs->should_quit = 1;
             }
 
             // TODO CTRL+ALT+FN

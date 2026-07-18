@@ -4,8 +4,8 @@
 #include <xf86drmMode.h>
 
 #include "backend-drm.h"
-#include "log.h"
 #include "drmProps.h"
+#include "log.h"
 
 int
 add_prop(drmModeAtomicReqPtr req,
@@ -23,7 +23,6 @@ add_prop(drmModeAtomicReqPtr req,
     }
     return 0;
 }
-
 
 int
 get_prop_value(int fd, drmModeObjectPropertiesPtr props, char* name)
@@ -54,7 +53,6 @@ get_prop_id(int fd, drmModeObjectPropertiesPtr props, char* name)
     }
     return -1;
 }
-
 
 // get props of crtc, connector and plane of the crtc
 int
