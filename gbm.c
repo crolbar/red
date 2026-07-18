@@ -1,8 +1,10 @@
-#include "drm.h"
+#include "backend-drm.h"
+#include "backend-wayland-client.h"
+#include "backend-wayland.h"
 #include "gbm.h"
 #include "linux-dmabuf-protocol.h"
 #include "log.h"
-#include "wayland-backend-client.h"
+#include "red.h"
 #include <drm/drm_fourcc.h>
 #include <gbm.h>
 #include <stdlib.h>
@@ -22,14 +24,13 @@ init_gbm(int drm_fd)
 // NOTE: pass pointers to egl_display and context
 int
 init_egl(struct gbm_device* gbm_dev,
-         struct glProc*     p,
          EGLDisplay*        egl_display,
          EGLContext*        egl_context)
 {
     EGLint major, minor;
     {
-        *egl_display =
-          p->eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, gbm_dev, NULL);
+        *egl_display = gl_proc->eglGetPlatformDisplayEXT(
+          EGL_PLATFORM_GBM_KHR, gbm_dev, NULL);
         if (*egl_display == EGL_NO_DISPLAY) {
             ROG_ERR("failed to get egl display: %x", eglGetError());
             return 1;
@@ -77,7 +78,6 @@ init_egl(struct gbm_device* gbm_dev,
 EGLImageKHR
 _create_egl_image(EGLDisplay     egl_display,
                   struct gbm_bo* bo,
-                  struct glProc* p,
                   int            gbm_has_modifier)
 {
     int      fd       = gbm_bo_get_fd(bo);
@@ -118,7 +118,7 @@ _create_egl_image(EGLDisplay     egl_display,
         attribs[i++] = EGL_NONE;
     }
 
-    EGLImageKHR image = p->eglCreateImageKHR(
+    EGLImageKHR image = gl_proc->eglCreateImageKHR(
       egl_display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attribs);
     if (image == EGL_NO_IMAGE_KHR) {
         ROG_ERR("failed to create egl image: %x", eglGetError());
@@ -130,15 +130,15 @@ _create_egl_image(EGLDisplay     egl_display,
 }
 
 struct redbuffer*
-init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
+init_wl_buffer(struct backend_wayland* bw)
 {
     EGLImageKHR       egl_image = EGL_NO_IMAGE_KHR;
     GLuint            fbo = 0, rbo = 0;
     struct wl_buffer* wl_buffer = NULL;
 
-    struct gbm_bo* bo = gbm_bo_create(cws->gbm_dev,
-                                      cws->width,
-                                      cws->height,
+    struct gbm_bo* bo = gbm_bo_create(bw->gbm_dev,
+                                      bw->width,
+                                      bw->height,
                                       GBM_FORMAT_XRGB8888,
                                       GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR);
     if (!bo) {
@@ -155,8 +155,7 @@ init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
 
     // connect buffer to opengl
     {
-        egl_image =
-          _create_egl_image(cws->egl_display, bo, p, gbm_has_modifier);
+        egl_image = _create_egl_image(bw->egl_display, bo, gbm_has_modifier);
         if (!egl_image) {
             goto fail;
         }
@@ -165,8 +164,8 @@ init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
         glBindRenderbuffer(GL_RENDERBUFFER, rbo);
 
         // attaching egl image to glRenderbuffer
-        p->glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER,
-                                                  (GLeglImageOES)egl_image);
+        gl_proc->glEGLImageTargetRenderbufferStorageOES(
+          GL_RENDERBUFFER, (GLeglImageOES)egl_image);
 
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
@@ -198,7 +197,7 @@ init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
         uint32_t format   = gbm_bo_get_format(bo);
 
         struct zwp_linux_buffer_params_v1* params =
-          zwp_linux_dmabuf_v1_create_params(cws->zwp_linux_dmabuf);
+          zwp_linux_dmabuf_v1_create_params(bw->wc->zwp_linux_dmabuf);
         zwp_linux_buffer_params_v1_add(params,
                                        bo_fd,
                                        0,
@@ -207,14 +206,14 @@ init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
                                        modifier >> 32,
                                        modifier & 0xffffffff);
 
-        if (wl_display_get_error(cws->wl_display) != 0) {
+        if (wl_display_get_error(bw->wc->wl_display) != 0) {
             ROG_ERR("wayland connection is dead, bailing out");
             return NULL;
         }
         wl_buffer = zwp_linux_buffer_params_v1_create_immed(
           params, width, height, format, 0);
 
-        wl_display_flush(cws->wl_display);
+        wl_display_flush(bw->wc->wl_display);
 
         zwp_linux_buffer_params_v1_destroy(params);
         close(bo_fd);
@@ -237,6 +236,7 @@ init_wl_buffer(struct client_wayland_state* cws, struct glProc* p)
 
     return rb;
 fail:
+    // TODO make its own free wl_buffer functions
     if (wl_buffer)
         wl_buffer_destroy(wl_buffer);
     if (fbo)
@@ -244,7 +244,7 @@ fail:
     if (rbo)
         glDeleteRenderbuffers(1, &rbo);
     if (egl_image)
-        eglDestroyImage(cws->egl_display, egl_image);
+        eglDestroyImage(bw->egl_display, egl_image);
     if (bo)
         gbm_bo_destroy(bo);
     return NULL;
@@ -252,12 +252,12 @@ fail:
 
 // using drm->width, drm->height
 struct redbuffer*
-init_drm_buffer(struct drmstate* drm, struct glProc* p)
+init_drm_buffer(struct backend_drm* bd)
 {
     struct gbm_bo* bo =
-      gbm_bo_create(drm->gbm_dev,
-                    drm->width,
-                    drm->height,
+      gbm_bo_create(bd->gbm_dev,
+                    bd->width,
+                    bd->height,
                     GBM_FORMAT_XRGB8888,
                     GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
     if (!bo) {
@@ -272,8 +272,8 @@ init_drm_buffer(struct drmstate* drm, struct glProc* p)
             ROG_ERR("failed to bo get modifier");
             goto fail;
         }
-        drm->gbm_has_modifier =
-          drm->gbm_has_modifier || modifier != DRM_FORMAT_MOD_INVALID;
+        bd->gbm_has_modifier =
+          bd->gbm_has_modifier || modifier != DRM_FORMAT_MOD_INVALID;
     }
 
     // connect buffer to opengl
@@ -281,7 +281,7 @@ init_drm_buffer(struct drmstate* drm, struct glProc* p)
     GLuint      fbo = 0, rbo = 0;
     {
         egl_image =
-          _create_egl_image(drm->egl_display, bo, p, drm->gbm_has_modifier);
+          _create_egl_image(bd->egl_display, bo, bd->gbm_has_modifier);
         if (!egl_image) {
             goto fail;
         }
@@ -290,8 +290,8 @@ init_drm_buffer(struct drmstate* drm, struct glProc* p)
         glBindRenderbuffer(GL_RENDERBUFFER, rbo);
 
         // attaching egl image to glRenderbuffer
-        p->glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER,
-                                                  (GLeglImageOES)egl_image);
+        gl_proc->glEGLImageTargetRenderbufferStorageOES(
+          GL_RENDERBUFFER, (GLeglImageOES)egl_image);
 
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
@@ -328,16 +328,16 @@ init_drm_buffer(struct drmstate* drm, struct glProc* p)
         uint32_t format = gbm_bo_get_format(bo);
 
         if (drmModeAddFB2WithModifiers(
-              drm->fd,
-              drm->width,
-              drm->height,
+              bd->drm_fd,
+              bd->width,
+              bd->height,
               format,
               handles,
               pitches,
               offsets,
-              (drm->gbm_has_modifier) ? modifiers : NULL,
+              (bd->gbm_has_modifier) ? modifiers : NULL,
               &buf_id,
-              (drm->gbm_has_modifier) ? DRM_MODE_FB_MODIFIERS : 0)) {
+              (bd->gbm_has_modifier) ? DRM_MODE_FB_MODIFIERS : 0)) {
             ROG_ERR("failed to submit buffer drmModeAddFB2");
             goto fail;
         }
@@ -355,24 +355,15 @@ init_drm_buffer(struct drmstate* drm, struct glProc* p)
 
     return rb;
 fail:
+    ROG("failed to init drm buffer");
 
     return NULL;
 }
 
-// returns the unused buffer
-struct redbuffer*
-get_buffer(struct redstate* rs)
-{
-    rs->used_rb = 1 - rs->used_rb;
-    if (rs->used_rb)
-        return rs->rb1;
-    return rs->rb0;
-}
-
-struct glProc*
+struct gl_proc*
 init_gl_proc()
 {
-    struct glProc* glProc;
+    struct gl_proc* glProc;
     glProc = malloc(sizeof(*glProc));
 
     // get procs

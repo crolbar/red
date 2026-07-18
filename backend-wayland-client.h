@@ -1,12 +1,11 @@
 #pragma once
 
-#include "red.h"
+#include "backend-wayland.h"
 #include "xdg-shell-client-protocol.h"
 #include <wayland-client-core.h>
 #include <wayland-client-protocol.h>
-#include <wayland-egl-core.h>
 
-struct client_wayland_state
+struct wayland_client
 {
     struct wl_display*          wl_display;
     struct wl_registry*         wl_registry;
@@ -15,24 +14,14 @@ struct client_wayland_state
     struct xdg_wm_base*         xdg_wm_base;
     struct xdg_surface*         xdg_surface;
     struct xdg_toplevel*        xdg_toplevel;
-    struct wl_egl_window*       wl_egl_window;
     struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf;
-
-    int width, height;
-
-    EGLDisplay         egl_display;
-    EGLContext         egl_context;
-    struct gbm_device* gbm_dev;
 };
 
 void
-free_wayland(struct client_wayland_state* cws);
+free_wayland(struct wayland_client* cws);
 
-struct client_wayland_state*
-init_wayland(struct redstate* rs);
-
-void
-commit_buffer_wayland(struct redstate* rs, struct redbuffer* rb);
+struct wayland_client*
+init_wayland();
 
 void
 wl_registry_global(void*               data,
@@ -105,7 +94,9 @@ static const struct wl_buffer_listener wl_buffer_listener = {
 };
 
 void
-wl_frame_done(void* data, struct wl_callback* wl_callback, uint32_t callback_data);
+wl_frame_done(void*               data,
+              struct wl_callback* wl_callback,
+              uint32_t            callback_data);
 
 static const struct wl_callback_listener wl_frame_listener = {
     .done = wl_frame_done,

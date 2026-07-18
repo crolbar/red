@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <errno.h> // IWYU pragma: keep
 #include <libinput.h>
 #include <linux/vt.h>
@@ -9,7 +10,7 @@
 #include <sys/stat.h>
 #include <xf86drm.h>
 
-#include "drm.h"
+#include "backend-drm.h"
 #include "log.h"
 #include "red.h"
 
@@ -42,11 +43,16 @@ init_signals()
 int
 handle_signal(struct redstate* rs)
 {
+    struct backend_drm* bd;
     // TODO: better later
-    // if (!rs->drm->page_flip_ready) {
-    //     rs->drm->stop_flipping = true;
-    //     return 0;
-    // }
+    if (!rs->is_wayland_client) {
+        bd = rs->backend->d;
+        if (!bd->page_flip_ready) {
+            bd->stop_flipping = true;
+            return 0;
+        }
+    }
+
     struct signalfd_siginfo si;
     ssize_t                 n = read(rs->sig_fd, &si, sizeof(si));
 
@@ -57,9 +63,11 @@ handle_signal(struct redstate* rs)
 
     switch (si.ssi_signo) {
         case SIGUSR1:
+            assert(!rs->is_wayland_client);
             ROG_INFO("Releasing drm_master and vt_display");
+            bd = rs->backend->d;
 
-            if (drmDropMaster(rs->drm->fd) == -1) {
+            if (drmDropMaster(bd->drm_fd) == -1) {
                 ROG_ERR("Could not drop master: %s", strerror(errno));
                 return -1;
             }
@@ -80,9 +88,11 @@ handle_signal(struct redstate* rs)
             break;
 
         case SIGUSR2:
+            assert(!rs->is_wayland_client);
             ROG_INFO("Acquiring drm_master and vt_display");
+            bd = rs->backend->d;
 
-            if (drmSetMaster(rs->drm->fd) == -1) {
+            if (drmSetMaster(bd->drm_fd) == -1) {
                 ROG_ERR("Could not set master: %s", strerror(errno));
                 return -1;
             }
@@ -97,8 +107,8 @@ handle_signal(struct redstate* rs)
                 return -1;
             }
 
-            rs->drm->stop_flipping = false;
-            rs->active             = 1;
+            bd->stop_flipping = false;
+            rs->active        = 1;
             break;
 
         case SIGINT:

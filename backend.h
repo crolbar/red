@@ -1,7 +1,33 @@
 #pragma once
 
-// current backends: drm and wayland-client
+#include "red.h"
+#include <stdint.h>
+
+// current backends: drm and wayland
 struct backend
 {
-    void (*init)();
+    // data structure of the current backend
+    void* d;
+    // initializing the data structure and returning it
+    void* (*init_data)();
+
+    /*
+     starts up the backend, up to the point of frame buffers
+    */
+    int (*init)(void* rs);
+
+    uint32_t (*get_width)(void* d);
+    uint32_t (*get_height)(void* d);
+
+    // gives a buffer that is render ready
+    struct redbuffer* (*pull_buffer)(void* d);
+    // takes a buffer and displays it
+    int (*push_buffer)(void* rs, struct redbuffer* rb);
+    int (*push_init_buffer)(void* rs, struct redbuffer* rb);
+    int (*resize_buffer)(void* d, struct redbuffer* rb);
+
+    // returns a fd that can be polled for events
+    int (*get_fd)(void* d);
+    int (*flush_events)(void* d);
+    int (*handle_events)(void* d);
 };

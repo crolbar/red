@@ -1,17 +1,15 @@
 #include "red.h"
-#include "drm.h"
-#include "log.h"
 #include "render.h"
+#include "time.h"
 #include <GLES3/gl3.h>
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include "wayland-backend-client.h"
 
 static GLuint g_rect_program = 0;
-static GLuint g_rect_vao = 0;
-static GLuint g_rect_vbo = 0;
-static GLuint g_rect_ebo = 0;
+static GLuint g_rect_vao     = 0;
+static GLuint g_rect_vbo     = 0;
+static GLuint g_rect_ebo     = 0;
 
 static const char* rect_vs_src =
   "#version 320 es\n"
@@ -97,16 +95,16 @@ init_rect_renderer(void)
 
 static void
 ortho(float* m,
-      float left,
-      float right,
-      float bottom,
-      float top,
-      float near,
-      float far)
+      float  left,
+      float  right,
+      float  bottom,
+      float  top,
+      float  near,
+      float  far)
 {
     memset(m, 0, sizeof(float) * 16);
-    m[0] = 2.0f / (right - left);
-    m[5] = 2.0f / (top - bottom);
+    m[0]  = 2.0f / (right - left);
+    m[5]  = 2.0f / (top - bottom);
     m[10] = -2.0f / (far - near);
     m[12] = -(right + left) / (right - left);
     m[13] = -(top + bottom) / (top - bottom);
@@ -118,8 +116,8 @@ static void
 make_model(float* m, float x, float y, float w, float h)
 {
     memset(m, 0, sizeof(float) * 16);
-    m[0] = w;
-    m[5] = h;
+    m[0]  = w;
+    m[5]  = h;
     m[10] = 1.0f;
     m[12] = x;
     m[13] = y;
@@ -127,8 +125,8 @@ make_model(float* m, float x, float y, float w, float h)
 }
 
 static void
-draw_rect(int viewport_w,
-          int viewport_h,
+draw_rect(int   viewport_w,
+          int   viewport_h,
           float x,
           float y,
           float w,
@@ -180,8 +178,8 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     assert(rs);
     assert(rb);
 
-    int width = rs->wl->width;
-    int height = rs->wl->height;
+    int width  = rs->backend->get_width(rs->backend->d);
+    int height = rs->backend->get_height(rs->backend->d);
 
     glBindFramebuffer(GL_FRAMEBUFFER, rb->fbo);
 
@@ -216,33 +214,27 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
 }
 
 void
-render_trigger(int wrender_fd)
+redraw(struct redstate* rs)
 {
-    int n = write(wrender_fd, (uint8_t[]){ RENDER_TRIGGER_FLIP }, 1);
-    if (n != 1) {
-        ROG_ERR("failed writing to wrender_fd");
+    {
+        double now          = time_get_elapsed_sec(rs->time_start);
+        double dt           = (now - rs->last_frame_time) * 1000;
+        rs->last_frame_time = now;
+        rs->frame_latency   = dt;
     }
-}
 
-void
-render_triggerI(int wrender_fd)
-{
-    int n = write(wrender_fd, (uint8_t[]){ RENDER_TRIGGER_INIT }, 1);
-    if (n != 1) {
-        ROG_ERR("failed writing to wrender_fd");
-    }
-}
+    redbuffer* rb = rs->backend->pull_buffer(rs->backend->d);
+    // this rerender should be triggered by frame done
+    // which should happen a whole lot after wl_buffer.release
+    assert(rb->free);
 
-int
-should_render_trigger(int rrender_fd)
-{
-    uint8_t buffer[1];
-    int n = read(rrender_fd, buffer, 1);
-    if (n != 1) {
-        ROG_ERR("failed reading from rrender_fd");
-        return 0;
-    }
-    if (buffer[0] == RENDER_TRIGGER_INIT || buffer[0] == RENDER_TRIGGER_FLIP)
-        return buffer[0];
-    return 0;
+    if (rb->needs_resize)
+        if (rs->backend->resize_buffer(rs->backend->d, rb)) {
+            rs->should_quit = 1;
+            return;
+        }
+
+    render_frame(rs, rb);
+    rs->backend->push_buffer(rs, rb);
+    return;
 }

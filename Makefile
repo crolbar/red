@@ -1,6 +1,8 @@
 SRC = red.c \
 		drm.c \
-		wayland-backend-client.c \
+		backend-drm.c \
+		backend-wayland.c \
+		backend-wayland-client.c \
 		drmProps.c \
 		input.c \
 		log.c \
@@ -11,10 +13,8 @@ SRC = red.c \
 		render.c \
 		time.c
 
-#REMOVE wayland egl
 DEPS = wayland-server \
 		wayland-client \
-		wayland-egl \
 		libdrm \
 		libudev \
 		libinput \

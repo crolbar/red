@@ -1,9 +1,9 @@
-#include "gbm.h"
+#include "backend-wayland-client.h"
+#include "backend-wayland.h"
 #include "linux-dmabuf-protocol.h"
 #include "log.h"
 #include "red.h"
 #include "render.h"
-#include "wayland-backend-client.h"
 #include "xdg-shell-client-protocol.h"
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +12,7 @@
 #include <wayland-egl-core.h>
 
 void
-free_wayland(struct client_wayland_state* cws)
+free_wayland(struct wayland_client* cws)
 {
     if (cws->zwp_linux_dmabuf)
         zwp_linux_dmabuf_v1_destroy(cws->zwp_linux_dmabuf);
@@ -44,9 +44,9 @@ wl_frame_done(void*               data,
 
     (void)callback_data;
     struct redstate* rs = data;
-    wl_callback_destroy(wl_callback);
 
-    render_trigger(rs->wrender_fd);
+    wl_callback_destroy(wl_callback);
+    redraw(rs);
 }
 
 /* ======== wl_buffer ======== */
@@ -68,7 +68,7 @@ wl_registry_global(void*               data,
                    uint32_t            version)
 {
     (void)version;
-    struct client_wayland_state* cws = data;
+    struct wayland_client* cws = data;
     if (strcmp(interface, "wl_compositor") == 0) {
         cws->wl_compositor =
           wl_registry_bind(wl_registry, name, &wl_compositor_interface, 6);
@@ -125,16 +125,18 @@ xdg_toplevel_configure(void*                data,
 {
     (void)states;
     (void)xdg_toplevel;
-    struct redstate* rs = data;
+    struct redstate*        rs = data;
+    struct backend_wayland* bw = rs->backend->d;
 
-    if (width > 0 && height > 0) {
-        if (rs->wl->width != width || rs->wl->height != height) {
-            rs->rb0->needs_resize = 1;
-            rs->rb1->needs_resize = 1;
-        }
-        rs->wl->width  = width;
-        rs->wl->height = height;
+    if (width <= 0 || height <= 0)
+        return;
+
+    if (bw->width != (uint32_t)width || bw->width != (uint32_t)height) {
+        bw->rb0->needs_resize = 1;
+        bw->rb1->needs_resize = 1;
     }
+    bw->width  = width;
+    bw->height = height;
 }
 
 void
@@ -162,25 +164,11 @@ xdg_toplevel_wm_capabilities(void*                data,
     (void)data, (void)xdg_toplevel, (void)capabilities;
 }
 
-void
-commit_buffer_wayland(struct redstate* rs, struct redbuffer* rb)
+struct wayland_client*
+init_wayland()
 {
-    rb->free = 0;
-    wl_surface_attach(rs->wl->wl_surface, rb->wl_buffer, 0, 0);
-    wl_surface_damage_buffer(
-      rs->wl->wl_surface, 0, 0, rs->wl->width, rs->wl->height);
-
-    struct wl_callback* cb = wl_surface_frame(rs->wl->wl_surface);
-    wl_callback_add_listener(cb, &wl_frame_listener, rs);
-
-    wl_surface_commit(rs->wl->wl_surface);
-}
-
-struct client_wayland_state*
-init_wayland(struct redstate* rs)
-{
-    struct client_wayland_state* cws = NULL;
-    cws                              = malloc(sizeof(*cws));
+    struct wayland_client* cws = NULL;
+    cws                        = malloc(sizeof(*cws));
     if (!cws)
         goto fail;
     cws->wl_display       = NULL;
@@ -190,10 +178,7 @@ init_wayland(struct redstate* rs)
     cws->xdg_wm_base      = NULL;
     cws->xdg_surface      = NULL;
     cws->xdg_toplevel     = NULL;
-    cws->wl_egl_window    = NULL;
     cws->zwp_linux_dmabuf = NULL;
-    cws->width            = 300;
-    cws->height           = 300;
 
     cws->wl_display = wl_display_connect(NULL);
     if (!cws->wl_display) {
@@ -229,9 +214,6 @@ init_wayland(struct redstate* rs)
     xdg_surface_add_listener(cws->xdg_surface, &xdg_surface_listener, cws);
 
     cws->xdg_toplevel = xdg_surface_get_toplevel(cws->xdg_surface);
-    xdg_toplevel_add_listener(cws->xdg_toplevel, &xdg_toplevel_listener, rs);
-
-    xdg_toplevel_set_title(cws->xdg_toplevel, "client-wayland");
 
     wl_surface_commit(cws->wl_surface);
 

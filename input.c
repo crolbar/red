@@ -1,7 +1,7 @@
+#include "backend-wayland-client.h"
 #include "drm.h"
 #include "log.h"
 #include "red.h"
-#include "wayland-backend-client.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <libinput.h>
@@ -111,23 +111,15 @@ input_check_close(struct redstate* rs)
             rs->rect_x += dx * 0.4;
             rs->rect_y += dy * 0.4;
 
-            // if (rs->rect_x > rs->drm->width)
-            //     rs->rect_x = rs->drm->width;
-            // if (rs->rect_x < 0)
-            //     rs->rect_x = 0;
-
-            // if (rs->rect_y > rs->drm->height)
-            //     rs->rect_y = rs->drm->height;
-            // if (rs->rect_y < 0)
-            //     rs->rect_y = 0;
-
-            if (rs->rect_x > rs->wl->width)
-                rs->rect_x = rs->wl->width;
+            int width  = rs->backend->get_width(rs->backend->d);
+            int height = rs->backend->get_height(rs->backend->d);
+            if (rs->rect_x > width)
+                rs->rect_x = width;
             if (rs->rect_x < 0)
                 rs->rect_x = 0;
 
-            if (rs->rect_y > rs->wl->height)
-                rs->rect_y = rs->wl->height;
+            if (rs->rect_y > height)
+                rs->rect_y = height;
             if (rs->rect_y < 0)
                 rs->rect_y = 0;
         }

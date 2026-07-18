@@ -1,6 +1,6 @@
 #pragma once
 
-#include "drm.h"
+#include "backend-drm.h"
 #include <stdint.h>
 #include <xf86drmMode.h>
 
@@ -39,4 +39,4 @@ int
 get_prop_id(int fd, drmModeObjectPropertiesPtr props, char* name);
 
 int
-init_prop_ids(struct drmstate* drm);
+init_prop_ids(struct backend_drm* drm);
