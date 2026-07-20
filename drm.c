@@ -7,7 +7,9 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/signalfd.h>
+#include <unistd.h>
 #include <xf86drm.h>
+#include <sys/stat.h>
 #include <xf86drmMode.h>
 
 #include "backend-drm.h"

@@ -1,6 +1,9 @@
 #include <errno.h> // IWYU pragma: keep
 #include <libinput.h>
 #include <poll.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "backend-drm.h"

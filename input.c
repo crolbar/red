@@ -6,6 +6,7 @@
 #include <linux/input.h>
 #include <linux/vt.h>
 #include <string.h>
+#include <unistd.h>
 
 static int
 li_open_restricted(const char* path, int flags, void* user_data)
@@ -74,7 +75,7 @@ input_check_close(struct redstate* rs)
 
             if (key == KEY_Q && !press) {
                 ROG_INFO("detected 'Q'");
-                // rs->should_quit = 1;
+                rs->should_quit = 1;
             }
 
             // TODO CTRL+ALT+FN

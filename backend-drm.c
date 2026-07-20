@@ -6,8 +6,10 @@
 #include "log.h"
 #include "render.h"
 #include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <xf86drm.h>
 
 void*
@@ -95,8 +97,9 @@ backend_drm_init(void* data)
 
     drmModeEncoder* encoder = drmModeGetEncoder(fd, conn->encoder_id);
     if (!encoder) {
-        ROG_ERR("failed to get current encoder. is monitor connected to gpu %s",
-                cfg.dri_dev);
+        ROG_ERR(
+          "failed to get current encoder. is monitor connected to gpu `%s`",
+          cfg.dri_dev);
         goto fail;
     }
     crtc_id = encoder->crtc_id;

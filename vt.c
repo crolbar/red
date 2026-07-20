@@ -1,10 +1,11 @@
 #include <errno.h> // IWYU pragma: keep
+#include <fcntl.h>
 #include <linux/kd.h>
 #include <linux/vt.h>
 #include <signal.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 
 #include "log.h"
 

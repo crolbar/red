@@ -9,6 +9,8 @@
 #include <gbm.h>
 #include <stdlib.h>
 #include <wayland-client-protocol.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 struct gbm_device*
 init_gbm(int drm_fd)

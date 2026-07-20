@@ -18,6 +18,20 @@ log_log_file(const char* level,
              const char* fmt,
              ...)
 {
+    va_list args;
+    va_start(args, fmt);
+    vargs_log_log_file(level, file, line, func, fmt, args);
+    va_end(args);
+}
+
+void
+vargs_log_log_file(const char* level,
+                   const char* file,
+                   int         line,
+                   const char* func,
+                   const char* fmt,
+                   va_list     args)
+{
     if (!log_file)
         return;
 
@@ -43,10 +57,7 @@ log_log_file(const char* level,
     if (strcmp(level, "DEBUG") == 0)
         fprintf(log_file, "%s:%d [%s]: ", file, line, func);
 
-    va_list args;
-    va_start(args, fmt);
     vfprintf(log_file, fmt, args);
-    va_end(args);
 
     fprintf(log_file, ANSI_RESET);
     fprintf(log_file, "%s", "\n");

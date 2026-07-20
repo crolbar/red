@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <errno.h> // IWYU pragma: keep
+#include <fcntl.h>
 #include <libinput.h>
 #include <linux/vt.h>
 #include <signal.h>
@@ -8,6 +9,7 @@
 #include <sys/ioctl.h>
 #include <sys/signalfd.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <xf86drm.h>
 
 #include "backend-drm.h"
