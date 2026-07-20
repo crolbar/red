@@ -75,7 +75,7 @@ input_check_close(struct redstate* rs)
 
             if (key == KEY_Q && !press) {
                 ROG_INFO("detected 'Q'");
-                rs->should_quit = 1;
+                // rs->should_quit = 1;
             }
 
             // TODO CTRL+ALT+FN

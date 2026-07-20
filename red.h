@@ -5,6 +5,7 @@
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <wayland-server.h>
 
 typedef struct redbuffer
 {
@@ -16,6 +17,21 @@ typedef struct redbuffer
     EGLImageKHR       egl_image;
     GLuint            rbo, fbo;
 } redbuffer;
+
+struct redsurface
+{
+    struct redstate*    rs;
+    struct wl_resource* wl_surface;
+    struct wl_resource* xdg_surface;
+    struct wl_resource* xdg_toplevel;
+
+    struct redsurface* parent;
+    int                sub_x, sub_y;
+
+    struct wl_resource* pending_buffer;   /* set by wl_surface.attach */
+    struct wl_resource* pending_callback; /* set by wl_surface.frame */
+    int                 configured;
+};
 
 struct redstate
 {
@@ -36,6 +52,22 @@ struct redstate
 
     double rect_x;
     double rect_y;
+
+    struct wl_display*    wl_display;
+    struct wl_event_loop* wl_event_loop;
+    struct wl_global*     wl_compositor;
+    struct wl_global*     xdg_wm_base;
+    struct wl_global*     wl_output;
+    struct wl_global*     wl_seat;
+
+    struct redsurface* rsurf;
+
+    struct wl_global* subcompositor_global;
+    struct wl_global* data_device_manager_global;
+
+    int32_t tex_w;
+    int32_t tex_h;
+    GLuint tex;
 };
 
 struct gl_proc

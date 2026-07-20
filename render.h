@@ -4,4 +4,4 @@
 
 // pulls buf from backend, calls render_frame, pushes buf to backend
 void
-redraw(struct redstate* rs);
+redraw(struct redstate* rs, struct redsurface* rsurf);

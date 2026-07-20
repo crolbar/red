@@ -193,7 +193,7 @@ backend_drm_push_init_buffer(void* data, redbuffer* rb)
     struct backend_drm* bd = rs->backend->d;
 
     drm_set_crct(bd, rb->buf_id);
-    redraw(rs);
+    redraw(rs, NULL);
     return 0;
 }
 
@@ -213,9 +213,16 @@ page_flip_handler(int          fd,
     struct redstate*    rs = user_data;
     struct backend_drm* bd = rs->backend->d;
     bd->page_flip_ready    = true;
-    if (bd->stop_flipping)
-        return;
-    redraw(rs);
+    // if (bd->stop_flipping)
+    //     return;
+    // redraw(rs);
+
+    if (rs->rsurf && rs->rsurf->pending_callback) {
+        uint32_t now_ms = (uint32_t)(wl_display_get_serial(rs->wl_display));
+        wl_callback_send_done(rs->rsurf->pending_callback, now_ms);
+        wl_resource_destroy(rs->rsurf->pending_callback);
+        rs->rsurf->pending_callback = NULL;
+    }
 }
 
 static drmEventContext drmevctx = {

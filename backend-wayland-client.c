@@ -46,7 +46,7 @@ wl_frame_done(void*               data,
     struct redstate* rs = data;
 
     wl_callback_destroy(wl_callback);
-    redraw(rs);
+    // redraw(rs);
 }
 
 /* ======== wl_buffer ======== */

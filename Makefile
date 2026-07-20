@@ -1,4 +1,5 @@
 SRC = red.c \
+		wayland.c \
 		drm.c \
 		backend-drm.c \
 		backend-wayland.c \
@@ -38,6 +39,8 @@ all: $(BINS)
 
 xdg-shell-client-protocol.h: $(XDG_SHELL_XML)
 	wayland-scanner client-header $< $@
+xdg-shell-server-protocol.h: $(XDG_SHELL_XML)
+	wayland-scanner server-header $< $@
 xdg-shell-protocol.c: $(XDG_SHELL_XML)
 	wayland-scanner private-code $< $@
 
@@ -46,7 +49,8 @@ linux-dmabuf-protocol.h: $(LINUX_DMABUF_XML)
 linux-dmabuf-protocol.c: $(LINUX_DMABUF_XML)
 	wayland-scanner private-code $< $@
 
-PRO_SRC=linux-dmabuf-protocol.c  xdg-shell-protocol.c xdg-shell-client-protocol.h linux-dmabuf-protocol.h
+PRO_SRC=linux-dmabuf-protocol.c xdg-shell-protocol.c xdg-shell-client-protocol.h linux-dmabuf-protocol.h xdg-shell-server-protocol.h
+pro: $(PRO_SRC)
 
 $(BINS): $(SRC) $(PRO_SRC)
 	$(CC) $(CFLAGS) -o $@ $(SRC) $(PRO_SRC) $(LDLIBS)

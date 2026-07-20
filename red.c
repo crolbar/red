@@ -1,10 +1,11 @@
 #include <errno.h> // IWYU pragma: keep
+#include <fcntl.h>
 #include <libinput.h>
 #include <poll.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <wayland-server-core.h>
 
 #include "backend-drm.h"
 #include "backend-wayland.h"
@@ -15,6 +16,7 @@
 #include "signals.h"
 #include "time.h"
 #include "vt.h"
+#include "wayland.h"
 
 struct gl_proc* gl_proc = NULL;
 
@@ -44,6 +46,18 @@ main(int argc, char** argv)
         }
     rs->backend    = (rs->is_wayland_client) ? &backend_wayland : &backend_drm;
     rs->backend->d = rs->backend->init_data();
+
+    rs->wl_display    = NULL;
+    rs->wl_event_loop = NULL;
+    rs->wl_compositor = NULL;
+    rs->xdg_wm_base   = NULL;
+    rs->wl_output     = NULL;
+    rs->wl_seat       = NULL;
+
+    rs->rsurf = NULL;
+    rs->tex = 0;
+    rs->tex_h = 0;
+    rs->tex_w = 0;
 
     {
         gl_proc = init_gl_proc();
@@ -94,9 +108,12 @@ main(int argc, char** argv)
 
     rs->backend->push_init_buffer(rs, rs->backend->pull_buffer(rs->backend->d));
 
+    init_compositor(rs);
+
     // loop
     {
-        struct pollfd fds[3];
+        size_t        fds_size = 4;
+        struct pollfd fds[fds_size];
 
         int li_fd = libinput_get_fd(rs->li);
         if (li_fd < 0) {
@@ -111,25 +128,41 @@ main(int argc, char** argv)
             goto end;
         }
 
+        int wl_event_loop_fd = wl_event_loop_get_fd(rs->wl_event_loop);
+        if (wl_event_loop_fd < 0) {
+            ROG_ERR("failed to get event loop fd");
+            ret = 1;
+            goto end;
+        }
+
         fds[0].fd     = li_fd;
         fds[0].events = POLLIN;
         fds[1].fd     = rs->sig_fd;
         fds[1].events = POLLIN;
         fds[2].fd     = backend_fd;
         fds[2].events = POLLIN;
+        fds[3].fd     = wl_event_loop_fd;
+        fds[3].events = POLLIN;
 
         ROG_INFO("Starting loop...");
         while (!rs->should_quit) {
+            wl_display_flush_clients(rs->wl_display);
             rs->backend->flush_events(rs->backend->d);
 
-            if (poll(fds, 3, -1) == -1) {
+            if (poll(fds, fds_size, -1) == -1) {
                 ROG_ERR("poll fds error");
                 ret = 1;
                 goto end;
             }
 
+            // backend events
             if (fds[2].revents & POLLIN || rs->is_wayland_client) {
                 rs->backend->handle_events(rs->backend->d);
+            }
+
+            // wayland events
+            if (fds[3].revents & POLLIN) {
+                wl_event_loop_dispatch(rs->wl_event_loop, 0);
             }
 
             // signal
