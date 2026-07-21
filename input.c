@@ -73,9 +73,13 @@ input_check_close(struct redstate* rs)
             uint32_t key   = libinput_event_keyboard_get_key(kbe);
             int      press = libinput_event_keyboard_get_key_state(kbe);
 
-            if (key == KEY_Q && !press) {
-                ROG_INFO("detected 'Q'");
-                // rs->should_quit = 1;
+            // if (key == KEY_Q && !press) {
+            if (key == KEY_F4 && !press) {
+                rs->should_quit = 1;
+            }
+            if (key == KEY_F5 && !press) {
+                ROG("tops: \n")
+                dll_for_each(rs->toplevels, v) ROG("  top: %s", v->val->app_id)
             }
 
             // TODO CTRL+ALT+FN

@@ -284,17 +284,11 @@ draw_textured_quad(struct redstate* rs, GLuint tex, int w, int h)
 }
 
 int
-render_frame(struct redstate*   rs,
-             struct redbuffer*  rb,
-             struct redsurface* rsurf)
+render_surface(struct redstate* rs, struct redsurface* rsurf)
 {
-    assert(rs);
-    assert(rb);
-
-    int width  = rs->backend->get_width(rs->backend->d);
-    int height = rs->backend->get_height(rs->backend->d);
-
     struct wl_resource* buffer = rsurf->pending_buffer;
+    if (!buffer)
+        buffer = rsurf->old_pending_buffer;
     if (!buffer)
         return 1;
 
@@ -303,20 +297,14 @@ render_frame(struct redstate*   rs,
         ROG_ERR("not shm buffer?");
         return 1;
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, rb->fbo);
-
-    glViewport(0, 0, width, height);
-    // glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f);
-    // glClear(GL_COLOR_BUFFER_BIT);
-
     wl_shm_buffer_begin_access(shm);
 
     uint8_t* src        = wl_shm_buffer_get_data(shm);
     int32_t  src_stride = wl_shm_buffer_get_stride(shm);
     int32_t  w          = wl_shm_buffer_get_width(shm);
     int32_t  h          = wl_shm_buffer_get_height(shm);
-    uint32_t fmt        = wl_shm_buffer_get_format(shm);
-    GLenum   gl_fmt     = GL_RGBA;
+    // uint32_t fmt        = wl_shm_buffer_get_format(shm);
+    GLenum gl_fmt = GL_RGBA;
 
     /* create/reuse a texture on rsurf so we don't alloc every frame */
     if (rs->tex == 0) {
@@ -349,30 +337,54 @@ render_frame(struct redstate*   rs,
 
     draw_textured_quad(rs, rs->tex, w, h);
 
-    wl_buffer_send_release(buffer);
-    rsurf->pending_buffer = NULL;
+    if (rsurf->pending_buffer) {
+        rsurf->old_pending_buffer = buffer;
+        wl_buffer_send_release(buffer);
+        rsurf->pending_buffer = NULL;
+    }
 
-    // {
-    //     float rect_w = 240.0f;
-    //     float rect_h = 240.0f;
-    //     float rect_x = rs->rect_x;
-    //     float rect_y = height - rs->rect_y;
-    //     if (rect_x + rect_w >= width)
-    //         rect_x = width - rect_w;
+    return 0;
+}
 
-    //     if (rect_y + rect_h >= height)
-    //         rect_y = height - rect_h;
-    //     draw_rect(width,
-    //               height,
-    //               rect_x,
-    //               rect_y,
-    //               rect_w,
-    //               rect_h,
-    //               1.0f,
-    //               1.0f,
-    //               1.0f,
-    //               1.0f);
-    // }
+int
+render_frame(struct redstate* rs, struct redbuffer* rb)
+{
+    assert(rs);
+    assert(rb);
+
+    int width  = rs->backend->get_width(rs->backend->d);
+    int height = rs->backend->get_height(rs->backend->d);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, rb->fbo);
+
+    glViewport(0, 0, width, height);
+    glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (rs->focused_toplevel && rs->focused_toplevel->configured)
+        render_surface(rs, rs->focused_toplevel);
+
+    {
+        float rect_w = 240.0f;
+        float rect_h = 240.0f;
+        float rect_x = rs->rect_x;
+        float rect_y = height - rs->rect_y;
+        if (rect_x + rect_w >= width)
+            rect_x = width - rect_w;
+
+        if (rect_y + rect_h >= height)
+            rect_y = height - rect_h;
+        draw_rect(width,
+                  height,
+                  rect_x,
+                  rect_y,
+                  rect_w,
+                  rect_h,
+                  1.0f,
+                  1.0f,
+                  1.0f,
+                  1.0f);
+    }
 
     glFinish();
     return 0;
@@ -380,8 +392,11 @@ render_frame(struct redstate*   rs,
 
 // called when page flip is done
 void
-redraw(struct redstate* rs, struct redsurface* rsurf)
+redraw(struct redstate* rs)
 {
+    if (!rs->needs_redraw)
+        return;
+
     {
         double now          = time_get_elapsed_sec(rs->time_start);
         double dt           = (now - rs->last_frame_time) * 1000;
@@ -400,9 +415,21 @@ redraw(struct redstate* rs, struct redsurface* rsurf)
             return;
         }
 
-    if (rsurf && rsurf->configured)
-        render_frame(rs, rb, rsurf);
+    render_frame(rs, rb);
 
     rs->backend->push_buffer(rs, rb);
-    return;
+    rs->needs_redraw = 0;
+}
+
+void
+request_redraw(struct redstate* rs)
+{
+    rs->needs_redraw = 1;
+    // if we are not ready - page flip in progress - once we are ready
+    // we call redraw, so this redraw request will happen on the next
+    // available redraw time
+    if (!rs->backend->is_ready_for_frame(rs->backend->d))
+        return;
+
+    redraw(rs);
 }

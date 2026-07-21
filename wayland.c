@@ -1,3 +1,4 @@
+#include "compositor.h"
 #include "log.h"
 #include "red.h"
 #include "render.h"
@@ -7,6 +8,20 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <wayland-server.h>
+
+int
+wl_send_pending_callback(struct redsurface* rsurf)
+{
+    if (!rsurf || !rsurf->pending_callback)
+        return 0;
+
+    uint32_t now_ms = (uint32_t)(wl_display_get_serial(rsurf->rs->wl_display));
+    wl_callback_send_done(rsurf->pending_callback, now_ms);
+    wl_resource_destroy(rsurf->pending_callback);
+    rsurf->pending_callback = NULL;
+
+    return 0;
+}
 
 void
 wl_surface_destroy(struct wl_client* client, struct wl_resource* resource)
@@ -69,10 +84,12 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     // on first commit, client is not sending a buffer
     if (rsurf->xdg_surface && !rsurf->configured)
         return;
-    // TODO
-    rsurf->rs->rsurf = rsurf;
 
-    redraw(rsurf->rs, rsurf);
+    // TODO: figure out background toplevels
+    if (rsurf != rsurf->rs->focused_toplevel)
+        return;
+
+    request_redraw(rsurf->rs);
 }
 
 void
@@ -114,6 +131,18 @@ wl_surface_get_release(struct wl_client*   client,
 {
 }
 
+static void
+wl_surface_resource_destroy(struct wl_resource* resource)
+{
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+
+    red_destroy_toplevel(rsurf->rs, rsurf);
+
+    if (rsurf->app_id)
+        free(rsurf->app_id);
+    free(rsurf);
+}
+
 static const struct wl_surface_interface wl_surface_implementation = {
     .destroy              = wl_surface_destroy,
     .attach               = wl_surface_attach,
@@ -128,13 +157,6 @@ static const struct wl_surface_interface wl_surface_implementation = {
     .offset               = wl_surface_offset,
     .get_release          = wl_surface_get_release,
 };
-
-static void
-wl_surface_resource_destroy(struct wl_resource* resource)
-{
-    struct redsurface* rsurf = wl_resource_get_user_data(resource);
-    free(rsurf);
-}
 
 static void
 wl_region_destroy(struct wl_client* c, struct wl_resource* r)
@@ -168,6 +190,26 @@ static const struct wl_region_interface wl_region_implementation = {
     .subtract = wl_region_subtract,
 };
 
+struct redsurface*
+init_redsurface()
+{
+    struct redsurface* rsurf = NULL;
+    rsurf                    = malloc(sizeof(*rsurf));
+    if (!rsurf) {
+        return NULL;
+    }
+    rsurf->rs                 = NULL;
+    rsurf->configured         = 0;
+    rsurf->pending_buffer     = NULL;
+    rsurf->pending_callback   = NULL;
+    rsurf->wl_surface         = NULL;
+    rsurf->xdg_toplevel       = NULL;
+    rsurf->app_id             = NULL;
+    rsurf->old_pending_buffer = NULL;
+
+    return rsurf;
+}
+
 static void
 wl_compositor_create_surface(struct wl_client*   client,
                              struct wl_resource* resource,
@@ -175,25 +217,19 @@ wl_compositor_create_surface(struct wl_client*   client,
 {
     struct redstate* rs = resource->data;
 
-    struct redsurface* rsurf = NULL;
-    rsurf                    = malloc(sizeof(*rsurf));
+    struct redsurface* rsurf = init_redsurface();
     if (!rsurf) {
         ROG_ERR("oom?");
-        rs->should_quit = 1;
+        return;
     }
-    rsurf->rs               = rs;
-    rsurf->configured       = 0;
-    rsurf->pending_buffer   = NULL;
-    rsurf->pending_callback = NULL;
-    rsurf->wl_surface       = NULL;
-    rsurf->xdg_toplevel     = NULL;
-
+    rsurf->rs         = rs;
     rsurf->wl_surface = wl_resource_create(
       client, &wl_surface_interface, wl_resource_get_version(resource), id);
     if (!rsurf->wl_surface) {
         ROG_ERR("oom?");
         return;
     }
+
     wl_resource_set_implementation(rsurf->wl_surface,
                                    &wl_surface_implementation,
                                    rsurf,
@@ -241,6 +277,7 @@ void
 xdg_toplevel_destroy(struct wl_client* client, struct wl_resource* resource)
 {
     wl_resource_destroy(resource);
+    ROG("dest")
 }
 
 void
@@ -255,7 +292,7 @@ xdg_toplevel_set_title(struct wl_client*   client,
                        struct wl_resource* resource,
                        const char*         title)
 {
-    ROG("window with title: %s spawned!", title);
+    ROG_INFO("Window with title: %s spawned!", title);
 }
 
 void
@@ -263,6 +300,10 @@ xdg_toplevel_set_app_id(struct wl_client*   client,
                         struct wl_resource* resource,
                         const char*         app_id)
 {
+    struct redsurface* rsurf = resource->data;
+    rsurf->app_id            = malloc(strlen(app_id) + 1);
+    strcpy(rsurf->app_id, app_id);
+    ROG("app id: %s", rsurf->app_id);
 }
 
 void
@@ -369,12 +410,16 @@ xdg_surface_get_toplevel(struct wl_client*   client,
 {
     struct redsurface* rsurf = resource->data;
 
+    rsurf->app_id       = "";
     rsurf->xdg_toplevel = wl_resource_create(
       client, &xdg_toplevel_interface, wl_resource_get_version(resource), id);
     if (!rsurf->xdg_toplevel) {
         ROG_ERR("oom?");
         return;
     }
+
+    red_create_toplevel(rsurf->rs, rsurf);
+
     wl_resource_set_implementation(
       rsurf->xdg_toplevel, &xdg_toplevel_implementation, rsurf, NULL);
 
@@ -528,7 +573,7 @@ wl_global_bind_output(struct wl_client* client,
                         height,
                         60 * 1000);
     if (version >= 2)
-        wl_output_send_scale(r, 2);
+        wl_output_send_scale(r, 1);
     if (version >= 4)
         wl_output_send_name(r, "red-1");
     wl_output_send_done(r);

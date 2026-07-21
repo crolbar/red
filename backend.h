@@ -30,4 +30,6 @@ struct backend
     int (*get_fd)(void* d);
     int (*flush_events)(void* d);
     int (*handle_events)(void* d);
+
+    int (*is_ready_for_frame)(void* d);
 };

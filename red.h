@@ -1,6 +1,7 @@
 #pragma once
 
 #include "backend.h"
+#include "dll.h"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
@@ -24,13 +25,15 @@ struct redsurface
     struct wl_resource* wl_surface;
     struct wl_resource* xdg_surface;
     struct wl_resource* xdg_toplevel;
+    char*               app_id; // xdg_toplevel title
 
     struct redsurface* parent;
     int                sub_x, sub_y;
 
-    struct wl_resource* pending_buffer;   /* set by wl_surface.attach */
-    struct wl_resource* pending_callback; /* set by wl_surface.frame */
-    int                 configured;
+    struct wl_resource* pending_buffer;   // set by wl_surface.attach
+    struct wl_resource* old_pending_buffer;
+    struct wl_resource* pending_callback; // set by wl_surface.frame
+    int                 configured;       // xdg_surface configure
 };
 
 struct redstate
@@ -44,6 +47,7 @@ struct redstate
     int is_wayland_client; // in wayland compositor spawn as a client
     int active;            // VT is active
     int should_quit;       // main loop condition
+    int needs_redraw;      // changes were made to the focused client
 
     struct timespec* time_start;
     // frame info
@@ -60,14 +64,15 @@ struct redstate
     struct wl_global*     wl_output;
     struct wl_global*     wl_seat;
 
-    struct redsurface* rsurf;
-
     struct wl_global* subcompositor_global;
     struct wl_global* data_device_manager_global;
 
     int32_t tex_w;
     int32_t tex_h;
-    GLuint tex;
+    GLuint  tex;
+
+    dll(struct redsurface*) toplevels;
+    struct redsurface* focused_toplevel;
 };
 
 struct gl_proc

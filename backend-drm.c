@@ -1,10 +1,12 @@
 #include "backend-drm.h"
 #include "config.h"
+#include "dll.h"
 #include "drm.h"
 #include "drmProps.h"
 #include "gbm.h"
 #include "log.h"
 #include "render.h"
+#include "wayland.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -193,7 +195,7 @@ backend_drm_push_init_buffer(void* data, redbuffer* rb)
     struct backend_drm* bd = rs->backend->d;
 
     drm_set_crct(bd, rb->buf_id);
-    redraw(rs, NULL);
+    redraw(rs);
     return 0;
 }
 
@@ -212,17 +214,23 @@ page_flip_handler(int          fd,
 {
     struct redstate*    rs = user_data;
     struct backend_drm* bd = rs->backend->d;
-    bd->page_flip_ready    = true;
-    // if (bd->stop_flipping)
-    //     return;
-    // redraw(rs);
 
-    if (rs->rsurf && rs->rsurf->pending_callback) {
-        uint32_t now_ms = (uint32_t)(wl_display_get_serial(rs->wl_display));
-        wl_callback_send_done(rs->rsurf->pending_callback, now_ms);
-        wl_resource_destroy(rs->rsurf->pending_callback);
-        rs->rsurf->pending_callback = NULL;
+    bd->page_flip_ready = 1;
+
+    dll_for_each(rs->toplevels, v)
+    {
+        if (v->val != rs->focused_toplevel) {
+            if (!v->val->pending_buffer)
+                continue;
+            wl_buffer_send_release(v->val->pending_buffer);
+            v->val->pending_buffer = NULL;
+        }
+        wl_send_pending_callback(v->val);
     }
+
+    // if updates happened on page flip
+    // shouldn't happen much as we have one window
+    redraw(rs);
 }
 
 static drmEventContext drmevctx = {
@@ -251,17 +259,25 @@ backend_drm_flush_events(void* d)
     return 0;
 }
 
+int
+backend_drm_is_ready_for_frame(void* d)
+{
+    struct backend_drm* bd = d;
+    return bd->page_flip_ready && !bd->stop_flipping;
+}
+
 struct backend backend_drm = {
-    .d                = NULL,
-    .init_data        = backend_drm_init_data,
-    .init             = backend_drm_init,
-    .get_height       = backend_drm_get_height,
-    .get_width        = backend_drm_get_width,
-    .pull_buffer      = backend_drm_pull_buffer,
-    .push_buffer      = backend_drm_push_buffer,
-    .push_init_buffer = backend_drm_push_init_buffer,
-    .resize_buffer    = backend_drm_resize_buffer,
-    .get_fd           = backend_drm_get_fd,
-    .flush_events     = backend_drm_flush_events,
-    .handle_events    = backend_drm_handle_events,
+    .d                  = NULL,
+    .init_data          = backend_drm_init_data,
+    .init               = backend_drm_init,
+    .get_height         = backend_drm_get_height,
+    .get_width          = backend_drm_get_width,
+    .pull_buffer        = backend_drm_pull_buffer,
+    .push_buffer        = backend_drm_push_buffer,
+    .push_init_buffer   = backend_drm_push_init_buffer,
+    .resize_buffer      = backend_drm_resize_buffer,
+    .get_fd             = backend_drm_get_fd,
+    .flush_events       = backend_drm_flush_events,
+    .handle_events      = backend_drm_handle_events,
+    .is_ready_for_frame = backend_drm_is_ready_for_frame,
 };

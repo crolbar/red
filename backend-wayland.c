@@ -114,6 +114,7 @@ backend_wayland_push_buffer(void* data, redbuffer* rb)
     wl_surface_attach(bw->wc->wl_surface, rb->wl_buffer, 0, 0);
     wl_surface_damage_buffer(bw->wc->wl_surface, 0, 0, bw->width, bw->height);
 
+    bw->is_ready_for_frame = 0;
     struct wl_callback* cb = wl_surface_frame(bw->wc->wl_surface);
     wl_callback_add_listener(cb, &wl_frame_listener, rs);
 
@@ -125,7 +126,7 @@ int
 backend_wayland_push_init_buffer(void* data, redbuffer* rb)
 {
     struct redstate* rs = data;
-    redraw(rs, NULL);
+    redraw(rs);
     return 0;
 }
 
@@ -187,17 +188,25 @@ backend_wayland_handle_events(void* d)
     return 0;
 }
 
+int
+backend_wayland_is_ready_for_frame(void* d)
+{
+    struct backend_wayland* bw = d;
+    return bw->is_ready_for_frame;
+}
+
 struct backend backend_wayland = {
-    .d                = NULL,
-    .init_data        = backend_wayland_init_data,
-    .init             = backend_wayland_init,
-    .get_height       = backend_wayland_get_height,
-    .get_width        = backend_wayland_get_width,
-    .pull_buffer      = backend_wayland_pull_buffer,
-    .push_buffer      = backend_wayland_push_buffer,
-    .push_init_buffer = backend_wayland_push_init_buffer,
-    .resize_buffer    = backend_wayland_resize_buffer,
-    .get_fd           = backend_wayland_get_fd,
-    .flush_events     = backend_wayland_flush_events,
-    .handle_events    = backend_wayland_handle_events,
+    .d                  = NULL,
+    .init_data          = backend_wayland_init_data,
+    .init               = backend_wayland_init,
+    .get_height         = backend_wayland_get_height,
+    .get_width          = backend_wayland_get_width,
+    .pull_buffer        = backend_wayland_pull_buffer,
+    .push_buffer        = backend_wayland_push_buffer,
+    .push_init_buffer   = backend_wayland_push_init_buffer,
+    .resize_buffer      = backend_wayland_resize_buffer,
+    .get_fd             = backend_wayland_get_fd,
+    .flush_events       = backend_wayland_flush_events,
+    .handle_events      = backend_wayland_handle_events,
+    .is_ready_for_frame = backend_wayland_is_ready_for_frame,
 };

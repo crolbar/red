@@ -1,5 +1,6 @@
 SRC = red.c \
 		wayland.c \
+		compositor.c \
 		drm.c \
 		backend-drm.c \
 		backend-wayland.c \

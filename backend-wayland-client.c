@@ -1,10 +1,12 @@
 #include "backend-wayland-client.h"
 #include "backend-wayland.h"
+#include "wayland.h"
 #include "linux-dmabuf-protocol.h"
 #include "log.h"
 #include "red.h"
 #include "render.h"
 #include "xdg-shell-client-protocol.h"
+#include "xdg-shell-server-protocol.h"
 #include <stdlib.h>
 #include <string.h>
 #include <wayland-client-core.h>
@@ -44,9 +46,14 @@ wl_frame_done(void*               data,
 
     (void)callback_data;
     struct redstate* rs = data;
-
+    struct backend_wayland* bw = rs->backend->d;
     wl_callback_destroy(wl_callback);
-    // redraw(rs);
+
+    bw->is_ready_for_frame = 1;
+
+    wl_send_pending_callback(rs->focused_toplevel);
+
+    redraw(rs);
 }
 
 /* ======== wl_buffer ======== */

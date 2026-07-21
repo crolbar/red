@@ -9,6 +9,7 @@
 
 #include "backend-drm.h"
 #include "backend-wayland.h"
+#include "dll.h"
 #include "gbm.h"
 #include "input.h"
 #include "log.h"
@@ -47,15 +48,17 @@ main(int argc, char** argv)
     rs->backend    = (rs->is_wayland_client) ? &backend_wayland : &backend_drm;
     rs->backend->d = rs->backend->init_data();
 
-    rs->wl_display    = NULL;
-    rs->wl_event_loop = NULL;
-    rs->wl_compositor = NULL;
-    rs->xdg_wm_base   = NULL;
-    rs->wl_output     = NULL;
-    rs->wl_seat       = NULL;
+    rs->wl_display       = NULL;
+    rs->wl_event_loop    = NULL;
+    rs->wl_compositor    = NULL;
+    rs->xdg_wm_base      = NULL;
+    rs->wl_output        = NULL;
+    rs->wl_seat          = NULL;
+    rs->needs_redraw     = 1;
+    rs->toplevels        = (typeof(rs->toplevels))dll_init();
+    rs->focused_toplevel = NULL;
 
-    rs->rsurf = NULL;
-    rs->tex = 0;
+    rs->tex   = 0;
     rs->tex_h = 0;
     rs->tex_w = 0;
 
@@ -212,6 +215,8 @@ end:
     //     free(drm);
     // if (rs->wl)
     //     free(rs->wl);
+
+    dll_destroy(rs->toplevels);
 
     if (rs)
         free(rs);
