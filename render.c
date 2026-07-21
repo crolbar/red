@@ -425,6 +425,9 @@ void
 request_redraw(struct redstate* rs)
 {
     rs->needs_redraw = 1;
+    // if our vt is not focused we don't handle rendering
+    if (!rs->active)
+        return;
     // if we are not ready - page flip in progress - once we are ready
     // we call redraw, so this redraw request will happen on the next
     // available redraw time

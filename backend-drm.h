@@ -21,7 +21,6 @@ struct backend_drm
     struct redbuffer*  rb0;
     struct redbuffer*  rb1;
     int                page_flip_ready; // are we ready to render next frame
-    int                stop_flipping;
     uint32_t           used_rb; // indicates which buffer is displayed
     uint32_t           width, height;
 };

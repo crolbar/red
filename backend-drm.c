@@ -34,7 +34,6 @@ backend_drm_init_data()
     bd->rb0              = NULL;
     bd->rb1              = NULL;
     bd->page_flip_ready  = 1;
-    bd->stop_flipping    = 0;
     bd->used_rb          = 0;
     bd->width            = 300;
     bd->height           = 300;
@@ -189,10 +188,11 @@ backend_drm_push_buffer(void* data, redbuffer* rb)
 }
 
 int
-backend_drm_push_init_buffer(void* data, redbuffer* rb)
+backend_drm_push_init_buffer(void* data)
 {
     struct redstate*    rs = data;
     struct backend_drm* bd = rs->backend->d;
+    struct redbuffer*   rb = (!bd->used_rb) ? bd->rb0 : bd->rb1;
 
     drm_set_crct(bd, rb->buf_id);
     redraw(rs);
@@ -263,7 +263,7 @@ int
 backend_drm_is_ready_for_frame(void* d)
 {
     struct backend_drm* bd = d;
-    return bd->page_flip_ready && !bd->stop_flipping;
+    return bd->page_flip_ready;
 }
 
 struct backend backend_drm = {

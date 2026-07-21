@@ -26,7 +26,7 @@ drm_flip(struct backend_drm* bd, uint32_t buf_id, struct redstate* rs)
         return 1;
     }
 
-    bd->page_flip_ready = false;
+    bd->page_flip_ready = 0;
 
     drmModeAtomicReqPtr req = drmModeAtomicAlloc();
 

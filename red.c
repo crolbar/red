@@ -10,6 +10,7 @@
 #include "backend-drm.h"
 #include "backend-wayland.h"
 #include "dll.h"
+#include "drm.h"
 #include "gbm.h"
 #include "input.h"
 #include "log.h"
@@ -109,7 +110,7 @@ main(int argc, char** argv)
         rs->li = li;
     }
 
-    rs->backend->push_init_buffer(rs, rs->backend->pull_buffer(rs->backend->d));
+    rs->backend->push_init_buffer(rs);
 
     init_compositor(rs);
 
@@ -179,8 +180,7 @@ main(int argc, char** argv)
 
                 // redraw on aquire
                 if (rs->active && prev_active != rs->active) {
-                    rs->backend->push_init_buffer(
-                      rs, rs->backend->pull_buffer(rs->backend->d));
+                    rs->backend->push_init_buffer(rs);
                 }
             }
 

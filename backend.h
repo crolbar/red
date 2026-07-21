@@ -23,7 +23,7 @@ struct backend
     struct redbuffer* (*pull_buffer)(void* d);
     // takes a buffer and displays it
     int (*push_buffer)(void* rs, struct redbuffer* rb);
-    int (*push_init_buffer)(void* rs, struct redbuffer* rb);
+    int (*push_init_buffer)(void* rs);
     int (*resize_buffer)(void* d, struct redbuffer* rb);
 
     // returns a fd that can be polled for events

@@ -292,7 +292,6 @@ xdg_toplevel_set_title(struct wl_client*   client,
                        struct wl_resource* resource,
                        const char*         title)
 {
-    ROG_INFO("Window with title: %s spawned!", title);
 }
 
 void

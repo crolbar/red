@@ -45,16 +45,6 @@ init_signals()
 int
 handle_signal(struct redstate* rs)
 {
-    struct backend_drm* bd;
-    // TODO: better later
-    if (!rs->is_wayland_client) {
-        bd = rs->backend->d;
-        if (!bd->page_flip_ready) {
-            bd->stop_flipping = true;
-            return 0;
-        }
-    }
-
     struct signalfd_siginfo si;
     ssize_t                 n = read(rs->sig_fd, &si, sizeof(si));
 
@@ -67,7 +57,10 @@ handle_signal(struct redstate* rs)
         case SIGUSR1:
             assert(!rs->is_wayland_client);
             ROG_INFO("Releasing drm_master and vt_display");
-            bd = rs->backend->d;
+            struct backend_drm* bd = rs->backend->d;
+            while (!bd->page_flip_ready) {
+                rs->backend->handle_events(bd);
+            }
 
             if (drmDropMaster(bd->drm_fd) == -1) {
                 ROG_ERR("Could not drop master: %s", strerror(errno));
@@ -109,8 +102,7 @@ handle_signal(struct redstate* rs)
                 return -1;
             }
 
-            bd->stop_flipping = false;
-            rs->active        = 1;
+            rs->active = 1;
             break;
 
         case SIGINT:

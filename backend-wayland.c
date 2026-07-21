@@ -123,7 +123,7 @@ backend_wayland_push_buffer(void* data, redbuffer* rb)
 }
 
 int
-backend_wayland_push_init_buffer(void* data, redbuffer* rb)
+backend_wayland_push_init_buffer(void* data)
 {
     struct redstate* rs = data;
     redraw(rs);
