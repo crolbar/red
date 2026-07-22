@@ -1,6 +1,7 @@
 SRC = red.c \
 		wayland.c \
 		compositor.c \
+		actions.c \
 		drm.c \
 		backend-drm.c \
 		backend-wayland.c \
@@ -20,6 +21,7 @@ DEPS = wayland-server \
 		libdrm \
 		libudev \
 		libinput \
+		xkbcommon \
 		gbm \
 		egl \
 		glesv2

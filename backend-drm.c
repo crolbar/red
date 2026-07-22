@@ -157,8 +157,6 @@ backend_drm_init(void* data)
 
     return 0;
 fail:
-    ROG("failed to init drm backend");
-
     if (fd)
         close(fd);
     if (conn)

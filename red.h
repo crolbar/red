@@ -7,6 +7,7 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <wayland-server.h>
+#include <xkbcommon/xkbcommon.h>
 
 typedef struct redbuffer
 {
@@ -45,10 +46,26 @@ struct redclient
     struct wl_listener  client_destroyed;
 };
 
+#define RED_MOD_SHIFT   1
+#define RED_MOD_CTRL    2
+#define RED_MOD_ALT     4
+#define RED_MOD_SUPER   8
+#define RED_MOD_NO_MODS 0
+
+// mods is a bitmask
+typedef struct redbind
+{
+    uint8_t mods;
+    char*   key;
+    char**  action;
+    size_t  action_len;
+} redbind;
+
 struct redstate
 {
-    struct backend*  backend;
-    struct libinput* li;
+    struct backend*     backend;
+    struct libinput*    li;
+    struct xkb_context* xkb;
 
     int tty_fd;
     int sig_fd;
@@ -86,6 +103,16 @@ struct redstate
     // clients that have xdg_toplevel as wl_surface
     dll(struct redclient*) trcs; // top red clients
     struct redclient* focused_trc;
+
+    int                xkb_keymap_fd;
+    char*              xkb_keymap_string;
+    struct xkb_keymap* xkb_keymap;
+    size_t             xkb_keymap_size;
+    struct xkb_state*  xkb_state;
+    xkb_mod_mask_t     xkb_mods_depressed;
+    xkb_mod_mask_t     xkb_mods_latched;
+    xkb_mod_mask_t     xkb_mods_locked;
+    xkb_layout_index_t xkb_group;
 };
 
 struct gl_proc

@@ -6,11 +6,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
+#include <xkbcommon/xkbcommon.h>
 
 #include "backend-drm.h"
 #include "backend-wayland.h"
 #include "dll.h"
-#include "drm.h"
 #include "gbm.h"
 #include "input.h"
 #include "log.h"
@@ -48,6 +48,17 @@ main(int argc, char** argv)
         }
     rs->backend    = (rs->is_wayland_client) ? &backend_wayland : &backend_drm;
     rs->backend->d = rs->backend->init_data();
+    rs->xkb        = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    rs->xkb_keymap_fd      = -1;
+    rs->xkb_keymap_string  = NULL;
+    rs->xkb_keymap_size    = 0;
+    rs->xkb_mods_depressed = 0;
+    rs->xkb_mods_latched   = 0;
+    rs->xkb_mods_locked    = 0;
+    rs->xkb_group          = 0;
+    if (xkb_init_keyboard(rs)) {
+        goto end;
+    }
 
     rs->wl_display    = NULL;
     rs->wl_event_loop = NULL;
@@ -187,7 +198,7 @@ main(int argc, char** argv)
 
             // input event
             if (fds[0].revents & POLLIN) {
-                if (input_check_close(rs)) {
+                if (input_dispatch(rs)) {
                     ret = 1;
                     goto end;
                 }
@@ -216,6 +227,9 @@ end:
     //     free(drm);
     // if (rs->wl)
     //     free(rs->wl);
+
+    if (rs->xkb)
+        xkb_destroy(rs);
 
     dll_destroy(rs->rcs);
 

@@ -1,10 +1,10 @@
 #include "compositor.h"
+#include "config.h"
 #include "dll.h"
 #include "log.h"
 #include "red.h"
 #include "render.h"
 #include "xdg-shell-server-protocol.h"
-#include <stdlib.h>
 #include <string.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
@@ -579,7 +579,8 @@ wl_global_bind_output(struct wl_client* client,
         wl_output_send_name(r, "red-1");
     wl_output_send_done(r);
 }
-void
+
+static void
 wl_keyboard_release(struct wl_client* client, struct wl_resource* resource)
 {
     wl_resource_destroy(resource);
@@ -590,25 +591,53 @@ static const struct wl_keyboard_interface wl_keyboard_implementation = {
 };
 
 static void
-wl_seat_get_pointer(struct wl_client* c, struct wl_resource* r, uint32_t id)
+wl_seat_get_pointer(struct wl_client*   client,
+                    struct wl_resource* resource,
+                    uint32_t            id)
 {
     wl_resource_post_error(
-      r, WL_SEAT_ERROR_MISSING_CAPABILITY, "no pointer capability");
+      resource, WL_SEAT_ERROR_MISSING_CAPABILITY, "no pointer capability");
 }
 
 static void
-wl_seat_get_keyboard(struct wl_client* c, struct wl_resource* r, uint32_t id)
+wl_seat_get_keyboard(struct wl_client*   client,
+                     struct wl_resource* resource,
+                     uint32_t            id)
 {
-    // wl_keyboard_interface
-    wl_resource_post_error(
-      r, WL_SEAT_ERROR_MISSING_CAPABILITY, "no keyboard capability");
+    struct redstate*    rs          = wl_resource_get_user_data(resource);
+    struct wl_resource* wl_keyboard = wl_resource_create(
+      client, &wl_keyboard_interface, wl_resource_get_version(resource), id);
+    wl_resource_set_implementation(
+      wl_keyboard, &wl_keyboard_implementation, wl_keyboard, NULL);
+
+    if (wl_resource_get_version(wl_keyboard) >=
+        WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION) {
+        wl_keyboard_send_repeat_info(
+          wl_keyboard, cfg.kb_repeat_rate, cfg.kb_repeat_delay);
+    }
+
+    wl_keyboard_send_keymap(wl_keyboard,
+                            WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
+                            rs->xkb_keymap_fd,
+                            rs->xkb_keymap_size);
+
+    dll_for_each(rs->rcs, v)
+    {
+        if (v->val->wl_client != client)
+            continue;
+
+        v->val->wl_keyboard = wl_keyboard;
+        break;
+    }
 }
 
 static void
-wl_seat_get_touch(struct wl_client* c, struct wl_resource* r, uint32_t id)
+wl_seat_get_touch(struct wl_client*   client,
+                  struct wl_resource* resource,
+                  uint32_t            id)
 {
     wl_resource_post_error(
-      r, WL_SEAT_ERROR_MISSING_CAPABILITY, "no touch capability");
+      resource, WL_SEAT_ERROR_MISSING_CAPABILITY, "no touch capability");
 }
 
 static void
@@ -633,7 +662,7 @@ wl_global_bind_seat(struct wl_client* client,
     struct wl_resource* r =
       wl_resource_create(client, &wl_seat_interface, version, id);
     wl_resource_set_implementation(r, &wl_seat_implementation, data, NULL);
-    wl_seat_send_capabilities(r, 0);
+    wl_seat_send_capabilities(r, WL_SEAT_CAPABILITY_KEYBOARD);
     if (version >= 2)
         wl_seat_send_name(r, "seat0");
 }

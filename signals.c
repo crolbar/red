@@ -72,12 +72,12 @@ handle_signal(struct redstate* rs)
                 return -1;
             }
 
-            libinput_suspend(rs->li);
             // after resume we should get only device_add events
             struct libinput_event* ev;
             while ((ev = libinput_get_event(rs->li))) {
                 libinput_event_destroy(ev);
             }
+            libinput_suspend(rs->li);
 
             rs->active = 0;
             break;

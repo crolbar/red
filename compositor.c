@@ -67,5 +67,13 @@ red_create_trc(struct redstate*   rs,
     rs->focused_trc = rc;
     // focus change requires redraw
     request_redraw(rs);
+
+    // TODO
+    uint32_t        serial = wl_display_next_serial(rs->wl_display);
+    struct wl_array keys;
+    wl_array_init(&keys);
+    wl_keyboard_send_enter(rc->wl_keyboard, serial, rsurf->wl_surface, &keys);
+    wl_array_release(&keys);
+
     return 0;
 }

@@ -16,6 +16,7 @@
       libgbm
       libdrm
       libinput
+      libxkbcommon
 
       wayland
     ];
