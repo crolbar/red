@@ -217,16 +217,10 @@ page_flip_handler(int          fd,
 
     bd->page_flip_ready = 1;
 
-    dll_for_each(rs->toplevels, v)
-    {
-        if (v->val != rs->focused_toplevel) {
-            if (!v->val->pending_buffer)
-                continue;
-            wl_buffer_send_release(v->val->pending_buffer);
-            v->val->pending_buffer = NULL;
-        }
-        wl_send_pending_callback(v->val);
-    }
+    // TODO: can we miss a pending callback when we change focus when
+    // page_flip_ready == 0 ?
+    if (rs->focused_trc)
+        wl_send_pending_callback(rs->focused_trc->rsurf);
 
     // if updates happened on page flip
     // shouldn't happen much as we have one window

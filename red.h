@@ -30,10 +30,19 @@ struct redsurface
     struct redsurface* parent;
     int                sub_x, sub_y;
 
-    struct wl_resource* pending_buffer;   // set by wl_surface.attach
+    struct wl_resource* pending_buffer; // set by wl_surface.attach
     struct wl_resource* old_pending_buffer;
     struct wl_resource* pending_callback; // set by wl_surface.frame
     int                 configured;       // xdg_surface configure
+};
+
+struct redclient
+{
+    struct redstate*    rs;
+    struct redsurface*  rsurf;
+    struct wl_client*   wl_client;
+    struct wl_resource* wl_keyboard;
+    struct wl_listener  client_destroyed;
 };
 
 struct redstate
@@ -63,16 +72,20 @@ struct redstate
     struct wl_global*     xdg_wm_base;
     struct wl_global*     wl_output;
     struct wl_global*     wl_seat;
-
-    struct wl_global* subcompositor_global;
-    struct wl_global* data_device_manager_global;
+    struct wl_global*     subcompositor_global;
+    struct wl_global*     data_device_manager_global;
+    struct wl_listener    client_created;
 
     int32_t tex_w;
     int32_t tex_h;
     GLuint  tex;
 
-    dll(struct redsurface*) toplevels;
-    struct redsurface* focused_toplevel;
+    // all clients
+    dll(struct redclient*) rcs; // red clients
+
+    // clients that have xdg_toplevel as wl_surface
+    dll(struct redclient*) trcs; // top red clients
+    struct redclient* focused_trc;
 };
 
 struct gl_proc

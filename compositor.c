@@ -1,38 +1,70 @@
 #include "compositor.h"
+#include "dll.h"
 #include "log.h"
 #include "red.h"
 #include "render.h"
 
 // on window close
 int
-red_destroy_toplevel(struct redstate* rs, struct redsurface* rsurf)
+red_destroy_trc(struct redstate* rs, struct redsurface* rsurf)
 {
-    if (rs->focused_toplevel == rsurf) {
-        dll_for_each(rs->toplevels, v)
-        {
-            if (v->val == rsurf) {
-                if (v->prev)
-                    rs->focused_toplevel = v->prev->val;
-                else if (v->next)
-                    rs->focused_toplevel = v->next->val;
-                else
-                    rs->focused_toplevel = NULL;
-            }
+    struct redclient* rc             = NULL;
+    int               is_rsurf_focus = 0;
+    dll_for_each(rs->trcs, v)
+    {
+        if (v->val->rsurf == rsurf) {
+            rc             = v->val;
+            is_rsurf_focus = rc == rs->focused_trc;
+
+            // change focused trc only if the destroyed one is on focus
+            if (!is_rsurf_focus)
+                break;
+
+            if (v->prev)
+                rs->focused_trc = v->prev->val;
+            else if (v->next)
+                rs->focused_trc = v->next->val;
+            else
+                rs->focused_trc = NULL;
+            break;
         }
     }
 
-    dll_remove_val(rs->toplevels, rsurf);
+    if (!rc)
+        ROG_ERR("toplevel destroy: did not find trc in trcs list");
+    else
+        dll_remove_val(rs->trcs, rc);
 
-    request_redraw(rs);
+    if (is_rsurf_focus)
+        request_redraw(rs);
+
     return 0;
 }
 
 int
-red_create_toplevel(struct redstate* rs, struct redsurface* rsurf)
+red_create_trc(struct redstate*   rs,
+               struct redsurface* rsurf,
+               struct wl_client*  wl_client)
 {
-    dll_push_tail(rs->toplevels, rsurf);
-    rs->focused_toplevel = rsurf;
 
+    struct redclient* rc = NULL;
+    dll_for_each(rs->rcs, v)
+    {
+        if (v->val->wl_client == wl_client)
+            rc = v->val;
+    }
+    if (!rc) {
+        ROG_ERR("toplevel create: did not find trc in rcs list");
+        return 1;
+    }
+
+    // NOTE: maybe move this on creation of wl_surface
+    // not needed for now
+    rc->rsurf = rsurf;
+    dll_push_tail(rs->trcs, rc);
+
+    // instantly focusing new toplevel
+    rs->focused_trc = rc;
     // focus change requires redraw
     request_redraw(rs);
     return 0;

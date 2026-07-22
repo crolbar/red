@@ -79,7 +79,8 @@ input_check_close(struct redstate* rs)
             }
             if (key == KEY_F5 && !press) {
                 ROG("tops: \n")
-                dll_for_each(rs->toplevels, v) ROG("  top: %s", v->val->app_id)
+                dll_for_each(rs->trcs, v)
+                  ROG("  top: %s", v->val->rsurf->app_id)
             }
 
             // TODO CTRL+ALT+FN

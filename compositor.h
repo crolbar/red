@@ -2,7 +2,7 @@
 #include "red.h"
 
 int
-red_destroy_toplevel(struct redstate* rs, struct redsurface* rsurf);
+red_destroy_trc(struct redstate* rs, struct redsurface* rsurf);
 
 int
-red_create_toplevel(struct redstate* rs, struct redsurface* rsurf);
+red_create_trc(struct redstate* rs, struct redsurface* rsurf, struct wl_client* wl_client);

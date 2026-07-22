@@ -51,7 +51,7 @@ wl_frame_done(void*               data,
 
     bw->is_ready_for_frame = 1;
 
-    wl_send_pending_callback(rs->focused_toplevel);
+    wl_send_pending_callback(rs->focused_trc->rsurf);
 
     redraw(rs);
 }

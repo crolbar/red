@@ -361,8 +361,9 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    if (rs->focused_toplevel && rs->focused_toplevel->configured)
-        render_surface(rs, rs->focused_toplevel);
+    if (rs->focused_trc && rs->focused_trc->rsurf &&
+        rs->focused_trc->rsurf->configured)
+        render_surface(rs, rs->focused_trc->rsurf);
 
     {
         float rect_w = 240.0f;

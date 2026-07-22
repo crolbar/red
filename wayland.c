@@ -1,4 +1,5 @@
 #include "compositor.h"
+#include "dll.h"
 #include "log.h"
 #include "red.h"
 #include "render.h"
@@ -85,8 +86,9 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     if (rsurf->xdg_surface && !rsurf->configured)
         return;
 
-    // TODO: figure out background toplevels
-    if (rsurf != rsurf->rs->focused_toplevel)
+    // NOTE: clients that are on background
+    // do not need redraw or frame callback
+    if (client != rsurf->rs->focused_trc->wl_client)
         return;
 
     request_redraw(rsurf->rs);
@@ -135,8 +137,6 @@ static void
 wl_surface_resource_destroy(struct wl_resource* resource)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
-
-    red_destroy_toplevel(rsurf->rs, rsurf);
 
     if (rsurf->app_id)
         free(rsurf->app_id);
@@ -276,8 +276,9 @@ wl_global_bind_compositor(struct wl_client* client,
 void
 xdg_toplevel_destroy(struct wl_client* client, struct wl_resource* resource)
 {
+    struct redsurface* rsurf = resource->data;
+    red_destroy_trc(rsurf->rs, rsurf);
     wl_resource_destroy(resource);
-    ROG("dest")
 }
 
 void
@@ -417,7 +418,7 @@ xdg_surface_get_toplevel(struct wl_client*   client,
         return;
     }
 
-    red_create_toplevel(rsurf->rs, rsurf);
+    red_create_trc(rsurf->rs, rsurf, client);
 
     wl_resource_set_implementation(
       rsurf->xdg_toplevel, &xdg_toplevel_implementation, rsurf, NULL);
@@ -538,6 +539,7 @@ wl_output_release(struct wl_client* c, struct wl_resource* r)
 {
     wl_resource_destroy(r);
 }
+
 static const struct wl_output_interface wl_output_implementation = {
     .release = wl_output_release
 };
@@ -577,6 +579,15 @@ wl_global_bind_output(struct wl_client* client,
         wl_output_send_name(r, "red-1");
     wl_output_send_done(r);
 }
+void
+wl_keyboard_release(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static const struct wl_keyboard_interface wl_keyboard_implementation = {
+    .release = wl_keyboard_release,
+};
 
 static void
 wl_seat_get_pointer(struct wl_client* c, struct wl_resource* r, uint32_t id)
@@ -588,6 +599,7 @@ wl_seat_get_pointer(struct wl_client* c, struct wl_resource* r, uint32_t id)
 static void
 wl_seat_get_keyboard(struct wl_client* c, struct wl_resource* r, uint32_t id)
 {
+    // wl_keyboard_interface
     wl_resource_post_error(
       r, WL_SEAT_ERROR_MISSING_CAPABILITY, "no keyboard capability");
 }
@@ -803,6 +815,46 @@ bind_data_device_manager(struct wl_client* client,
     wl_resource_set_implementation(r, &data_device_manager_impl, data, NULL);
 }
 
+static void
+wl_client_destroyed(struct wl_listener* listener, void* data)
+{
+    struct redclient* rc = wl_container_of(listener, rc, client_destroyed);
+
+    dll_remove_val(rc->rs->rcs, rc);
+    // just in case client doesn't call xdg_toplevel destroy.
+    // client destroy, should be called so its a safe fallback
+    {
+        int is_trcs = 0;
+        dll_for_each(rc->rs->trcs, v)
+        {
+            if (v->val == rc)
+                is_trcs = 1;
+        }
+        if (is_trcs)
+            red_destroy_trc(rc->rs, rc->rsurf);
+    }
+    free(rc);
+}
+
+static void
+wl_client_created(struct wl_listener* listener, void* data)
+{
+    struct redstate* rs = wl_container_of(listener, rs, client_created);
+
+    struct wl_client* wl_client = data;
+
+    struct redclient* rc;
+    rc                          = malloc(sizeof(*rc));
+    rc->rs                      = rs;
+    rc->rsurf                   = NULL;
+    rc->wl_keyboard             = NULL;
+    rc->wl_client               = wl_client;
+    rc->client_destroyed.notify = wl_client_destroyed;
+
+    wl_client_add_destroy_listener(wl_client, &rc->client_destroyed);
+    dll_push_tail(rs->rcs, rc);
+}
+
 void
 handle_wl_log(const char* _fmt, va_list args)
 {
@@ -820,7 +872,6 @@ int
 init_compositor(struct redstate* rs)
 {
     wl_log_set_handler_server(handle_wl_log);
-
     rs->wl_display = wl_display_create();
     if (!rs->wl_display) {
         ROG_ERR("could not create wl_display");
@@ -888,6 +939,10 @@ init_compositor(struct redstate* rs)
                        3,
                        rs,
                        bind_data_device_manager);
+
+    rs->client_created.notify = wl_client_created;
+    wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);
+
     return 0;
 fail:
     return 1;

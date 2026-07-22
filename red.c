@@ -49,15 +49,16 @@ main(int argc, char** argv)
     rs->backend    = (rs->is_wayland_client) ? &backend_wayland : &backend_drm;
     rs->backend->d = rs->backend->init_data();
 
-    rs->wl_display       = NULL;
-    rs->wl_event_loop    = NULL;
-    rs->wl_compositor    = NULL;
-    rs->xdg_wm_base      = NULL;
-    rs->wl_output        = NULL;
-    rs->wl_seat          = NULL;
-    rs->needs_redraw     = 1;
-    rs->toplevels        = (typeof(rs->toplevels))dll_init();
-    rs->focused_toplevel = NULL;
+    rs->wl_display    = NULL;
+    rs->wl_event_loop = NULL;
+    rs->wl_compositor = NULL;
+    rs->xdg_wm_base   = NULL;
+    rs->wl_output     = NULL;
+    rs->wl_seat       = NULL;
+    rs->needs_redraw  = 1;
+    rs->rcs           = (typeof(rs->rcs))dll_init();
+    rs->trcs          = (typeof(rs->trcs))dll_init();
+    rs->focused_trc   = NULL;
 
     rs->tex   = 0;
     rs->tex_h = 0;
@@ -216,7 +217,7 @@ end:
     // if (rs->wl)
     //     free(rs->wl);
 
-    dll_destroy(rs->toplevels);
+    dll_destroy(rs->rcs);
 
     if (rs)
         free(rs);
