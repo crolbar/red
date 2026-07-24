@@ -338,8 +338,10 @@ input_pointer(struct redstate*               rs,
     if (event_type == LIBINPUT_EVENT_POINTER_MOTION)
         return red_pointer_send_motion(rs, pe);
 
-    if (event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL)
-        return red_pointer_send_scroll(rs, pe);
+    if (event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL ||
+        event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER)
+        return red_pointer_send_scroll(
+          rs, pe, event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER);
 
     return 0;
 }
@@ -362,10 +364,22 @@ input_dispatch(struct redstate* rs)
             input_kb_key(rs, kbe);
         } else if (event_type == LIBINPUT_EVENT_POINTER_MOTION ||
                    event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL ||
+                   event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER ||
                    event_type == LIBINPUT_EVENT_POINTER_BUTTON) {
             struct libinput_event_pointer* pe =
               libinput_event_get_pointer_event(event);
             input_pointer(rs, event_type, pe);
+        }
+
+        else if (event_type == LIBINPUT_EVENT_DEVICE_ADDED) {
+            struct libinput_device* device = libinput_event_get_device(event);
+
+            // enable finger tap
+            if (libinput_device_config_tap_get_finger_count(device) > 0) {
+                libinput_device_config_tap_set_enabled(
+                  device, LIBINPUT_CONFIG_TAP_ENABLED);
+            }
+            break;
         }
 
         libinput_event_destroy(event);

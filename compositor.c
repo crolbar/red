@@ -65,7 +65,7 @@ red_focus_trc(struct redstate* rs, struct redclient* trc)
         }
         // keyboard enter new trc
         if (trc->wl_keyboard && trc->rsurf->wl_surface) {
-            uint32_t        serial = wl_display_next_serial(rs->wl_display);
+            uint32_t serial = wl_display_next_serial(rs->wl_display);
             struct wl_array keys;
             wl_array_init(&keys);
             wl_keyboard_send_enter(
@@ -113,9 +113,9 @@ red_destroy_trc(struct redstate* rs, struct redsurface* rsurf)
 }
 
 int
-red_create_trc(struct redstate*   rs,
+red_create_trc(struct redstate* rs,
                struct redsurface* rsurf,
-               struct wl_client*  wl_client)
+               struct wl_client* wl_client)
 {
 
     struct redclient* rc = NULL;
@@ -141,11 +141,11 @@ red_create_trc(struct redstate*   rs,
 }
 
 int
-red_kb_send_keys(struct redstate*                rs,
+red_kb_send_keys(struct redstate* rs,
                  struct libinput_event_keyboard* kbe,
-                 uint32_t                        key,
-                 int                             press,
-                 int                             mods_have_changed)
+                 uint32_t key,
+                 int press,
+                 int mods_have_changed)
 {
 
     if (!rs->focused_trc)
@@ -154,7 +154,7 @@ red_kb_send_keys(struct redstate*                rs,
     if (!rs->focused_trc->wl_keyboard)
         return 0;
 
-    uint32_t serial    = wl_display_next_serial(rs->wl_display);
+    uint32_t serial = wl_display_next_serial(rs->wl_display);
     uint32_t time_msec = libinput_event_keyboard_get_time(kbe);
     wl_keyboard_send_key(
       rs->focused_trc->wl_keyboard, serial, time_msec, key, press);
@@ -176,14 +176,14 @@ int
 red_pointer_send_motion(struct redstate* rs, struct libinput_event_pointer* pe)
 {
 
-    double   dx     = libinput_event_pointer_get_dx_unaccelerated(pe);
-    double   dy     = libinput_event_pointer_get_dy_unaccelerated(pe);
-    uint32_t width  = rs->backend->get_width(rs->backend->d);
+    double dx = libinput_event_pointer_get_dx_unaccelerated(pe);
+    double dy = libinput_event_pointer_get_dy_unaccelerated(pe);
+    uint32_t width = rs->backend->get_width(rs->backend->d);
     uint32_t height = rs->backend->get_height(rs->backend->d);
-    double   x      = rs->cursor_x + dx * 0.4;
-    double   y      = rs->cursor_y + dy * 0.4;
-    rs->cursor_x    = max(min(x, (double)width), 0);
-    rs->cursor_y    = max(min(y, (double)height), 0);
+    double x = rs->cursor_x + dx * 0.4;
+    double y = rs->cursor_y + dy * 0.4;
+    rs->cursor_x = max(min(x, (double)width), 0);
+    rs->cursor_y = max(min(y, (double)height), 0);
 
     if (rs->focused_trc && rs->focused_trc->wl_pointer) {
         uint32_t time_msec = libinput_event_pointer_get_time(pe);
@@ -207,11 +207,11 @@ red_pointer_send_button(struct redstate* rs, struct libinput_event_pointer* pe)
     if (!rs->focused_trc || !rs->focused_trc->wl_pointer)
         return 0;
 
-    uint32_t                   button = libinput_event_pointer_get_button(pe);
+    uint32_t button = libinput_event_pointer_get_button(pe);
     enum libinput_button_state state =
       libinput_event_pointer_get_button_state(pe);
 
-    uint32_t serial    = wl_display_next_serial(rs->wl_display);
+    uint32_t serial = wl_display_next_serial(rs->wl_display);
     uint32_t time_msec = libinput_event_pointer_get_time(pe);
     wl_pointer_send_button(
       rs->focused_trc->wl_pointer, serial, time_msec, button, state);
@@ -220,7 +220,9 @@ red_pointer_send_button(struct redstate* rs, struct libinput_event_pointer* pe)
     return 0;
 }
 int
-red_pointer_send_scroll(struct redstate* rs, struct libinput_event_pointer* pe)
+red_pointer_send_scroll(struct redstate* rs,
+                        struct libinput_event_pointer* pe,
+                        int is_finger)
 {
     if (!rs->focused_trc || !rs->focused_trc->wl_pointer)
         return 0;
@@ -231,7 +233,11 @@ red_pointer_send_scroll(struct redstate* rs, struct libinput_event_pointer* pe)
     double val = libinput_event_pointer_get_scroll_value(
       pe,
       ((is_vertical_scroll) ? LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL
-                            : LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL));
+                            : LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL));
+
+    if (is_finger)
+        wl_pointer_send_axis_source(rs->focused_trc->wl_pointer,
+                                    WL_POINTER_AXIS_SOURCE_FINGER);
 
     uint32_t time_msec = libinput_event_pointer_get_time(pe);
     wl_pointer_send_axis(rs->focused_trc->wl_pointer,
