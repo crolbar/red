@@ -78,6 +78,7 @@ main(int argc, char** argv)
     rs->cursor_gl_vao         = 0;
     rs->cursor_x              = 0;
     rs->cursor_y              = 0;
+    rs->using_hardware_cursor = 0;
 
     {
         gl_proc = init_gl_proc();

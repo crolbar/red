@@ -58,6 +58,7 @@ struct redclient
     struct redsurface*  rsurf;
     struct wl_client*   wl_client;
     struct wl_resource* wl_keyboard;
+    struct wl_resource* wl_pointer;
     struct wl_listener  client_destroyed;
 };
 
@@ -108,6 +109,7 @@ struct redstate
     GLuint cursor_gl_vao;
     double cursor_x;
     double cursor_y;
+    int    using_hardware_cursor;
 
     // all clients
     dll(struct redclient*) rcs; // red clients

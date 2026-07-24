@@ -612,12 +612,45 @@ static const struct wl_keyboard_interface wl_keyboard_implementation = {
 };
 
 static void
+wl_pointer_set_cursor(struct wl_client*   client,
+                      struct wl_resource* resource,
+                      uint32_t            serial,
+                      struct wl_resource* surface,
+                      int32_t             hotspot_x,
+                      int32_t             hotspot_y)
+{
+}
+
+static void
+wl_pointer_release(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static const struct wl_pointer_interface wl_pointer_implementation = {
+    .set_cursor = wl_pointer_set_cursor,
+    .release    = wl_pointer_release,
+};
+
+static void
 wl_seat_get_pointer(struct wl_client*   client,
                     struct wl_resource* resource,
                     uint32_t            id)
 {
-    wl_resource_post_error(
-      resource, WL_SEAT_ERROR_MISSING_CAPABILITY, "no pointer capability");
+    struct redstate*    rs         = wl_resource_get_user_data(resource);
+    struct wl_resource* wl_pointer = wl_resource_create(
+      client, &wl_pointer_interface, wl_resource_get_version(resource), id);
+    wl_resource_set_implementation(
+      wl_pointer, &wl_pointer_implementation, rs, NULL);
+
+    dll_for_each(rs->rcs, v)
+    {
+        if (v->val->wl_client != client)
+            continue;
+
+        v->val->wl_pointer = wl_pointer;
+        break;
+    }
 }
 
 static void
@@ -683,7 +716,8 @@ wl_global_bind_seat(struct wl_client* client,
     struct wl_resource* r =
       wl_resource_create(client, &wl_seat_interface, version, id);
     wl_resource_set_implementation(r, &wl_seat_implementation, data, NULL);
-    wl_seat_send_capabilities(r, WL_SEAT_CAPABILITY_KEYBOARD);
+    wl_seat_send_capabilities(
+      r, WL_SEAT_CAPABILITY_KEYBOARD | WL_SEAT_CAPABILITY_POINTER);
     if (version >= 2)
         wl_seat_send_name(r, "seat0");
 }
@@ -972,6 +1006,7 @@ wl_client_created(struct wl_listener* listener, void* data)
     rc->rs                      = rs;
     rc->rsurf                   = NULL;
     rc->wl_keyboard             = NULL;
+    rc->wl_pointer              = NULL;
     rc->wl_client               = wl_client;
     rc->client_destroyed.notify = wl_client_destroyed;
 

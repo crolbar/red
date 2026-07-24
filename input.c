@@ -1,8 +1,8 @@
 #include "actions.h"
+#include "compositor.h"
 #include "config.h"
 #include "log.h"
 #include "red.h"
-#include "render.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <libinput.h>
@@ -11,7 +11,6 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon-names.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -320,42 +319,38 @@ input_kb_key(struct redstate* rs, struct libinput_event_keyboard* kbe)
     if (input_handle_binds(rs, key_str, evdev_press))
         return 0;
 
-    if (!rs->focused_trc)
-        return 0;
-
-    if (rs->is_wayland_client || getenv("RED_DONT_SPAWN_CLIENT"))
-        return 0;
-
     // forward key press to client
 
-    uint32_t serial = wl_display_next_serial(rs->wl_display);
-    wl_keyboard_send_key(rs->focused_trc->wl_keyboard,
-                         serial,
-                         0,
-                         evdev_key,
-                         (evdev_press) ? WL_KEYBOARD_KEY_STATE_PRESSED
-                                       : WL_KEYBOARD_KEY_STATE_RELEASED);
-
-    if (mods_have_changed) {
-        serial = wl_display_next_serial(rs->wl_display);
-        wl_keyboard_send_modifiers(rs->focused_trc->wl_keyboard,
-                                   serial,
-                                   rs->xkb_mods_depressed,
-                                   rs->xkb_mods_latched,
-                                   rs->xkb_mods_locked,
-                                   rs->xkb_group);
-    }
+    if (red_kb_send_keys(rs, kbe, evdev_key, evdev_press, mods_have_changed))
+        return 1;
 
     return 0;
 }
 
-#define min(x, y) ((x) < (y)) ? (x) : (y)
-#define max(x, y) ((x) > (y)) ? (x) : (y)
+int
+input_pointer(struct redstate*               rs,
+              enum libinput_event_type       event_type,
+              struct libinput_event_pointer* pe)
+{
+    if (event_type == LIBINPUT_EVENT_POINTER_BUTTON)
+        return red_pointer_send_button(rs, pe);
+
+    if (event_type == LIBINPUT_EVENT_POINTER_MOTION)
+        return red_pointer_send_motion(rs, pe);
+
+    if (event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL)
+        return red_pointer_send_scroll(rs, pe);
+
+    return 0;
+}
 
 int
 input_dispatch(struct redstate* rs)
 {
     libinput_dispatch(rs->li);
+
+    if (rs->is_wayland_client || getenv("RED_DONT_SPAWN_CLIENT"))
+        return 0;
 
     struct libinput_event* event;
     while ((event = libinput_get_event(rs->li)) != NULL) {
@@ -365,19 +360,12 @@ input_dispatch(struct redstate* rs)
             struct libinput_event_keyboard* kbe =
               libinput_event_get_keyboard_event(event);
             input_kb_key(rs, kbe);
-        } else if (event_type == LIBINPUT_EVENT_POINTER_MOTION) {
-            struct libinput_event_pointer* me =
+        } else if (event_type == LIBINPUT_EVENT_POINTER_MOTION ||
+                   event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL ||
+                   event_type == LIBINPUT_EVENT_POINTER_BUTTON) {
+            struct libinput_event_pointer* pe =
               libinput_event_get_pointer_event(event);
-
-            double   dx     = libinput_event_pointer_get_dx_unaccelerated(me);
-            double   dy     = libinput_event_pointer_get_dy_unaccelerated(me);
-            uint32_t width  = rs->backend->get_width(rs->backend->d);
-            uint32_t height = rs->backend->get_height(rs->backend->d);
-            double   x      = rs->cursor_x + dx * 0.4;
-            double   y      = rs->cursor_y + dy * 0.4;
-            rs->cursor_x    = max(min(x, (double)width), 0);
-            rs->cursor_y    = max(min(y, (double)height), 0);
-            request_redraw(rs);
+            input_pointer(rs, event_type, pe);
         }
 
         libinput_event_destroy(event);
