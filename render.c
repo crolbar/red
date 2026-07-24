@@ -33,22 +33,6 @@ compile_shader(GLenum type, const char* src)
     return shader;
 }
 
-int
-max(int x, int y)
-{
-    if (x > y)
-        return x;
-    return y;
-}
-
-int
-min(int x, int y)
-{
-    if (x < y)
-        return x;
-    return y;
-}
-
 static bool
 ensure_quad_resources(void)
 {
@@ -171,11 +155,40 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
 
     uint8_t* src        = wl_shm_buffer_get_data(shm);
     int32_t  src_stride = wl_shm_buffer_get_stride(shm);
-    int32_t  w          = wl_shm_buffer_get_width(shm);
-    int32_t  h          = wl_shm_buffer_get_height(shm);
-    // uint32_t fmt        = wl_shm_buffer_get_format(shm);
-    GLenum gl_fmt = GL_RGBA;
-    // DRM_FORMAT_RGBX8888
+    int32_t  src_w      = wl_shm_buffer_get_width(shm);
+    int32_t  src_h      = wl_shm_buffer_get_height(shm);
+    GLenum   gl_fmt     = GL_RGBA;
+
+    int32_t x = 0; // offset
+    int32_t y = 0;
+    int32_t w = src_w;
+    int32_t h = src_h;
+
+    // removing csd that has been informed by xdg_surface_set_window_geometry
+    if (rsurf->geom_configured) {
+        x = rsurf->geom_x;
+        y = rsurf->geom_y;
+        w = rsurf->geom_width;
+        h = rsurf->geom_height;
+        if (x < 0)
+            x = 0;
+
+        if (y < 0)
+            y = 0;
+
+        if (x + w > src_w)
+            w = src_w - x;
+
+        if (y + h > src_h)
+            h = src_h - y;
+
+        if (w <= 0 || h <= 0) {
+            x = 0;
+            y = 0;
+            w = src_w;
+            h = src_h;
+        }
+    }
 
     /* create/reuse a texture on rsurf so we don't alloc every frame */
     if (rs->tex == 0) {
@@ -191,22 +204,25 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
 
     /* row length in pixels, since stride may include padding */
     glPixelStorei(GL_UNPACK_ROW_LENGTH, src_stride / 4);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, y);
 
-    if (rs->tex_w != w || rs->tex_h != h) {
+    if (rs->tex_w != src_w || rs->tex_h != src_h) {
         glTexImage2D(
           GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, gl_fmt, GL_UNSIGNED_BYTE, src);
-        rs->tex_w = w;
-        rs->tex_h = h;
+        rs->tex_w = src_w;
+        rs->tex_h = src_h;
     } else {
         glTexSubImage2D(
           GL_TEXTURE_2D, 0, 0, 0, w, h, gl_fmt, GL_UNSIGNED_BYTE, src);
     }
 
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
     wl_shm_buffer_end_access(shm);
 
-    draw_textured_quad(rs, rs->tex, w, h);
+    draw_textured_quad(rs, rs->tex, src_w, src_h);
 
     if (rsurf->pending_buffer) {
         rsurf->old_pending_buffer = buffer;

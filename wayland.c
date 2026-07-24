@@ -4,6 +4,7 @@
 #include "log.h"
 #include "red.h"
 #include "render.h"
+#include "xdg-decoration-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
 #include <string.h>
 #include <wayland-server-core.h>
@@ -24,13 +25,13 @@ wl_send_pending_callback(struct redsurface* rsurf)
     return 0;
 }
 
-void
+static void
 wl_surface_destroy(struct wl_client* client, struct wl_resource* resource)
 {
     wl_resource_destroy(resource);
 }
 
-void
+static void
 wl_surface_attach(struct wl_client*   client,
                   struct wl_resource* resource,
                   struct wl_resource* buffer,
@@ -41,7 +42,7 @@ wl_surface_attach(struct wl_client*   client,
     rsurf->pending_buffer    = buffer;
 }
 
-void
+static void
 wl_surface_damage(struct wl_client*   client,
                   struct wl_resource* resource,
                   int32_t             x,
@@ -51,7 +52,7 @@ wl_surface_damage(struct wl_client*   client,
 {
 }
 
-void
+static void
 wl_surface_frame(struct wl_client*   client,
                  struct wl_resource* resource,
                  uint32_t            callback)
@@ -64,24 +65,28 @@ wl_surface_frame(struct wl_client*   client,
     rsurf->pending_callback = cb;
 }
 
-void
+static void
 wl_surface_set_opaque_region(struct wl_client*   client,
                              struct wl_resource* resource,
                              struct wl_resource* region)
 {
 }
 
-void
+static void
 wl_surface_set_input_region(struct wl_client*   client,
                             struct wl_resource* resource,
                             struct wl_resource* region)
 {
 }
 
-void
+static void
 wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
+
+    if (!rsurf->rs->focused_trc)
+        return;
+
     // on first commit, client is not sending a buffer
     if (rsurf->xdg_surface && !rsurf->configured)
         return;
@@ -94,21 +99,21 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     request_redraw(rsurf->rs);
 }
 
-void
+static void
 wl_surface_set_buffer_transform(struct wl_client*   client,
                                 struct wl_resource* resource,
                                 int32_t             transform)
 {
 }
 
-void
+static void
 wl_surface_set_buffer_scale(struct wl_client*   client,
                             struct wl_resource* resource,
                             int32_t             scale)
 {
 }
 
-void
+static void
 wl_surface_damage_buffer(struct wl_client*   client,
                          struct wl_resource* resource,
                          int32_t             x,
@@ -118,7 +123,7 @@ wl_surface_damage_buffer(struct wl_client*   client,
 {
 }
 
-void
+static void
 wl_surface_offset(struct wl_client*   client,
                   struct wl_resource* resource,
                   int32_t             x,
@@ -126,7 +131,7 @@ wl_surface_offset(struct wl_client*   client,
 {
 }
 
-void
+static void
 wl_surface_get_release(struct wl_client*   client,
                        struct wl_resource* resource,
                        uint32_t            callback)
@@ -206,6 +211,11 @@ init_redsurface()
     rsurf->xdg_toplevel       = NULL;
     rsurf->app_id             = NULL;
     rsurf->old_pending_buffer = NULL;
+    rsurf->geom_x             = 0;
+    rsurf->geom_y             = 0;
+    rsurf->geom_width         = 0;
+    rsurf->geom_height        = 0;
+    rsurf->geom_configured    = 0;
 
     return rsurf;
 }
@@ -236,7 +246,7 @@ wl_compositor_create_surface(struct wl_client*   client,
                                    wl_surface_resource_destroy);
 }
 
-void
+static void
 wl_compositor_create_region(struct wl_client*   client,
                             struct wl_resource* resource,
                             uint32_t            id)
@@ -246,7 +256,7 @@ wl_compositor_create_region(struct wl_client*   client,
     wl_resource_set_implementation(r, &wl_region_implementation, NULL, NULL);
 }
 
-void
+static void
 wl_compositor_release(struct wl_client* client, struct wl_resource* resource)
 {
 }
@@ -257,7 +267,7 @@ static const struct wl_compositor_interface wl_compositor_implementation = {
     .release        = wl_compositor_release,
 };
 
-void
+static void
 wl_global_bind_compositor(struct wl_client* client,
                           void*             data,
                           uint32_t          version,
@@ -273,7 +283,7 @@ wl_global_bind_compositor(struct wl_client* client,
       wl_compositor, &wl_compositor_implementation, data, NULL);
 }
 
-void
+static void
 xdg_toplevel_destroy(struct wl_client* client, struct wl_resource* resource)
 {
     struct redsurface* rsurf = resource->data;
@@ -281,21 +291,21 @@ xdg_toplevel_destroy(struct wl_client* client, struct wl_resource* resource)
     wl_resource_destroy(resource);
 }
 
-void
+static void
 xdg_toplevel_set_parent(struct wl_client*   client,
                         struct wl_resource* resource,
                         struct wl_resource* parent)
 {
 }
 
-void
+static void
 xdg_toplevel_set_title(struct wl_client*   client,
                        struct wl_resource* resource,
                        const char*         title)
 {
 }
 
-void
+static void
 xdg_toplevel_set_app_id(struct wl_client*   client,
                         struct wl_resource* resource,
                         const char*         app_id)
@@ -306,7 +316,7 @@ xdg_toplevel_set_app_id(struct wl_client*   client,
     ROG("app id: %s", rsurf->app_id);
 }
 
-void
+static void
 xdg_toplevel_show_window_menu(struct wl_client*   client,
                               struct wl_resource* resource,
                               struct wl_resource* seat,
@@ -316,7 +326,7 @@ xdg_toplevel_show_window_menu(struct wl_client*   client,
 {
 }
 
-void
+static void
 xdg_toplevel_move(struct wl_client*   client,
                   struct wl_resource* resource,
                   struct wl_resource* seat,
@@ -324,7 +334,7 @@ xdg_toplevel_move(struct wl_client*   client,
 {
 }
 
-void
+static void
 xdg_toplevel_resize(struct wl_client*   client,
                     struct wl_resource* resource,
                     struct wl_resource* seat,
@@ -333,7 +343,7 @@ xdg_toplevel_resize(struct wl_client*   client,
 {
 }
 
-void
+static void
 xdg_toplevel_set_max_size(struct wl_client*   client,
                           struct wl_resource* resource,
                           int32_t             width,
@@ -341,7 +351,7 @@ xdg_toplevel_set_max_size(struct wl_client*   client,
 {
 }
 
-void
+static void
 xdg_toplevel_set_min_size(struct wl_client*   client,
                           struct wl_resource* resource,
                           int32_t             width,
@@ -349,32 +359,32 @@ xdg_toplevel_set_min_size(struct wl_client*   client,
 {
 }
 
-void
+static void
 xdg_toplevel_set_maximized(struct wl_client*   client,
                            struct wl_resource* resource)
 {
 }
 
-void
+static void
 xdg_toplevel_unset_maximized(struct wl_client*   client,
                              struct wl_resource* resource)
 {
 }
 
-void
+static void
 xdg_toplevel_set_fullscreen(struct wl_client*   client,
                             struct wl_resource* resource,
                             struct wl_resource* output)
 {
 }
 
-void
+static void
 xdg_toplevel_unset_fullscreen(struct wl_client*   client,
                               struct wl_resource* resource)
 {
 }
 
-void
+static void
 xdg_toplevel_set_minimized(struct wl_client*   client,
                            struct wl_resource* resource)
 {
@@ -397,13 +407,13 @@ static const struct xdg_toplevel_interface xdg_toplevel_implementation = {
     .set_minimized    = xdg_toplevel_set_minimized
 };
 
-void
+static void
 xdg_surface_destroy(struct wl_client* client, struct wl_resource* resource)
 {
     wl_resource_destroy(resource);
 }
 
-void
+static void
 xdg_surface_get_toplevel(struct wl_client*   client,
                          struct wl_resource* resource,
                          uint32_t            id)
@@ -425,8 +435,14 @@ xdg_surface_get_toplevel(struct wl_client*   client,
 
     uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
     uint32_t height = rsurf->rs->backend->get_height(rsurf->rs->backend->d);
+
     struct wl_array states;
     wl_array_init(&states);
+    // setting maximized state as it basicly tells the client to not render csd
+    // also if we have one toplevel drawn at a time,
+    // it might as well be maximized
+    uint32_t* s = wl_array_add(&states, sizeof(uint32_t));
+    *s          = XDG_TOPLEVEL_STATE_MAXIMIZED;
     xdg_toplevel_send_configure(rsurf->xdg_toplevel, width, height, &states);
     wl_array_release(&states);
 
@@ -434,7 +450,7 @@ xdg_surface_get_toplevel(struct wl_client*   client,
     xdg_surface_send_configure(resource, serial);
 }
 
-void
+static void
 xdg_surface_get_popup(struct wl_client*   client,
                       struct wl_resource* resource,
                       uint32_t            id,
@@ -444,7 +460,7 @@ xdg_surface_get_popup(struct wl_client*   client,
     ROG("xdg surface get popup called");
 }
 
-void
+static void
 xdg_surface_set_window_geometry(struct wl_client*   client,
                                 struct wl_resource* resource,
                                 int32_t             x,
@@ -452,10 +468,15 @@ xdg_surface_set_window_geometry(struct wl_client*   client,
                                 int32_t             width,
                                 int32_t             height)
 {
-    ROG("xdg surface set window geometry called")
+    struct redsurface* rsurf = resource->data;
+    rsurf->geom_configured   = 1;
+    rsurf->geom_width        = width;
+    rsurf->geom_height       = height;
+    rsurf->geom_x            = x;
+    rsurf->geom_y            = y;
 }
 
-void
+static void
 xdg_surface_ack_configure(struct wl_client*   client,
                           struct wl_resource* resource,
                           uint32_t            serial)
@@ -472,13 +493,13 @@ static const struct xdg_surface_interface xdg_surface_implementation = {
     .ack_configure       = xdg_surface_ack_configure,
 };
 
-void
+static void
 xdg_wm_base_destroy(struct wl_client* client, struct wl_resource* resource)
 {
     wl_resource_destroy(resource);
 }
 
-void
+static void
 xdg_wm_base_create_positioner(struct wl_client*   client,
                               struct wl_resource* resource,
                               uint32_t            id)
@@ -490,7 +511,7 @@ xdg_wm_base_create_positioner(struct wl_client*   client,
     ROG("wm base create positioner called");
 }
 
-void
+static void
 xdg_wm_base_get_xdg_surface(struct wl_client*   client,
                             struct wl_resource* resource,
                             uint32_t            id,
@@ -504,7 +525,7 @@ xdg_wm_base_get_xdg_surface(struct wl_client*   client,
       rsurf->xdg_surface, &xdg_surface_implementation, rsurf, NULL);
 }
 
-void
+static void
 xdg_wm_base_pong(struct wl_client*   client,
                  struct wl_resource* resource,
                  uint32_t            serial)
@@ -518,7 +539,7 @@ static const struct xdg_wm_base_interface xdg_wm_base_implementation = {
     .pong              = xdg_wm_base_pong,
 };
 
-void
+static void
 wl_global_bind_xdg_wm_base(struct wl_client* client,
                            void*             data,
                            uint32_t          version,
@@ -845,6 +866,80 @@ bind_data_device_manager(struct wl_client* client,
 }
 
 static void
+xdg_toplevel_decoration_destroy(struct wl_client*   client,
+                                struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+static void
+xdg_toplevel_decoration_set_mode(struct wl_client*   client,
+                                 struct wl_resource* resource,
+                                 uint32_t            mode)
+{
+}
+static void
+xdg_toplevel_decoration_unset_mode(struct wl_client*   client,
+                                   struct wl_resource* resource)
+{
+}
+
+static const struct zxdg_toplevel_decoration_v1_interface
+  zxdg_toplevel_decoration_v1_implementation = {
+      .destroy    = xdg_toplevel_decoration_destroy,
+      .set_mode   = xdg_toplevel_decoration_set_mode,
+      .unset_mode = xdg_toplevel_decoration_unset_mode,
+  };
+
+static void
+xdg_decoration_manager_destroy(struct wl_client*   client,
+                               struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static void
+xdg_decoration_manager_get_toplevel_decoration(struct wl_client*   client,
+                                               struct wl_resource* resource,
+                                               uint32_t            id,
+                                               struct wl_resource* toplevel)
+{
+    struct wl_resource* xdg_toplevel_decoration =
+      wl_resource_create(client,
+                         &zxdg_toplevel_decoration_v1_interface,
+                         wl_resource_get_version(resource),
+                         id);
+
+    wl_resource_set_implementation(xdg_toplevel_decoration,
+                                   &zxdg_toplevel_decoration_v1_implementation,
+                                   wl_resource_get_user_data(toplevel),
+                                   NULL);
+
+    // we only want server side
+    zxdg_toplevel_decoration_v1_send_configure(
+      xdg_toplevel_decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+}
+
+static const struct zxdg_decoration_manager_v1_interface
+  zxdg_decoration_manager_v1_implementation = {
+      .destroy                 = xdg_decoration_manager_destroy,
+      .get_toplevel_decoration = xdg_decoration_manager_get_toplevel_decoration,
+  };
+
+static void
+wl_global_bind_xdg_decoration_manager(struct wl_client* client,
+                                      void*             data,
+                                      uint32_t          version,
+                                      uint32_t          id)
+{
+    struct wl_resource* xdg_decoration_manager = wl_resource_create(
+      client, &zxdg_decoration_manager_v1_interface, version, id);
+    wl_resource_set_implementation(xdg_decoration_manager,
+                                   &zxdg_decoration_manager_v1_implementation,
+                                   data,
+                                   NULL);
+}
+
+static void
 wl_client_destroyed(struct wl_listener* listener, void* data)
 {
     struct redclient* rc = wl_container_of(listener, rc, client_destroyed);
@@ -884,7 +979,7 @@ wl_client_created(struct wl_listener* listener, void* data)
     dll_push_tail(rs->rcs, rc);
 }
 
-void
+static void
 handle_wl_log(const char* _fmt, va_list args)
 {
     // remove newline at end
@@ -968,6 +1063,13 @@ init_compositor(struct redstate* rs)
                        3,
                        rs,
                        bind_data_device_manager);
+
+    rs->xdg_decoration_manager =
+      wl_global_create(rs->wl_display,
+                       &zxdg_decoration_manager_v1_interface,
+                       1,
+                       rs,
+                       wl_global_bind_xdg_decoration_manager);
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);

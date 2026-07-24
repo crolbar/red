@@ -37,9 +37,15 @@ BINS ?= red
 
 WAYLAND_PROTOCOLS_DIR = $(shell pkg-config --variable=pkgdatadir wayland-protocols)
 XDG_SHELL_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/xdg-shell/xdg-shell.xml
+XDG_DECORATION_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
 LINUX_DMABUF_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/linux-dmabuf/linux-dmabuf-v1.xml
 
 all: $(BINS)
+
+xdg-decoration-server-protocol.h: $(XDG_DECORATION_XML)
+	wayland-scanner server-header $< $@
+xdg-decoration-protocol.c: $(XDG_DECORATION_XML)
+	wayland-scanner private-code $< $@
 
 xdg-shell-client-protocol.h: $(XDG_SHELL_XML)
 	wayland-scanner client-header $< $@
@@ -53,7 +59,14 @@ linux-dmabuf-protocol.h: $(LINUX_DMABUF_XML)
 linux-dmabuf-protocol.c: $(LINUX_DMABUF_XML)
 	wayland-scanner private-code $< $@
 
-PRO_SRC=linux-dmabuf-protocol.c xdg-shell-protocol.c xdg-shell-client-protocol.h linux-dmabuf-protocol.h xdg-shell-server-protocol.h
+PRO_SRC=linux-dmabuf-protocol.c \
+		 linux-dmabuf-protocol.h \
+		 xdg-shell-protocol.c \
+		 xdg-shell-client-protocol.h \
+		 xdg-shell-server-protocol.h \
+		 xdg-decoration-server-protocol.h \
+		 xdg-decoration-protocol.c
+
 pro: $(PRO_SRC)
 
 $(BINS): $(SRC) $(PRO_SRC)

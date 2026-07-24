@@ -59,24 +59,25 @@ main(int argc, char** argv)
         goto end;
     }
 
-    rs->wl_display    = NULL;
-    rs->wl_event_loop = NULL;
-    rs->wl_compositor = NULL;
-    rs->xdg_wm_base   = NULL;
-    rs->wl_output     = NULL;
-    rs->wl_seat       = NULL;
-    rs->needs_redraw  = 1;
-    rs->rcs           = (typeof(rs->rcs))dll_init();
-    rs->trcs          = (typeof(rs->trcs))dll_init();
-    rs->focused_trc   = NULL;
+    rs->wl_display             = NULL;
+    rs->wl_event_loop          = NULL;
+    rs->wl_compositor          = NULL;
+    rs->xdg_wm_base            = NULL;
+    rs->xdg_decoration_manager = NULL;
+    rs->wl_output              = NULL;
+    rs->wl_seat                = NULL;
+    rs->needs_redraw           = 1;
+    rs->rcs                    = (typeof(rs->rcs))dll_init();
+    rs->trcs                   = (typeof(rs->trcs))dll_init();
+    rs->focused_trc            = NULL;
 
-    rs->tex               = 0;
-    rs->tex_h             = 0;
-    rs->tex_w             = 0;
-    rs->cursor_gl_program = 0;
-    rs->cursor_gl_vao     = 0;
-    rs->cursor_x          = 0;
-    rs->cursor_y          = 0;
+    rs->tex                   = 0;
+    rs->tex_h                 = 0;
+    rs->tex_w                 = 0;
+    rs->cursor_gl_program     = 0;
+    rs->cursor_gl_vao         = 0;
+    rs->cursor_x              = 0;
+    rs->cursor_y              = 0;
 
     {
         gl_proc = init_gl_proc();

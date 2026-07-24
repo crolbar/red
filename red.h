@@ -9,6 +9,15 @@
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 
+#define RED_MOD_SHIFT   1
+#define RED_MOD_CTRL    2
+#define RED_MOD_ALT     4
+#define RED_MOD_SUPER   8
+#define RED_MOD_NO_MODS 0
+
+#define min(x, y) ((x) < (y)) ? (x) : (y)
+#define max(x, y) ((x) > (y)) ? (x) : (y)
+
 typedef struct redbuffer
 {
     uint32_t          buf_id;       // drm backend, drm framebuffer id
@@ -28,6 +37,12 @@ struct redsurface
     struct wl_resource* xdg_toplevel;
     char*               app_id; // xdg_toplevel title
 
+    int32_t geom_x;
+    int32_t geom_y;
+    int32_t geom_width;
+    int32_t geom_height;
+    int     geom_configured;
+
     struct redsurface* parent;
     int                sub_x, sub_y;
 
@@ -45,12 +60,6 @@ struct redclient
     struct wl_resource* wl_keyboard;
     struct wl_listener  client_destroyed;
 };
-
-#define RED_MOD_SHIFT   1
-#define RED_MOD_CTRL    2
-#define RED_MOD_ALT     4
-#define RED_MOD_SUPER   8
-#define RED_MOD_NO_MODS 0
 
 // mods is a bitmask
 typedef struct redbind
@@ -84,6 +93,7 @@ struct redstate
     struct wl_event_loop* wl_event_loop;
     struct wl_global*     wl_compositor;
     struct wl_global*     xdg_wm_base;
+    struct wl_global*     xdg_decoration_manager;
     struct wl_global*     wl_output;
     struct wl_global*     wl_seat;
     struct wl_global*     subcompositor_global;
