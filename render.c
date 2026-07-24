@@ -1,4 +1,5 @@
 #include "log.h"
+#include "opengl.h"
 #include "red.h"
 #include "render.h"
 #include "time.h"
@@ -8,32 +9,10 @@
 #include <string.h>
 #include <wayland-server-protocol.h>
 
-static GLuint g_rect_program = 0;
-static GLuint g_rect_vao     = 0;
-static GLuint g_rect_vbo     = 0;
-static GLuint g_rect_ebo     = 0;
-
 static GLuint quad_program  = 0;
 static GLuint quad_vao      = 0;
 static GLuint quad_vbo      = 0;
 static GLint  u_texture_loc = -1;
-
-static const char* rect_vs_src =
-  "#version 320 es\n"
-  "layout(location = 0) in vec2 aPos;\n"
-  "uniform mat4 uProjection;\n"
-  "uniform mat4 uModel;\n"
-  "void main() {\n"
-  "    gl_Position = uProjection * uModel * vec4(aPos, 0.0, 1.0);\n"
-  "}\n";
-
-static const char* rect_fs_src = "#version 320 es\n"
-                                 "precision mediump float;\n"
-                                 "out vec4 fragColor;\n"
-                                 "uniform vec4 uColor;\n"
-                                 "void main() {\n"
-                                 "    fragColor = uColor;\n"
-                                 "}\n";
 
 static GLuint
 compile_shader(GLenum type, const char* src)
@@ -54,118 +33,6 @@ compile_shader(GLenum type, const char* src)
     return shader;
 }
 
-static void
-init_rect_renderer(void)
-{
-    if (g_rect_program)
-        return;
-
-    GLuint vs = compile_shader(GL_VERTEX_SHADER, rect_vs_src);
-    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, rect_fs_src);
-
-    g_rect_program = glCreateProgram();
-    glAttachShader(g_rect_program, vs);
-    glAttachShader(g_rect_program, fs);
-    glLinkProgram(g_rect_program);
-
-    GLint ok = 0;
-    glGetProgramiv(g_rect_program, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        char log[512];
-        glGetProgramInfoLog(g_rect_program, sizeof(log), NULL, log);
-        fprintf(stderr, "program link error: %s\n", log);
-    }
-
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-
-    float vertices[] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f };
-    unsigned short indices[] = { 0, 1, 2, 2, 3, 0 };
-
-    glGenVertexArrays(1, &g_rect_vao);
-    glGenBuffers(1, &g_rect_vbo);
-    glGenBuffers(1, &g_rect_ebo);
-
-    glBindVertexArray(g_rect_vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, g_rect_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_rect_ebo);
-    glBufferData(
-      GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(
-      0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    glBindVertexArray(0);
-}
-
-static void
-ortho(float* m,
-      float  left,
-      float  right,
-      float  bottom,
-      float  top,
-      float  near,
-      float  far)
-{
-    memset(m, 0, sizeof(float) * 16);
-    m[0]  = 2.0f / (right - left);
-    m[5]  = 2.0f / (top - bottom);
-    m[10] = -2.0f / (far - near);
-    m[12] = -(right + left) / (right - left);
-    m[13] = -(top + bottom) / (top - bottom);
-    m[14] = -(far + near) / (far - near);
-    m[15] = 1.0f;
-}
-
-static void
-make_model(float* m, float x, float y, float w, float h)
-{
-    memset(m, 0, sizeof(float) * 16);
-    m[0]  = w;
-    m[5]  = h;
-    m[10] = 1.0f;
-    m[12] = x;
-    m[13] = y;
-    m[15] = 1.0f;
-}
-
-static void
-draw_rect(int   viewport_w,
-          int   viewport_h,
-          float x,
-          float y,
-          float w,
-          float h,
-          float r,
-          float g,
-          float b,
-          float a)
-{
-    init_rect_renderer();
-
-    glUseProgram(g_rect_program);
-
-    float proj[16];
-    ortho(proj, 0, (float)viewport_w, (float)viewport_h, 0, -1, 1);
-    glUniformMatrix4fv(
-      glGetUniformLocation(g_rect_program, "uProjection"), 1, GL_FALSE, proj);
-
-    float model[16];
-    make_model(model, x, y, w, h);
-    glUniformMatrix4fv(
-      glGetUniformLocation(g_rect_program, "uModel"), 1, GL_FALSE, model);
-
-    glUniform4f(glGetUniformLocation(g_rect_program, "uColor"), r, g, b, a);
-
-    glBindVertexArray(g_rect_vao);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
-    glBindVertexArray(0);
-}
-
 int
 max(int x, int y)
 {
@@ -173,6 +40,7 @@ max(int x, int y)
         return x;
     return y;
 }
+
 int
 min(int x, int y)
 {
@@ -236,8 +104,10 @@ ensure_quad_resources(void)
        bottom-left) */
     float verts[] = {
         /* pos        uv */
-        -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, 0.0f,
-        -1.0f, 1.0f,  0.0f, 1.0f, 1.0f, 1.0f,  1.0f, 1.0f,
+        -1.0f, -1.0f, 0.0f, 0.0f, //
+        1.0f,  -1.0f, 1.0f, 0.0f, //
+        -1.0f, 1.0f,  0.0f, 1.0f, //
+        1.0f,  1.0f,  1.0f, 1.0f,
     };
 
     glGenVertexArrays(1, &quad_vao);
@@ -305,13 +175,14 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
     int32_t  h          = wl_shm_buffer_get_height(shm);
     // uint32_t fmt        = wl_shm_buffer_get_format(shm);
     GLenum gl_fmt = GL_RGBA;
+    // DRM_FORMAT_RGBX8888
 
     /* create/reuse a texture on rsurf so we don't alloc every frame */
     if (rs->tex == 0) {
         glGenTextures(1, &rs->tex);
         glBindTexture(GL_TEXTURE_2D, rs->tex);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     } else {
@@ -346,14 +217,118 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
     return 0;
 }
 
+// yoinked out of aquamarine
+static char* vertex_shader_src = "\
+#version 300 es\n\
+precision highp float;\n\
+uniform mat3 proj;\n\
+in vec2 pos;\n\
+in vec2 texcoord;\n\
+out vec2 v_texcoord;\n\
+void main() {\n\
+    gl_Position = vec4(proj * vec3(pos, 1.0), 1.0);\n\
+    v_texcoord = texcoord;\n\
+}";
+
+int
+_render_cursor_part(struct redstate* rs,
+                    uint32_t         screen_width,
+                    uint32_t         screen_height,
+                    uint32_t         x,
+                    uint32_t         y,
+                    uint32_t         w,
+                    uint32_t         h)
+{
+    // using vertex shader to move to cursor coords
+    {
+        float x_frac = (float)x / (float)screen_width;
+        float y_frac = (float)y / (float)screen_height;
+
+        float x_ndc = x_frac - (1 - x_frac);
+        float y_ndc = y_frac - (1 - y_frac);
+
+        float cursor_coord[2];
+        cursor_coord[0] = x_ndc;
+        cursor_coord[1] = y_ndc;
+        CALL(glUniform2fv(
+          glGetUniformLocation(rs->cursor_gl_program, "cursor_coord"),
+          1,
+          cursor_coord));
+    }
+
+    float rotation[4];
+    {
+        float angle = -5.0f * (M_PI / 180.0f);
+
+        rotation[0] = cosf(angle);
+        rotation[1] = sinf(angle);
+        rotation[2] = -sinf(angle);
+        rotation[3] = cosf(angle);
+        CALL(glUniformMatrix2fv(
+          glGetUniformLocation(rs->cursor_gl_program, "rotation"),
+          1,
+          GL_FALSE,
+          rotation));
+    }
+
+    {
+        float size[2];
+        size[0] = w;
+        size[1] = h;
+        CALL(glUniform2fv(
+          glGetUniformLocation(rs->cursor_gl_program, "size"), 1, size));
+    }
+
+    {
+        float scale[2];
+        // top and left are 0 not -1
+        // so we are scaling up twice
+        scale[0] = 2.0f / screen_width;
+        scale[1] = 2.0f / screen_height;
+        CALL(glUniform2fv(
+          glGetUniformLocation(rs->cursor_gl_program, "scale"), 1, scale));
+    }
+
+    CALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0));
+
+    return 0;
+fail:
+    return 1;
+}
+
+int
+render_cursor(struct redstate* rs,
+              uint32_t         screen_width,
+              uint32_t         screen_height,
+              uint32_t         x,
+              uint32_t         y,
+              uint32_t         w,
+              uint32_t         h)
+{
+    CALL(glUseProgram(rs->cursor_gl_program));
+    CALL(glBindVertexArray(rs->cursor_gl_vao));
+
+    glUniform4f(glGetUniformLocation(rs->cursor_gl_program, "cursor_color"),
+                0x99 / 255.0f,
+                0x22 / 255.0f,
+                0x22 / 255.0f,
+                1.0f);
+
+    _render_cursor_part(rs, screen_width, screen_height, x, y, w, h);
+    _render_cursor_part(rs, screen_width, screen_height, x, y, h, w);
+    return 0;
+fail:
+    return 1;
+}
+
 int
 render_frame(struct redstate* rs, struct redbuffer* rb)
 {
     assert(rs);
     assert(rb);
 
-    int width  = rs->backend->get_width(rs->backend->d);
-    int height = rs->backend->get_height(rs->backend->d);
+    uint32_t width  = rs->backend->get_width(rs->backend->d);
+    uint32_t height = rs->backend->get_height(rs->backend->d);
 
     glBindFramebuffer(GL_FRAMEBUFFER, rb->fbo);
 
@@ -365,27 +340,9 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
         rs->focused_trc->rsurf->configured)
         render_surface(rs, rs->focused_trc->rsurf);
 
-    {
-        float rect_w = 240.0f;
-        float rect_h = 240.0f;
-        float rect_x = rs->rect_x;
-        float rect_y = height - rs->rect_y;
-        if (rect_x + rect_w >= width)
-            rect_x = width - rect_w;
-
-        if (rect_y + rect_h >= height)
-            rect_y = height - rect_h;
-        draw_rect(width,
-                  height,
-                  rect_x,
-                  rect_y,
-                  rect_w,
-                  rect_h,
-                  1.0f,
-                  1.0f,
-                  1.0f,
-                  1.0f);
-    }
+    // cursor
+    int size = 20;
+    render_cursor(rs, width, height, rs->cursor_x, rs->cursor_y, size, size / 3);
 
     glFinish();
     return 0;

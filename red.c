@@ -14,6 +14,7 @@
 #include "gbm.h"
 #include "input.h"
 #include "log.h"
+#include "opengl.h"
 #include "red.h"
 #include "signals.h"
 #include "time.h"
@@ -35,8 +36,6 @@ main(int argc, char** argv)
     rs->li                = NULL;
     rs->active            = 1;
     rs->should_quit       = 0;
-    rs->rect_x            = 0.0;
-    rs->rect_y            = 0.0;
     rs->time_start        = time_get_now();
     rs->last_frame_time   = time_get_elapsed_sec(rs->time_start);
     rs->is_wayland_client = false;
@@ -71,9 +70,13 @@ main(int argc, char** argv)
     rs->trcs          = (typeof(rs->trcs))dll_init();
     rs->focused_trc   = NULL;
 
-    rs->tex   = 0;
-    rs->tex_h = 0;
-    rs->tex_w = 0;
+    rs->tex               = 0;
+    rs->tex_h             = 0;
+    rs->tex_w             = 0;
+    rs->cursor_gl_program = 0;
+    rs->cursor_gl_vao     = 0;
+    rs->cursor_x          = 0;
+    rs->cursor_y          = 0;
 
     {
         gl_proc = init_gl_proc();
@@ -88,6 +91,8 @@ main(int argc, char** argv)
         ret = 1;
         goto end;
     }
+    rs->cursor_x = rs->backend->get_width(rs->backend->d) / 2;
+    rs->cursor_y = rs->backend->get_height(rs->backend->d) / 2;
 
     // signals
     {
@@ -120,6 +125,15 @@ main(int argc, char** argv)
             goto end;
         }
         rs->li = li;
+    }
+
+    // gl
+    {
+        if (gl_setup_cursor_program(rs)) {
+            ROG_ERR("opengl failed to setup cursor program");
+            ret = 1;
+            goto end;
+        }
     }
 
     rs->backend->push_init_buffer(rs);

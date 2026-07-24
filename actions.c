@@ -1,7 +1,7 @@
 #include "actions.h"
 #include "log.h"
 #include "red.h"
-#include "render.h"
+#include "compositor.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
@@ -20,8 +20,7 @@ redaction_focus_next(struct redstate* rs, char** args, size_t args_len)
     {
         if (rs->focused_trc == v->val) {
             if (v->next) {
-                rs->focused_trc = v->next->val;
-                request_redraw(rs);
+                red_focus_trc(rs, v->next->val);
                 break;
             }
         }
@@ -35,8 +34,7 @@ redaction_focus_prev(struct redstate* rs, char** args, size_t args_len)
     {
         if (rs->focused_trc == v->val) {
             if (v->prev) {
-                rs->focused_trc = v->prev->val;
-                request_redraw(rs);
+                red_focus_trc(rs, v->prev->val);
                 break;
             }
         }
@@ -103,7 +101,7 @@ exec_action(struct redstate* rs, char** action, size_t action_len)
         return;
     }
 
-    for (int i = 0; i < redactions_len; i++) {
+    for (size_t i = 0; i < redactions_len; i++) {
         if (action[0] != redactions[i].action_type)
             continue;
         // found action, now exec it

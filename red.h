@@ -80,9 +80,6 @@ struct redstate
     double last_frame_time;
     double frame_latency;
 
-    double rect_x;
-    double rect_y;
-
     struct wl_display*    wl_display;
     struct wl_event_loop* wl_event_loop;
     struct wl_global*     wl_compositor;
@@ -96,6 +93,11 @@ struct redstate
     int32_t tex_w;
     int32_t tex_h;
     GLuint  tex;
+
+    GLuint cursor_gl_program;
+    GLuint cursor_gl_vao;
+    double cursor_x;
+    double cursor_y;
 
     // all clients
     dll(struct redclient*) rcs; // red clients

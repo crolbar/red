@@ -610,16 +610,16 @@ wl_seat_get_keyboard(struct wl_client*   client,
     wl_resource_set_implementation(
       wl_keyboard, &wl_keyboard_implementation, wl_keyboard, NULL);
 
+    wl_keyboard_send_keymap(wl_keyboard,
+                            WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
+                            rs->xkb_keymap_fd,
+                            rs->xkb_keymap_size);
+
     if (wl_resource_get_version(wl_keyboard) >=
         WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION) {
         wl_keyboard_send_repeat_info(
           wl_keyboard, cfg.kb_repeat_rate, cfg.kb_repeat_delay);
     }
-
-    wl_keyboard_send_keymap(wl_keyboard,
-                            WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
-                            rs->xkb_keymap_fd,
-                            rs->xkb_keymap_size);
 
     dll_for_each(rs->rcs, v)
     {

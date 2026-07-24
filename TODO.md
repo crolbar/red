@@ -1,3 +1,7 @@
+- [ ]drm cursor + wayland pointer
+- [ ]fix up wayland backend
+
+
 - [x]get foot terminal on screen
 - [x]figure out frames
 - [x]drm.c

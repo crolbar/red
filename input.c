@@ -2,6 +2,7 @@
 #include "config.h"
 #include "log.h"
 #include "red.h"
+#include "render.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <libinput.h>
@@ -322,6 +323,9 @@ input_kb_key(struct redstate* rs, struct libinput_event_keyboard* kbe)
     if (!rs->focused_trc)
         return 0;
 
+    if (rs->is_wayland_client || getenv("RED_DONT_SPAWN_CLIENT"))
+        return 0;
+
     // forward key press to client
 
     uint32_t serial = wl_display_next_serial(rs->wl_display);
@@ -345,6 +349,9 @@ input_kb_key(struct redstate* rs, struct libinput_event_keyboard* kbe)
     return 0;
 }
 
+#define min(x, y) ((x) < (y)) ? (x) : (y)
+#define max(x, y) ((x) > (y)) ? (x) : (y)
+
 int
 input_dispatch(struct redstate* rs)
 {
@@ -362,23 +369,15 @@ input_dispatch(struct redstate* rs)
             struct libinput_event_pointer* me =
               libinput_event_get_pointer_event(event);
 
-            double dx = libinput_event_pointer_get_dx_unaccelerated(me);
-            double dy = libinput_event_pointer_get_dy_unaccelerated(me);
-
-            rs->rect_x += dx * 0.4;
-            rs->rect_y += dy * 0.4;
-
-            int width  = rs->backend->get_width(rs->backend->d);
-            int height = rs->backend->get_height(rs->backend->d);
-            if (rs->rect_x > width)
-                rs->rect_x = width;
-            if (rs->rect_x < 0)
-                rs->rect_x = 0;
-
-            if (rs->rect_y > height)
-                rs->rect_y = height;
-            if (rs->rect_y < 0)
-                rs->rect_y = 0;
+            double   dx     = libinput_event_pointer_get_dx_unaccelerated(me);
+            double   dy     = libinput_event_pointer_get_dy_unaccelerated(me);
+            uint32_t width  = rs->backend->get_width(rs->backend->d);
+            uint32_t height = rs->backend->get_height(rs->backend->d);
+            double   x      = rs->cursor_x + dx * 0.4;
+            double   y      = rs->cursor_y + dy * 0.4;
+            rs->cursor_x    = max(min(x, (double)width), 0);
+            rs->cursor_y    = max(min(y, (double)height), 0);
+            request_redraw(rs);
         }
 
         libinput_event_destroy(event);

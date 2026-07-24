@@ -7,6 +7,7 @@ SRC = red.c \
 		backend-wayland.c \
 		backend-wayland-client.c \
 		drmProps.c \
+		opengl.c \
 		input.c \
 		log.c \
 		signals.c \
