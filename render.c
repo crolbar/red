@@ -356,10 +356,12 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
         rs->focused_trc->rsurf->configured)
         render_surface(rs, rs->focused_trc->rsurf);
 
-    // cursor
-    int size = 16;
-    render_cursor(
-      rs, width, height, rs->cursor_x, rs->cursor_y, size, size / 3);
+    // software cursor
+    if (!rs->using_hardware_cursor) {
+        int size = 16;
+        render_cursor(
+          rs, width, height, rs->cursor_x, rs->cursor_y, size, size / 3);
+    }
 
     glFinish();
     return 0;

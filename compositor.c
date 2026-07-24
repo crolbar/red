@@ -1,5 +1,6 @@
 #include "compositor.h"
 #include "dll.h"
+#include "drm.h"
 #include "log.h"
 #include "red.h"
 #include "render.h"
@@ -184,6 +185,10 @@ red_pointer_send_motion(struct redstate* rs, struct libinput_event_pointer* pe)
     double y = rs->cursor_y + dy * 0.4;
     rs->cursor_x = max(min(x, (double)width), 0);
     rs->cursor_y = max(min(y, (double)height), 0);
+
+    if (rs->using_hardware_cursor)
+        if (drm_update_cursor_plane(rs))
+            return 1;
 
     if (rs->focused_trc && rs->focused_trc->wl_pointer) {
         uint32_t time_msec = libinput_event_pointer_get_time(pe);

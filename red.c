@@ -93,8 +93,8 @@ main(int argc, char** argv)
         ret = 1;
         goto end;
     }
-    rs->cursor_x = rs->backend->get_width(rs->backend->d) / 2;
-    rs->cursor_y = rs->backend->get_height(rs->backend->d) / 2;
+    rs->cursor_x = (float)rs->backend->get_width(rs->backend->d) / 2;
+    rs->cursor_y = (float)rs->backend->get_height(rs->backend->d) / 2;
 
     // signals
     {

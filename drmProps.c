@@ -108,10 +108,10 @@ init_prop_ids(struct backend_drm* bd)
         }
     }
 
-    // planes
+    // primary plane
     {
         drmModeObjectPropertiesPtr props = drmModeObjectGetProperties(
-          bd->drm_fd, bd->plane_id, DRM_MODE_OBJECT_PLANE);
+          bd->drm_fd, bd->primary_plane_id, DRM_MODE_OBJECT_PLANE);
         if (!props) {
             ROG_ERR("failed get props for plane");
             return 1;
@@ -123,7 +123,7 @@ init_prop_ids(struct backend_drm* bd)
                 ROG_ERR("failed to get plane prop SRC_X");
                 return 1;
             }
-            dp->plane_src_x = v;
+            dp->pp_src_x = v;
         }
         {
             int v = get_prop_id(bd->drm_fd, props, "SRC_Y");
@@ -131,15 +131,16 @@ init_prop_ids(struct backend_drm* bd)
                 ROG_ERR("failed to get plane prop SRC_Y");
                 return 1;
             }
-            dp->plane_src_y = v;
+            dp->pp_src_y = v;
         }
         {
+            int  using_hardware_cursor;
             int v = get_prop_id(bd->drm_fd, props, "SRC_W");
             if (v == -1) {
                 ROG_ERR("failed to get plane prop SRC_W");
                 return 1;
             }
-            dp->plane_src_w = v;
+            dp->pp_src_w = v;
         }
         {
             int v = get_prop_id(bd->drm_fd, props, "SRC_H");
@@ -147,7 +148,7 @@ init_prop_ids(struct backend_drm* bd)
                 ROG_ERR("failed to get plane prop SRC_H");
                 return 1;
             }
-            dp->plane_src_h = v;
+            dp->pp_src_h = v;
         }
         {
             int v = get_prop_id(bd->drm_fd, props, "CRTC_X");
@@ -155,7 +156,7 @@ init_prop_ids(struct backend_drm* bd)
                 ROG_ERR("failed to get plane prop CRTC_X");
                 return 1;
             }
-            dp->plane_crtc_x = v;
+            dp->pp_crtc_x = v;
         }
         {
             int v = get_prop_id(bd->drm_fd, props, "CRTC_Y");
@@ -163,7 +164,7 @@ init_prop_ids(struct backend_drm* bd)
                 ROG_ERR("failed to get plane prop CRTC_Y");
                 return 1;
             }
-            dp->plane_crtc_y = v;
+            dp->pp_crtc_y = v;
         }
         {
             int v = get_prop_id(bd->drm_fd, props, "CRTC_W");
@@ -171,7 +172,7 @@ init_prop_ids(struct backend_drm* bd)
                 ROG_ERR("failed to get plane prop CRTC_W");
                 return 1;
             }
-            dp->plane_crtc_w = v;
+            dp->pp_crtc_w = v;
         }
         {
             int v = get_prop_id(bd->drm_fd, props, "CRTC_H");
@@ -179,7 +180,7 @@ init_prop_ids(struct backend_drm* bd)
                 ROG_ERR("failed to get plane prop CRTC_H");
                 return 1;
             }
-            dp->plane_crtc_h = v;
+            dp->pp_crtc_h = v;
         }
         {
             int v = get_prop_id(bd->drm_fd, props, "FB_ID");
@@ -187,7 +188,7 @@ init_prop_ids(struct backend_drm* bd)
                 ROG_ERR("failed to get plane prop FB_ID");
                 return 1;
             }
-            dp->plane_fb_id = v;
+            dp->pp_fb_id = v;
         }
         {
             int v = get_prop_id(bd->drm_fd, props, "CRTC_ID");
@@ -195,7 +196,97 @@ init_prop_ids(struct backend_drm* bd)
                 ROG_ERR("failed to get plane prop CRTC_ID");
                 return 1;
             }
-            dp->plane_crtc_id = v;
+            dp->pp_crtc_id = v;
+        }
+    }
+    // cursor plane
+    {
+        drmModeObjectPropertiesPtr props = drmModeObjectGetProperties(
+          bd->drm_fd, bd->cursor_plane_id, DRM_MODE_OBJECT_PLANE);
+        if (!props) {
+            ROG_ERR("failed get props for plane");
+            return 1;
+        }
+
+        {
+            int v = get_prop_id(bd->drm_fd, props, "SRC_X");
+            if (v == -1) {
+                ROG_ERR("failed to get plane prop SRC_X");
+                return 1;
+            }
+            dp->cp_src_x = v;
+        }
+        {
+            int v = get_prop_id(bd->drm_fd, props, "SRC_Y");
+            if (v == -1) {
+                ROG_ERR("failed to get plane prop SRC_Y");
+                return 1;
+            }
+            dp->cp_src_y = v;
+        }
+        {
+            int v = get_prop_id(bd->drm_fd, props, "SRC_W");
+            if (v == -1) {
+                ROG_ERR("failed to get plane prop SRC_W");
+                return 1;
+            }
+            dp->cp_src_w = v;
+        }
+        {
+            int v = get_prop_id(bd->drm_fd, props, "SRC_H");
+            if (v == -1) {
+                ROG_ERR("failed to get plane prop SRC_H");
+                return 1;
+            }
+            dp->cp_src_h = v;
+        }
+        {
+            int v = get_prop_id(bd->drm_fd, props, "CRTC_X");
+            if (v == -1) {
+                ROG_ERR("failed to get plane prop CRTC_X");
+                return 1;
+            }
+            dp->cp_crtc_x = v;
+        }
+        {
+            int v = get_prop_id(bd->drm_fd, props, "CRTC_Y");
+            if (v == -1) {
+                ROG_ERR("failed to get plane prop CRTC_Y");
+                return 1;
+            }
+            dp->cp_crtc_y = v;
+        }
+        {
+            int v = get_prop_id(bd->drm_fd, props, "CRTC_W");
+            if (v == -1) {
+                ROG_ERR("failed to get plane prop CRTC_W");
+                return 1;
+            }
+            dp->cp_crtc_w = v;
+        }
+        {
+            int v = get_prop_id(bd->drm_fd, props, "CRTC_H");
+            if (v == -1) {
+                ROG_ERR("failed to get plane prop CRTC_H");
+                return 1;
+            }
+            dp->cp_crtc_h = v;
+        }
+        {
+            int v = get_prop_id(bd->drm_fd, props, "FB_ID");
+            if (v == -1) {
+                ROG_ERR("failed to get plane prop FB_ID");
+                return 1;
+            }
+            dp->cp_fb_id = v;
+        }
+        {
+            int v = get_prop_id(bd->drm_fd, props, "CRTC_ID");
+            if (v == -1) {
+                ROG_ERR("failed to get plane prop CRTC_ID");
+                return 1;
+            }
+            dp->cp_crtc_id = v;
         }
     }
 

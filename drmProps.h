@@ -14,16 +14,26 @@ struct drmprops
     uint32_t conn_crtc_id;
 
     // plane
-    uint32_t plane_src_x;
-    uint32_t plane_src_y;
-    uint32_t plane_src_w;
-    uint32_t plane_src_h;
-    uint32_t plane_crtc_x;
-    uint32_t plane_crtc_y;
-    uint32_t plane_crtc_w;
-    uint32_t plane_crtc_h;
-    uint32_t plane_fb_id;
-    uint32_t plane_crtc_id;
+    uint32_t pp_src_x;
+    uint32_t pp_src_y;
+    uint32_t pp_src_w;
+    uint32_t pp_src_h;
+    uint32_t pp_crtc_x;
+    uint32_t pp_crtc_y;
+    uint32_t pp_crtc_w;
+    uint32_t pp_crtc_h;
+    uint32_t pp_fb_id;
+    uint32_t pp_crtc_id;
+    uint32_t cp_src_x;
+    uint32_t cp_src_y;
+    uint32_t cp_src_w;
+    uint32_t cp_src_h;
+    uint32_t cp_crtc_x;
+    uint32_t cp_crtc_y;
+    uint32_t cp_crtc_w;
+    uint32_t cp_crtc_h;
+    uint32_t cp_fb_id;
+    uint32_t cp_crtc_id;
 };
 
 int

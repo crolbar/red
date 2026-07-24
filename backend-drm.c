@@ -1,16 +1,17 @@
 #include "backend-drm.h"
 #include "config.h"
-#include "dll.h"
 #include "drm.h"
 #include "drmProps.h"
 #include "gbm.h"
 #include "log.h"
 #include "render.h"
 #include "wayland.h"
+#include <drm/drm_fourcc.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <xf86drm.h>
 
@@ -22,11 +23,13 @@ backend_drm_init_data()
     if (!bd)
         return NULL;
 
+    bd->rs               = NULL;
     bd->drm_fd           = 0;
     bd->crtc_id          = 0;
     bd->crtc_idx         = 0;
     bd->conn_id          = 0;
-    bd->plane_id         = 0;
+    bd->primary_plane_id = 0;
+    bd->cursor_plane_id  = 0;
     bd->gbm_has_modifier = 0;
     bd->egl_display      = NULL;
     bd->egl_context      = NULL;
@@ -37,6 +40,10 @@ backend_drm_init_data()
     bd->used_rb          = 0;
     bd->width            = 300;
     bd->height           = 300;
+    bd->cursor_gbm_bo    = 0;
+    bd->cursor_buf_id    = 0;
+    bd->cursor_plane_w   = 0;
+    bd->cursor_plane_h   = 0;
 
     return bd;
 }
@@ -61,11 +68,12 @@ backend_drm_init(void* data)
     struct redstate*    rs = data;
     struct backend_drm* bd = rs->backend->d;
 
-    int               fd       = -1;
-    int               crtc_idx = -1;
-    uint32_t          crtc_id  = -1;
-    uint32_t          plane_id = -1;
-    drmModeConnector* conn     = NULL;
+    int               fd               = -1;
+    int               crtc_idx         = -1;
+    int               crtc_id          = -1;
+    int               primary_plane_id = -1;
+    int               cursor_plane_id  = -1;
+    drmModeConnector* conn             = NULL;
 
     char* dri_dev_path;
     if (strcmp(cfg.dri_dev, "auto") == 0) {
@@ -113,22 +121,33 @@ backend_drm_init(void* data)
     }
 
     {
-        int _plane_id = drm_get_primary_plane(fd, crtc_idx);
+        int _plane_id = drm_get_plane(fd, crtc_idx, DRM_PLANE_TYPE_PRIMARY);
         if (_plane_id == -1) {
-            ROG_ERR("failed to get plane_id");
+            ROG_ERR("failed to get primary_plane_id");
             goto fail;
         }
-        plane_id = (uint32_t)_plane_id;
+        primary_plane_id = (uint32_t)_plane_id;
     }
 
-    bd->drm_fd   = fd;
-    bd->mode     = conn->modes[1];
-    bd->width    = bd->mode.hdisplay;
-    bd->height   = bd->mode.vdisplay;
-    bd->crtc_id  = crtc_id;
-    bd->crtc_idx = crtc_idx;
-    bd->plane_id = plane_id;
-    bd->conn_id  = conn->connector_id;
+    {
+        int _plane_id = drm_get_plane(fd, crtc_idx, DRM_PLANE_TYPE_CURSOR);
+        if (_plane_id == -1) {
+            ROG_ERR("failed to get cursor_plane_id");
+            goto fail;
+        }
+        cursor_plane_id = (uint32_t)_plane_id;
+    }
+
+    bd->rs               = rs;
+    bd->drm_fd           = fd;
+    bd->mode             = conn->modes[1];
+    bd->width            = bd->mode.hdisplay;
+    bd->height           = bd->mode.vdisplay;
+    bd->crtc_id          = crtc_id;
+    bd->crtc_idx         = crtc_idx;
+    bd->primary_plane_id = primary_plane_id;
+    bd->cursor_plane_id  = cursor_plane_id;
+    bd->conn_id          = conn->connector_id;
     if (init_prop_ids(bd))
         goto fail;
 
@@ -140,19 +159,20 @@ backend_drm_init(void* data)
     drmModeFreeConnector(conn);
 
     bd->gbm_dev = init_gbm(bd->drm_fd);
-    if (!bd->gbm_dev) {
+    if (!bd->gbm_dev)
         goto fail;
-    }
 
-    if (init_egl(bd->gbm_dev, &bd->egl_display, &bd->egl_context)) {
+    if (init_egl(bd->gbm_dev, &bd->egl_display, &bd->egl_context))
         goto fail;
-    }
 
     bd->rb0 = init_drm_buffer(bd);
     if (!bd->rb0)
         goto fail;
     bd->rb1 = init_drm_buffer(bd);
     if (!bd->rb1)
+        goto fail;
+
+    if (drm_init_cursor_plane(bd))
         goto fail;
 
     return 0;
