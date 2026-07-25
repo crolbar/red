@@ -34,6 +34,8 @@ struct drmprops
     uint32_t cp_crtc_h;
     uint32_t cp_fb_id;
     uint32_t cp_crtc_id;
+    uint32_t cp_hotspot_x;
+    uint32_t cp_hotspot_y;
 };
 
 int

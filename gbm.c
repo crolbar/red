@@ -6,11 +6,11 @@
 #include "log.h"
 #include "red.h"
 #include <drm/drm_fourcc.h>
+#include <fcntl.h>
 #include <gbm.h>
 #include <stdlib.h>
-#include <wayland-client-protocol.h>
-#include <fcntl.h>
 #include <unistd.h>
+#include <wayland-client-protocol.h>
 
 struct gbm_device*
 init_gbm(int drm_fd)
@@ -360,6 +360,52 @@ fail:
     ROG("failed to init drm buffer");
 
     return NULL;
+}
+
+int
+init_drm_cursor_buffer(struct backend_drm* bd)
+{
+
+    struct gbm_bo* bo = gbm_bo_create(bd->gbm_dev,
+                                      bd->cursor_plane_w,
+                                      bd->cursor_plane_h,
+                                      GBM_FORMAT_ARGB8888,
+                                      GBM_BO_USE_CURSOR | GBM_BO_USE_WRITE);
+    if (!bo) {
+        ROG_ERR("failed to create cursor gbm_bo");
+        goto fail;
+    }
+
+    uint32_t buf_id;
+    {
+        uint32_t handles[4] = { 0 };
+        uint32_t pitches[4] = { 0 };
+        uint32_t offsets[4] = { 0 };
+
+        handles[0]      = gbm_bo_get_handle(bo).u32;
+        pitches[0]      = gbm_bo_get_stride(bo);
+        offsets[0]      = gbm_bo_get_offset(bo, 0);
+        uint32_t format = gbm_bo_get_format(bo);
+
+        if (drmModeAddFB2(bd->drm_fd,
+                          bd->cursor_plane_w,
+                          bd->cursor_plane_h,
+                          format,
+                          handles,
+                          pitches,
+                          offsets,
+                          &buf_id,
+                          0)) {
+            ROG_ERR("failed to submit cursor buffer drmModeAddFB2");
+            goto fail;
+        }
+    }
+
+    bd->cursor_gbm_bo = bo;
+    bd->cursor_buf_id = buf_id;
+    return 0;
+fail:
+    return 1;
 }
 
 struct gl_proc*

@@ -17,5 +17,8 @@ init_gl_proc();
 struct redbuffer*
 init_drm_buffer(struct backend_drm* bd);
 
+int
+init_drm_cursor_buffer(struct backend_drm* bd);
+
 struct redbuffer*
 init_wl_buffer(struct backend_wayland* bw);

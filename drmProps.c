@@ -134,7 +134,6 @@ init_prop_ids(struct backend_drm* bd)
             dp->pp_src_y = v;
         }
         {
-            int  using_hardware_cursor;
             int v = get_prop_id(bd->drm_fd, props, "SRC_W");
             if (v == -1) {
                 ROG_ERR("failed to get plane prop SRC_W");

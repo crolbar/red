@@ -29,6 +29,8 @@ typedef struct redconfig
 
     redbind* binds;
     size_t   binds_len;
+
+    bool center_cursor_hotspot;
 } redconfig;
 
 extern struct redconfig cfg;

@@ -351,8 +351,8 @@ input_dispatch(struct redstate* rs)
 {
     libinput_dispatch(rs->li);
 
-    if (rs->is_wayland_client || getenv("RED_DONT_SPAWN_CLIENT"))
-        return 0;
+    // if (rs->is_wayland_client || getenv("RED_DONT_SPAWN_CLIENT"))
+    //     return 0;
 
     struct libinput_event* event;
     while ((event = libinput_get_event(rs->li)) != NULL) {
@@ -361,14 +361,18 @@ input_dispatch(struct redstate* rs)
         if (event_type == LIBINPUT_EVENT_KEYBOARD_KEY) {
             struct libinput_event_keyboard* kbe =
               libinput_event_get_keyboard_event(event);
-            input_kb_key(rs, kbe);
+
+            if (input_kb_key(rs, kbe))
+                goto fail;
         } else if (event_type == LIBINPUT_EVENT_POINTER_MOTION ||
                    event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL ||
                    event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER ||
                    event_type == LIBINPUT_EVENT_POINTER_BUTTON) {
             struct libinput_event_pointer* pe =
               libinput_event_get_pointer_event(event);
-            input_pointer(rs, event_type, pe);
+
+            if (input_pointer(rs, event_type, pe))
+                goto fail;
         }
 
         else if (event_type == LIBINPUT_EVENT_DEVICE_ADDED) {
@@ -387,4 +391,6 @@ input_dispatch(struct redstate* rs)
     }
 
     return 0;
+fail:
+    return 1;
 }

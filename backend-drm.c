@@ -6,12 +6,9 @@
 #include "log.h"
 #include "render.h"
 #include "wayland.h"
-#include <drm/drm_fourcc.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <unistd.h>
 #include <xf86drm.h>
 
@@ -240,7 +237,7 @@ page_flip_handler(int          fd,
     if (rs->focused_trc)
         wl_send_pending_callback(rs->focused_trc->rsurf);
 
-    // if updates happened on page flip
+    // if updates happened on page flip.
     // shouldn't happen much as we have one window
     redraw(rs);
 }

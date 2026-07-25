@@ -6,6 +6,7 @@ SRC = red.c \
 		backend-drm.c \
 		backend-wayland.c \
 		backend-wayland-client.c \
+		red_cursor.c \
 		drmProps.c \
 		opengl.c \
 		input.c \
