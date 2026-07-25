@@ -1,9 +1,11 @@
 #include "backend-wayland-client.h"
 #include "backend-wayland.h"
 #include "compositor.h"
+#include "dll.h"
 #include "input.h"
 #include "linux-dmabuf-protocol.h"
 #include "log.h"
+#include "red.h"
 #include "render.h"
 #include "wayland.h"
 #include "xdg-shell-client-protocol.h"
@@ -42,6 +44,44 @@ free_wayland(struct wayland_client* cws)
 
 /* ======== wl_surface======== */
 
+// void
+// process_pending_releases(struct redstate* rs)
+// {
+//     struct backend_wayland* bw = rs->backend->d;
+//     if (rs->pending_releases.size == 0)
+//         return;
+
+//     dll(void*) removed_releases = dll_init();
+
+//     // ROG("release")
+//     // dll_for_each(rs->pending_releases, v) ROG("val: %d", v->val.buffer);
+
+//     dll_for_each(rs->pending_releases, v)
+//     {
+//         struct pending_release p = v->val;
+//         EGLint                 val;
+//         EGLBoolean             ok = gl_proc->eglGetSyncAttribKHR(
+//           bw->egl_display, p.sync, EGL_SYNC_STATUS_KHR, &val);
+//         if (ok && val == EGL_SIGNALED_KHR) {
+//             wl_buffer_send_release(p.buffer);
+//             gl_proc->eglDestroySyncKHR(bw->egl_display, p.sync);
+//             dll_push_tail(removed_releases, v);
+//         }
+//     }
+
+//     if (removed_releases.size == 0)
+//         return;
+
+//     dll_for_each(removed_releases, v)
+//     {
+//         typeof(rs->pending_releases.tail) o = v->val;
+//         dll_remove(rs->pending_releases, o);
+//     }
+
+//     // ROG("removing")
+//     // dll_for_each(rs->pending_releases, v) ROG("val: %d", v->val.buffer)
+// }
+
 void
 wl_frame_done(void*               data,
               struct wl_callback* wl_callback,
@@ -52,6 +92,8 @@ wl_frame_done(void*               data,
     struct redstate*        rs = data;
     struct backend_wayland* bw = rs->backend->d;
     wl_callback_destroy(wl_callback);
+
+    // process_pending_releases(rs);
 
     bw->is_ready_for_frame = 1;
 
@@ -261,7 +303,11 @@ wl_pointer_motion(void*              data,
                   wl_fixed_t         surface_y)
 {
     struct redstate* rs = data;
-    red_pointer_send_motion(rs, time, wl_fixed_to_double(surface_x), wl_fixed_to_double(surface_y), 0);
+    red_pointer_send_motion(rs,
+                            time,
+                            wl_fixed_to_double(surface_x),
+                            wl_fixed_to_double(surface_y),
+                            0);
 }
 void
 wl_pointer_button(void*              data,

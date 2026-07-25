@@ -219,6 +219,43 @@ backend_drm_resize_buffer(void* d, struct redbuffer* rb)
 {
     return 0;
 }
+void
+process_pending_releases(struct redstate* rs)
+{
+    struct backend_wayland* bw = rs->backend->d;
+    if (rs->pending_releases.size == 0)
+        return;
+
+    dll(void*) removed_releases = dll_init();
+
+    // ROG("release")
+    // dll_for_each(rs->pending_releases, v) ROG("val: %d", v->val.buffer);
+
+    dll_for_each(rs->pending_releases, v)
+    {
+        struct pending_release p = v->val;
+        EGLint                 val;
+        EGLBoolean             ok = gl_proc->eglGetSyncAttribKHR(
+          bw->egl_display, p.sync, EGL_SYNC_STATUS_KHR, &val);
+        if (ok && val == EGL_SIGNALED_KHR) {
+            wl_buffer_send_release(p.buffer);
+            gl_proc->eglDestroySyncKHR(bw->egl_display, p.sync);
+            dll_push_tail(removed_releases, v);
+        }
+    }
+
+    if (removed_releases.size == 0)
+        return;
+
+    dll_for_each(removed_releases, v)
+    {
+        typeof(rs->pending_releases.tail) o = v->val;
+        dll_remove(rs->pending_releases, o);
+    }
+
+    // ROG("removing")
+    // dll_for_each(rs->pending_releases, v) ROG("val: %d", v->val.buffer)
+}
 
 static void
 page_flip_handler(int          fd,
@@ -231,6 +268,7 @@ page_flip_handler(int          fd,
     struct backend_drm* bd = rs->backend->d;
 
     bd->page_flip_ready = 1;
+    // process_pending_releases(rs);
 
     // TODO: can we miss a pending callback when we change focus when
     // page_flip_ready == 0 ?

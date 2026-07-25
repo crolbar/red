@@ -71,14 +71,13 @@ main(int argc, char** argv)
     rs->trcs                   = (typeof(rs->trcs))dll_init();
     rs->focused_trc            = NULL;
 
-    rs->tex                   = 0;
-    rs->tex_h                 = 0;
-    rs->tex_w                 = 0;
     rs->cursor_gl_program     = 0;
     rs->cursor_gl_vao         = 0;
     rs->cursor_x              = 0;
     rs->cursor_y              = 0;
     rs->using_hardware_cursor = 0;
+
+    rs->pending_releases = (typeof(rs->pending_releases))dll_init();
 
     {
         gl_proc = init_gl_proc();

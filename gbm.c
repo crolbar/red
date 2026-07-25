@@ -440,6 +440,37 @@ init_gl_proc()
                     "glEGLImageTargetRenderbufferStorageOES");
             goto fail;
         }
+
+        glProc->glEGLImageTargetTexture2DOES =
+          (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress(
+            "glEGLImageTargetTexture2DOES");
+        if (!glProc->glEGLImageTargetTexture2DOES) {
+            ROG_ERR("did not found proc address of "
+                    "glEGLImageTargetTexture2DOES");
+            goto fail;
+        }
+
+        glProc->eglCreateSyncKHR =
+          (PFNEGLCREATESYNCKHRPROC)eglGetProcAddress("eglCreateSyncKHR");
+        if (!glProc->eglCreateSyncKHR) {
+            ROG_ERR("did not found proc address of "
+                    "eglCreateSyncKHR");
+            goto fail;
+        }
+        glProc->eglGetSyncAttribKHR =
+          (PFNEGLGETSYNCATTRIBKHRPROC)eglGetProcAddress("eglGetSyncAttribKHR");
+        if (!glProc->eglGetSyncAttribKHR) {
+            ROG_ERR("did not found proc address of "
+                    "eglGetSyncAttribKHR");
+            goto fail;
+        }
+        glProc->eglDestroySyncKHR =
+          (PFNEGLDESTROYSYNCKHRPROC)eglGetProcAddress("eglDestroySyncKHR");
+        if (!glProc->eglDestroySyncKHR) {
+            ROG_ERR("did not found proc address of "
+                    "eglDestroySyncKHR");
+            goto fail;
+        }
     }
 
     return glProc;

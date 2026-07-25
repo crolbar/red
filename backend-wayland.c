@@ -28,6 +28,7 @@ backend_wayland_init_data()
     bw->width       = 1600;
     bw->height      = 1000;
     bw->used_rb     = 0;
+    bw->drm_fd      = -1;
 
     return bw;
 }
@@ -62,6 +63,7 @@ backend_wayland_init(void* data)
         ROG_ERR("failed oppening drm device: %s", strerror(errno));
         goto fail;
     }
+    bw->drm_fd = fd;
 
     bw->gbm_dev = init_gbm(fd);
     if (!bw->gbm_dev)

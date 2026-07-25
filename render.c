@@ -1,3 +1,6 @@
+#include "backend-drm.h"
+#include "backend-wayland.h"
+#include "dll.h"
 #include "log.h"
 #include "opengl.h"
 #include "red.h"
@@ -5,6 +8,7 @@
 #include "time.h"
 #include <GLES3/gl3.h>
 #include <assert.h>
+#include <drm/drm_fourcc.h>
 #include <stdio.h>
 #include <string.h>
 #include <wayland-server-protocol.h>
@@ -55,7 +59,7 @@ ensure_quad_resources(void)
                                 "uniform sampler2D u_texture;\n"
                                 "void main() {\n"
                                 "    vec4 c = texture(u_texture, v_uv);\n"
-                                "    frag_color = c.bgra;\n"
+                                "    frag_color = c;\n"
                                 "}\n";
 
     GLuint vs = compile_shader(GL_VERTEX_SHADER, vs_src);
@@ -147,89 +151,206 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
         return 1;
 
     struct wl_shm_buffer* shm = wl_shm_buffer_get(buffer);
-    if (!shm) {
-        ROG_ERR("not shm buffer?");
+
+    if (shm) {
+        /* ---- existing CPU shm path (unchanged from before) ---- */
+        wl_shm_buffer_begin_access(shm);
+        uint8_t* src        = wl_shm_buffer_get_data(shm);
+        int32_t  src_stride = wl_shm_buffer_get_stride(shm);
+        int32_t  src_w      = wl_shm_buffer_get_width(shm);
+        int32_t  src_h      = wl_shm_buffer_get_height(shm);
+        GLenum   gl_fmt     = GL_RGBA;
+        int32_t  x = 0, y = 0, w = src_w, h = src_h;
+
+        if (rsurf->geom_configured) {
+            x = rsurf->geom_x;
+            y = rsurf->geom_y;
+            w = rsurf->geom_width;
+            h = rsurf->geom_height;
+            if (x < 0)
+                x = 0;
+            if (y < 0)
+                y = 0;
+            if (x + w > src_w)
+                w = src_w - x;
+            if (y + h > src_h)
+                h = src_h - y;
+            if (w <= 0 || h <= 0) {
+                x = 0;
+                y = 0;
+                w = src_w;
+                h = src_h;
+            }
+        }
+
+        if (rsurf->tex == 0) {
+            glGenTextures(1, &rsurf->tex);
+            glBindTexture(GL_TEXTURE_2D, rsurf->tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        } else {
+            glBindTexture(GL_TEXTURE_2D, rsurf->tex);
+        }
+
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, src_stride / 4);
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, y);
+
+        if (rsurf->tex_w != src_w || rsurf->tex_h != src_h) {
+            glTexImage2D(GL_TEXTURE_2D,
+                         0,
+                         GL_RGBA,
+                         w,
+                         h,
+                         0,
+                         gl_fmt,
+                         GL_UNSIGNED_BYTE,
+                         src);
+            rsurf->tex_w = src_w;
+            rsurf->tex_h = src_h;
+        } else {
+            glTexSubImage2D(
+              GL_TEXTURE_2D, 0, 0, 0, w, h, gl_fmt, GL_UNSIGNED_BYTE, src);
+        }
+
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+        wl_shm_buffer_end_access(shm);
+
+        draw_textured_quad(rs, rsurf->tex, src_w, src_h);
+
+        if (rsurf->pending_buffer) {
+            rsurf->old_pending_buffer = buffer;
+            wl_buffer_send_release(
+              buffer); /* CPU copy already done, safe immediately */
+            rsurf->pending_buffer = NULL;
+        }
+        return 0;
+    }
+
+    // struct backend_wayland* bw = rs->backend->d;
+    struct backend_drm* bd = rs->backend->d;
+
+    struct dmabuf_buffer_data* dmabuf = dmabuf_buffer_get(buffer);
+    if (!dmabuf) {
+        ROG_ERR("not shm or dmabuf buffer?\n");
         return 1;
     }
-    wl_shm_buffer_begin_access(shm);
 
-    uint8_t* src        = wl_shm_buffer_get_data(shm);
-    int32_t  src_stride = wl_shm_buffer_get_stride(shm);
-    int32_t  src_w      = wl_shm_buffer_get_width(shm);
-    int32_t  src_h      = wl_shm_buffer_get_height(shm);
-    GLenum   gl_fmt     = GL_RGBA;
-
-    int32_t x = 0; // offset
-    int32_t y = 0;
-    int32_t w = src_w;
-    int32_t h = src_h;
-
-    // removing csd that has been informed by xdg_surface_set_window_geometry
-    if (rsurf->geom_configured) {
-        x = rsurf->geom_x;
-        y = rsurf->geom_y;
-        w = rsurf->geom_width;
-        h = rsurf->geom_height;
-        if (x < 0)
-            x = 0;
-
-        if (y < 0)
-            y = 0;
-
-        if (x + w > src_w)
-            w = src_w - x;
-
-        if (y + h > src_h)
-            h = src_h - y;
-
-        if (w <= 0 || h <= 0) {
-            x = 0;
-            y = 0;
-            w = src_w;
-            h = src_h;
+    /* only (re)import if this is a different wl_buffer resource than last frame
+     */
+    if (rsurf->tex_buffer != buffer) {
+        if (rsurf->egl_image != EGL_NO_IMAGE_KHR) {
+            // gl_proc->eglDestroyImageKHR(rs->egl_display, rsurf->egl_image);
+            rsurf->egl_image = EGL_NO_IMAGE_KHR;
         }
-    }
 
-    /* create/reuse a texture on rsurf so we don't alloc every frame */
-    if (rs->tex == 0) {
-        glGenTextures(1, &rs->tex);
-        glBindTexture(GL_TEXTURE_2D, rs->tex);
+        EGLint attribs[50];
+        int    a     = 0;
+        attribs[a++] = EGL_WIDTH;
+        attribs[a++] = dmabuf->width;
+        attribs[a++] = EGL_HEIGHT;
+        attribs[a++] = dmabuf->height;
+        attribs[a++] = EGL_LINUX_DRM_FOURCC_EXT;
+        attribs[a++] = dmabuf->format;
+
+        static const EGLint fd_attrs[4]    = { EGL_DMA_BUF_PLANE0_FD_EXT,
+                                               EGL_DMA_BUF_PLANE1_FD_EXT,
+                                               EGL_DMA_BUF_PLANE2_FD_EXT,
+                                               EGL_DMA_BUF_PLANE3_FD_EXT };
+        static const EGLint off_attrs[4]   = { EGL_DMA_BUF_PLANE0_OFFSET_EXT,
+                                               EGL_DMA_BUF_PLANE1_OFFSET_EXT,
+                                               EGL_DMA_BUF_PLANE2_OFFSET_EXT,
+                                               EGL_DMA_BUF_PLANE3_OFFSET_EXT };
+        static const EGLint pitch_attrs[4] = { EGL_DMA_BUF_PLANE0_PITCH_EXT,
+                                               EGL_DMA_BUF_PLANE1_PITCH_EXT,
+                                               EGL_DMA_BUF_PLANE2_PITCH_EXT,
+                                               EGL_DMA_BUF_PLANE3_PITCH_EXT };
+        static const EGLint modlo_attrs[4] = {
+            EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,
+            EGL_DMA_BUF_PLANE1_MODIFIER_LO_EXT,
+            EGL_DMA_BUF_PLANE2_MODIFIER_LO_EXT,
+            EGL_DMA_BUF_PLANE3_MODIFIER_LO_EXT
+        };
+        static const EGLint modhi_attrs[4] = {
+            EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT,
+            EGL_DMA_BUF_PLANE1_MODIFIER_HI_EXT,
+            EGL_DMA_BUF_PLANE2_MODIFIER_HI_EXT,
+            EGL_DMA_BUF_PLANE3_MODIFIER_HI_EXT
+        };
+
+        for (int i = 0; i < dmabuf->n_planes; i++) {
+            attribs[a++] = fd_attrs[i];
+            attribs[a++] = dmabuf->planes[i].fd;
+            attribs[a++] = off_attrs[i];
+            attribs[a++] = dmabuf->planes[i].offset;
+            attribs[a++] = pitch_attrs[i];
+            attribs[a++] = dmabuf->planes[i].stride;
+            if (dmabuf->planes[i].modifier != DRM_FORMAT_MOD_INVALID) {
+                attribs[a++] = modlo_attrs[i];
+                attribs[a++] =
+                  (EGLint)(dmabuf->planes[i].modifier & 0xffffffff);
+                attribs[a++] = modhi_attrs[i];
+                attribs[a++] = (EGLint)(dmabuf->planes[i].modifier >> 32);
+            }
+        }
+        attribs[a++] = EGL_NONE;
+
+        EGLImageKHR img = gl_proc->eglCreateImageKHR(bd->egl_display,
+                                                     EGL_NO_CONTEXT,
+                                                     EGL_LINUX_DMA_BUF_EXT,
+                                                     NULL,
+                                                     attribs);
+        if (img == EGL_NO_IMAGE_KHR) {
+            ROG_ERR("eglCreateImageKHR failed for dmabuf buffer (0x%x)\n",
+                    eglGetError());
+            return 1;
+        }
+
+        if (rsurf->tex == 0)
+            glGenTextures(1, &rsurf->tex);
+
+        glBindTexture(GL_TEXTURE_2D, rsurf->tex);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        gl_proc->glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, img);
+
+        rsurf->egl_image  = img;
+        rsurf->tex_w      = dmabuf->width;
+        rsurf->tex_h      = dmabuf->height;
+        rsurf->tex_buffer = buffer;
     } else {
-        glBindTexture(GL_TEXTURE_2D, rs->tex);
+        glBindTexture(GL_TEXTURE_2D, rsurf->tex);
     }
 
-    /* row length in pixels, since stride may include padding */
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, src_stride / 4);
-    glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
-    glPixelStorei(GL_UNPACK_SKIP_ROWS, y);
-
-    if (rs->tex_w != src_w || rs->tex_h != src_h) {
-        glTexImage2D(
-          GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, gl_fmt, GL_UNSIGNED_BYTE, src);
-        rs->tex_w = src_w;
-        rs->tex_h = src_h;
-    } else {
-        glTexSubImage2D(
-          GL_TEXTURE_2D, 0, 0, 0, w, h, gl_fmt, GL_UNSIGNED_BYTE, src);
-    }
-
-    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
-    wl_shm_buffer_end_access(shm);
-
-    draw_textured_quad(rs, rs->tex, src_w, src_h);
+    draw_textured_quad(rs, rsurf->tex, rsurf->tex_w, rsurf->tex_h);
+    // ROG("render pend: %d", rsurf->pending_buffer)
 
     if (rsurf->pending_buffer) {
         rsurf->old_pending_buffer = buffer;
-        wl_buffer_send_release(buffer);
-        rsurf->pending_buffer = NULL;
-    }
+        rsurf->pending_buffer     = NULL;
 
+        /* GPU draw above is async: fence it and release once the GPU is
+           actually done reading, not immediately. */
+        // EGLSyncKHR sync =
+        //   gl_proc->eglCreateSyncKHR(bd->egl_display, EGL_SYNC_FENCE_KHR,
+        //   NULL);
+        // glFlush();
+
+        // ROG("pusing buf: %d", buffer)
+        // if (sync != EGL_NO_SYNC_KHR) {
+        //     dll_push_tail(
+        //       rs->pending_releases,
+        //       ((struct pending_release){ .buffer = buffer, .sync = sync }))
+        // } else
+        wl_buffer_send_release(buffer); /* fallback: fence creation failed */
+    }
+    // ROG("render")
     return 0;
 }
 
@@ -353,8 +474,10 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     glClear(GL_COLOR_BUFFER_BIT);
 
     if (rs->focused_trc && rs->focused_trc->rsurf &&
-        rs->focused_trc->rsurf->configured)
-        render_surface(rs, rs->focused_trc->rsurf);
+        rs->focused_trc->rsurf->configured) {
+        if (render_surface(rs, rs->focused_trc->rsurf))
+            return 1;
+    }
 
     // software cursor
     if (!rs->is_wayland_client && !rs->using_hardware_cursor) {

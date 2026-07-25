@@ -1,12 +1,26 @@
+#define _GNU_SOURCE
+#include "backend-wayland.h"
+#include "backend-drm.h"
 #include "compositor.h"
 #include "config.h"
 #include "dll.h"
+#include "linux-dmabuf-server-protocol.h"
 #include "log.h"
 #include "red.h"
 #include "render.h"
 #include "xdg-decoration-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <drm/drm_fourcc.h>
+#include <drm_fourcc.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <wayland-server.h>
@@ -143,6 +157,8 @@ wl_surface_resource_destroy(struct wl_resource* resource)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
 
+    // if (rsurf->rs)
+    //     redsurface_release_buffer_state(rsurf->rs, rsurf);
     if (rsurf->app_id)
         free(rsurf->app_id);
     free(rsurf);
@@ -216,6 +232,11 @@ init_redsurface()
     rsurf->geom_width         = 0;
     rsurf->geom_height        = 0;
     rsurf->geom_configured    = 0;
+    rsurf->tex                = 0;
+    rsurf->tex_w              = 0;
+    rsurf->tex_h              = 0;
+    rsurf->egl_image          = EGL_NO_IMAGE_KHR;
+    rsurf->tex_buffer         = NULL;
 
     return rsurf;
 }
@@ -1014,6 +1035,508 @@ wl_client_created(struct wl_listener* listener, void* data)
     dll_push_tail(rs->rcs, rc);
 }
 
+/* ---------- wl_buffer (dmabuf-backed) implementation ---------- */
+
+static void
+buffer_destroy(struct wl_client* client, struct wl_resource* res)
+{
+    wl_resource_destroy(res);
+}
+
+static const struct wl_buffer_interface dmabuf_buffer_impl = {
+    .destroy = buffer_destroy,
+};
+
+static void
+dmabuf_buffer_resource_destroy(struct wl_resource* res)
+{
+    struct dmabuf_buffer_data* data = wl_resource_get_user_data(res);
+    if (!data)
+        return;
+    for (int i = 0; i < data->n_planes; i++) {
+        if (data->planes[i].fd >= 0)
+            close(data->planes[i].fd);
+    }
+    free(data);
+}
+
+int
+dmabuf_resource_is_dmabuf_buffer(struct wl_resource* buffer)
+{
+    return wl_resource_instance_of(
+      buffer, &wl_buffer_interface, &dmabuf_buffer_impl);
+}
+
+struct dmabuf_buffer_data*
+dmabuf_buffer_get(struct wl_resource* buffer)
+{
+    if (!dmabuf_resource_is_dmabuf_buffer(buffer))
+        return NULL;
+    return wl_resource_get_user_data(buffer);
+}
+
+/* ---------- zwp_linux_buffer_params_v1 ---------- */
+
+struct dmabuf_params
+{
+    struct wl_resource* resource;
+    struct redstate*    rs;
+    struct dmabuf_plane planes[4];
+    int                 has_plane[4];
+    int                 used;
+};
+
+static void
+params_destroy(struct wl_client* client, struct wl_resource* res)
+{
+    wl_resource_destroy(res);
+}
+
+static void
+params_resource_destroy(struct wl_resource* res)
+{
+    struct dmabuf_params* p = wl_resource_get_user_data(res);
+    if (!p->used) {
+        /* buffer was never created from these fds; close them here */
+        for (int i = 0; i < 4; i++)
+            if (p->has_plane[i])
+                close(p->planes[i].fd);
+    }
+    free(p);
+}
+
+static void
+params_add(struct wl_client*   client,
+           struct wl_resource* res,
+           int32_t             fd,
+           uint32_t            plane_idx,
+           uint32_t            offset,
+           uint32_t            stride,
+           uint32_t            modifier_hi,
+           uint32_t            modifier_lo)
+{
+    struct dmabuf_params* p = wl_resource_get_user_data(res);
+
+    if (p->used) {
+        wl_resource_post_error(res,
+                               ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_ALREADY_USED,
+                               "params already used");
+        close(fd);
+        return;
+    }
+    if (plane_idx >= 4) {
+        wl_resource_post_error(res,
+                               ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_IDX,
+                               "plane index out of bounds");
+        close(fd);
+        return;
+    }
+    if (p->has_plane[plane_idx]) {
+        wl_resource_post_error(
+          res, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_SET, "plane already set");
+        close(fd);
+        return;
+    }
+
+    p->planes[plane_idx].fd       = fd;
+    p->planes[plane_idx].offset   = offset;
+    p->planes[plane_idx].stride   = stride;
+    p->planes[plane_idx].modifier = ((uint64_t)modifier_hi << 32) | modifier_lo;
+    p->has_plane[plane_idx]       = 1;
+}
+
+/* how many planes a format expects - extend as you add formats */
+static int
+format_plane_count(uint32_t format)
+{
+    switch (format) {
+        case DRM_FORMAT_ARGB8888:
+        case DRM_FORMAT_XRGB8888:
+        case DRM_FORMAT_ABGR8888:
+        case DRM_FORMAT_XBGR8888:
+            return 1;
+        case DRM_FORMAT_NV12:
+            return 2;
+        case DRM_FORMAT_YUV420:
+            return 3;
+        default:
+            return -1; /* unknown/unsupported */
+    }
+}
+
+static struct wl_resource*
+params_do_create(struct wl_client*   client,
+                 struct wl_resource* res,
+                 uint32_t            new_id_or_zero,
+                 int32_t             width,
+                 int32_t             height,
+                 uint32_t            format,
+                 uint32_t            flags,
+                 int                 immed)
+{
+    struct dmabuf_params* p = wl_resource_get_user_data(res);
+
+    if (p->used) {
+        wl_resource_post_error(res,
+                               ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_ALREADY_USED,
+                               "params already used");
+        return NULL;
+    }
+    p->used = 1;
+
+    if (width <= 0 || height <= 0) {
+        wl_resource_post_error(
+          res,
+          ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_DIMENSIONS,
+          "invalid dimensions");
+        return NULL;
+    }
+
+    int expected = format_plane_count(format);
+    int n_planes = 0;
+    for (int i = 0; i < 4; i++)
+        if (p->has_plane[i])
+            n_planes++;
+
+    if (expected < 0) {
+        if (immed)
+            wl_resource_post_error(
+              res,
+              ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_FORMAT,
+              "unsupported format 0x%x",
+              format);
+        else
+            zwp_linux_buffer_params_v1_send_failed(res);
+        return NULL;
+    }
+    if (n_planes != expected || n_planes == 0) {
+        if (immed)
+            wl_resource_post_error(res,
+                                   ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
+                                   "wrong plane count for format");
+        else
+            zwp_linux_buffer_params_v1_send_failed(res);
+        return NULL;
+    }
+    /* planes must be contiguous 0..n_planes-1 */
+    for (int i = 0; i < n_planes; i++) {
+        if (!p->has_plane[i]) {
+            if (immed)
+                wl_resource_post_error(
+                  res,
+                  ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
+                  "missing plane %d",
+                  i);
+            else
+                zwp_linux_buffer_params_v1_send_failed(res);
+            return NULL;
+        }
+    }
+
+    struct dmabuf_buffer_data* data = calloc(1, sizeof(*data));
+    data->rs                        = p->rs;
+    data->width                     = width;
+    data->height                    = height;
+    data->format                    = format;
+    data->flags                     = flags;
+    data->n_planes                  = n_planes;
+    for (int i = 0; i < n_planes; i++)
+        data->planes[i] = p->planes[i];
+
+    struct wl_resource* buffer_res;
+    if (immed) {
+        buffer_res = wl_resource_create(client,
+                                        &wl_buffer_interface,
+                                        wl_resource_get_version(res),
+                                        new_id_or_zero);
+    } else {
+        buffer_res = wl_resource_create(client, &wl_buffer_interface, 1, 0);
+    }
+    if (!buffer_res) {
+        wl_client_post_no_memory(client);
+        free(data);
+        return NULL;
+    }
+    wl_resource_set_implementation(
+      buffer_res, &dmabuf_buffer_impl, data, dmabuf_buffer_resource_destroy);
+
+    if (!immed)
+        zwp_linux_buffer_params_v1_send_created(res, buffer_res);
+
+    return buffer_res;
+}
+
+static void
+params_create(struct wl_client*   client,
+              struct wl_resource* res,
+              int32_t             width,
+              int32_t             height,
+              uint32_t            format,
+              uint32_t            flags)
+{
+    params_do_create(client, res, 0, width, height, format, flags, 0);
+}
+
+static void
+params_create_immed(struct wl_client*   client,
+                    struct wl_resource* res,
+                    uint32_t            buffer_id,
+                    int32_t             width,
+                    int32_t             height,
+                    uint32_t            format,
+                    uint32_t            flags)
+{
+    params_do_create(client, res, buffer_id, width, height, format, flags, 1);
+}
+
+static const struct zwp_linux_buffer_params_v1_interface params_impl = {
+    .destroy      = params_destroy,
+    .add          = params_add,
+    .create       = params_create,
+    .create_immed = params_create_immed,
+};
+
+/* ---------- zwp_linux_dmabuf_feedback_v1 ---------- */
+
+static int
+build_format_table_fd(struct redstate* rs, size_t* out_size)
+{
+    size_t size =
+      rs->dmabuf_formats_len * 16; /* {u32 format, u32 pad, u64 modifier} */
+    int fd = memfd_create("dmabuf-format-table-red", MFD_CLOEXEC);
+    if (fd < 0)
+        return -1;
+    if (ftruncate(fd, size) < 0) {
+        close(fd);
+        return -1;
+    }
+    void* map = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (map == MAP_FAILED) {
+        close(fd);
+        return -1;
+    }
+    struct
+    {
+        uint32_t format;
+        uint32_t pad;
+        uint64_t modifier;
+    }* entries = map;
+    for (int i = 0; i < rs->dmabuf_formats_len; i++) {
+        entries[i].format   = rs->dmabuf_formats[i].format;
+        entries[i].pad      = 0;
+        entries[i].modifier = rs->dmabuf_formats[i].modifier;
+    }
+    munmap(map, size);
+    *out_size = size;
+    return fd;
+}
+
+static void
+feedback_send_default(struct wl_resource* res)
+{
+    struct redstate* rs = wl_resource_get_user_data(res);
+
+    size_t table_size;
+    int    fd = build_format_table_fd(rs, &table_size);
+    if (fd < 0) {
+        /* nothing we can do but skip the table; client will just get no formats
+         */
+        zwp_linux_dmabuf_feedback_v1_send_done(res);
+        ROG("failed build format table fd");
+        return;
+    }
+    zwp_linux_dmabuf_feedback_v1_send_format_table(res, fd, table_size);
+    close(fd);
+
+    struct wl_array dev_arr;
+    wl_array_init(&dev_arr);
+    dev_t* devp = wl_array_add(&dev_arr, sizeof(dev_t));
+    *devp       = rs->dmabuf_main_device;
+    zwp_linux_dmabuf_feedback_v1_send_main_device(res, &dev_arr);
+    zwp_linux_dmabuf_feedback_v1_send_tranche_target_device(res, &dev_arr);
+    wl_array_release(&dev_arr);
+
+    /* one tranche containing every table index */
+    struct wl_array idx_arr;
+    wl_array_init(&idx_arr);
+    for (int i = 0; i < rs->dmabuf_formats_len; i++) {
+        uint16_t* idxp = wl_array_add(&idx_arr, sizeof(uint16_t));
+        *idxp          = (uint16_t)i;
+    }
+    zwp_linux_dmabuf_feedback_v1_send_tranche_formats(res, &idx_arr);
+    wl_array_release(&idx_arr);
+
+    zwp_linux_dmabuf_feedback_v1_send_tranche_flags(res, 0);
+    zwp_linux_dmabuf_feedback_v1_send_tranche_done(res);
+    zwp_linux_dmabuf_feedback_v1_send_done(res);
+}
+
+static void
+feedback_destroy(struct wl_client* client, struct wl_resource* res)
+{
+    wl_resource_destroy(res);
+}
+
+static const struct zwp_linux_dmabuf_feedback_v1_interface feedback_impl = {
+    .destroy = feedback_destroy,
+};
+
+/* ---------- zwp_linux_dmabuf_v1 global ---------- */
+
+static void
+dmabuf_destroy(struct wl_client* client, struct wl_resource* res)
+{
+    wl_resource_destroy(res);
+}
+
+static void
+dmabuf_create_params(struct wl_client*   client,
+                     struct wl_resource* res,
+                     uint32_t            id)
+{
+    struct redstate*      rs = wl_resource_get_user_data(res);
+    struct dmabuf_params* p  = calloc(1, sizeof(*p));
+    p->rs                    = rs;
+
+    struct wl_resource* params_res =
+      wl_resource_create(client,
+                         &zwp_linux_buffer_params_v1_interface,
+                         wl_resource_get_version(res),
+                         id);
+    if (!params_res) {
+        wl_client_post_no_memory(client);
+        free(p);
+        return;
+    }
+    p->resource = params_res;
+    wl_resource_set_implementation(
+      params_res, &params_impl, p, params_resource_destroy);
+}
+
+static void
+dmabuf_get_default_feedback(struct wl_client*   client,
+                            struct wl_resource* res,
+                            uint32_t            id)
+{
+    struct redstate*    rs = wl_resource_get_user_data(res);
+    struct wl_resource* fb =
+      wl_resource_create(client,
+                         &zwp_linux_dmabuf_feedback_v1_interface,
+                         wl_resource_get_version(res),
+                         id);
+    if (!fb) {
+        wl_client_post_no_memory(client);
+        return;
+    }
+    wl_resource_set_implementation(fb, &feedback_impl, rs, NULL);
+    feedback_send_default(fb);
+}
+
+static void
+dmabuf_get_surface_feedback(struct wl_client*   client,
+                            struct wl_resource* res,
+                            uint32_t            id,
+                            struct wl_resource* surface)
+{
+    /* per-surface tranches (e.g. scanout-capable) are an optimization;
+       returning the same default feedback is spec-legal */
+    dmabuf_get_default_feedback(client, res, id);
+}
+
+static const struct zwp_linux_dmabuf_v1_interface dmabuf_impl = {
+    .destroy              = dmabuf_destroy,
+    .create_params        = dmabuf_create_params,
+    .get_default_feedback = dmabuf_get_default_feedback,
+    .get_surface_feedback = dmabuf_get_surface_feedback,
+};
+
+static void
+dmabuf_bind(struct wl_client* client, void* data, uint32_t version, uint32_t id)
+{
+    struct redstate*    rs = data;
+    struct wl_resource* res =
+      wl_resource_create(client, &zwp_linux_dmabuf_v1_interface, version, id);
+    if (!res) {
+        wl_client_post_no_memory(client);
+        return;
+    }
+    wl_resource_set_implementation(res, &dmabuf_impl, rs, NULL);
+
+    /* pre-v4 clients expect format/modifier events right on bind */
+    if (wl_resource_get_version(res) < 4) {
+        int v = wl_resource_get_version(res);
+        for (int i = 0; i < rs->dmabuf_formats_len; i++) {
+            uint32_t fmt = rs->dmabuf_formats[i].format;
+            uint64_t mod = rs->dmabuf_formats[i].modifier;
+            if (v >= 3) {
+                zwp_linux_dmabuf_v1_send_modifier(
+                  res, fmt, mod >> 32, mod & 0xffffffff);
+            } else if (mod == DRM_FORMAT_MOD_LINEAR ||
+                       mod == DRM_FORMAT_MOD_INVALID) {
+                zwp_linux_dmabuf_v1_send_format(res, fmt);
+            }
+        }
+    }
+}
+
+/* ---------- format/modifier enumeration via EGL ---------- */
+
+static void
+dmabuf_query_formats(struct redstate* rs, EGLDisplay dpy)
+{
+    PFNEGLQUERYDMABUFFORMATSEXTPROC eglQueryDmaBufFormatsEXT =
+      (void*)eglGetProcAddress("eglQueryDmaBufFormatsEXT");
+    PFNEGLQUERYDMABUFMODIFIERSEXTPROC eglQueryDmaBufModifiersEXT =
+      (void*)eglGetProcAddress("eglQueryDmaBufModifiersEXT");
+
+    if (!eglQueryDmaBufFormatsEXT || !eglQueryDmaBufModifiersEXT) {
+        ROG_ERR("EGL_EXT_image_dma_buf_import_modifiers not supported\n");
+        return;
+    }
+
+    EGLint num_formats = 0;
+    eglQueryDmaBufFormatsEXT(dpy, 0, NULL, &num_formats);
+    EGLint* fmts = calloc(num_formats, sizeof(EGLint));
+    eglQueryDmaBufFormatsEXT(dpy, num_formats, fmts, &num_formats);
+
+    size_t                         cap = 32, len = 0;
+    struct dmabuf_format_modifier* out = calloc(cap, sizeof(*out));
+
+    for (int i = 0; i < num_formats; i++) {
+        EGLint num_mods = 0;
+        eglQueryDmaBufModifiersEXT(dpy, fmts[i], 0, NULL, NULL, &num_mods);
+        if (num_mods <= 0) {
+            if (len == cap) {
+                cap *= 2;
+                out = realloc(out, cap * sizeof(*out));
+            }
+            out[len].format   = fmts[i];
+            out[len].modifier = DRM_FORMAT_MOD_INVALID;
+            len++;
+            continue;
+        }
+        EGLuint64KHR* mods     = calloc(num_mods, sizeof(EGLuint64KHR));
+        EGLBoolean*   ext_only = calloc(num_mods, sizeof(EGLBoolean));
+        eglQueryDmaBufModifiersEXT(
+          dpy, fmts[i], num_mods, mods, ext_only, &num_mods);
+        for (int m = 0; m < num_mods; m++) {
+            if (len == cap) {
+                cap *= 2;
+                out = realloc(out, cap * sizeof(*out));
+            }
+            out[len].format   = fmts[i];
+            out[len].modifier = mods[m];
+            len++;
+        }
+        free(mods);
+        free(ext_only);
+    }
+    free(fmts);
+
+    rs->dmabuf_formats     = out;
+    rs->dmabuf_formats_len = len;
+}
+
 static void
 handle_wl_log(const char* _fmt, va_list args)
 {
@@ -1107,6 +1630,27 @@ init_compositor(struct redstate* rs)
                        1,
                        rs,
                        wl_global_bind_xdg_decoration_manager);
+
+    // assert(rs->is_wayland_client);
+    // struct backend_wayland* bw = rs->backend->d;
+    struct backend_drm* bd = rs->backend->d;
+
+    int fd = open("/dev/dri/renderD128", O_RDWR | O_CLOEXEC);
+    if (fd < 0) {
+        ROG_ERR("failed oppening drm device: %s", strerror(errno));
+        goto fail;
+    }
+
+    struct stat st;
+    if (fstat(fd, &st) == 0)
+        rs->dmabuf_main_device = st.st_rdev;
+
+    dmabuf_query_formats(rs, bd->egl_display);
+
+    rs->linux_dmabuf_global = wl_global_create(
+      rs->wl_display, &zwp_linux_dmabuf_v1_interface, 5, rs, dmabuf_bind);
+    if (!rs->linux_dmabuf_global)
+        ROG_ERR("failed to create linux-dmabuf-v1 global\n");
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);

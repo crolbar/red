@@ -18,6 +18,41 @@
 #define min(x, y) ((x) < (y)) ? (x) : (y)
 #define max(x, y) ((x) > (y)) ? (x) : (y)
 
+#define RED_DMABUF_MAX_PLANES 4
+
+struct dmabuf_format_modifier
+{
+    uint32_t format;
+    uint64_t modifier;
+};
+
+struct pending_release
+{
+    struct wl_resource* buffer;
+    EGLSyncKHR          sync;
+};
+
+struct dmabuf_plane
+{
+    int      fd;
+    uint32_t offset;
+    uint32_t stride;
+    uint64_t modifier;
+};
+
+struct dmabuf_buffer_data
+{
+    struct redstate*    rs;
+    int32_t             width, height;
+    uint32_t            format;
+    uint32_t            flags;
+    int                 n_planes;
+    struct dmabuf_plane planes[4];
+};
+
+struct dmabuf_buffer_data*
+dmabuf_buffer_get(struct wl_resource* buffer);
+
 typedef struct redbuffer
 {
     uint32_t          buf_id;       // drm backend, drm framebuffer id
@@ -50,6 +85,12 @@ struct redsurface
     struct wl_resource* old_pending_buffer;
     struct wl_resource* pending_callback; // set by wl_surface.frame
     int                 configured;       // xdg_surface configure
+
+    GLuint              tex;
+    int32_t             tex_w;
+    int32_t             tex_h;
+    EGLImageKHR         egl_image;
+    struct wl_resource* tex_buffer;
 };
 
 struct redclient
@@ -100,11 +141,14 @@ struct redstate
     struct wl_global*     wl_seat;
     struct wl_global*     subcompositor_global;
     struct wl_global*     data_device_manager_global;
+    struct wl_global*     linux_dmabuf_global;
     struct wl_listener    client_created;
 
-    int32_t tex_w;
-    int32_t tex_h;
-    GLuint  tex;
+    struct dmabuf_format_modifier* dmabuf_formats;
+    int                            dmabuf_formats_len;
+    dev_t                          dmabuf_main_device;
+
+    dll(struct pending_release) pending_releases;
 
     GLuint cursor_gl_program;
     GLuint cursor_gl_vao;
@@ -136,6 +180,10 @@ struct gl_proc
     PFNEGLCREATEIMAGEKHRPROC        eglCreateImageKHR;
     PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC
     glEGLImageTargetRenderbufferStorageOES;
+    PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
+    PFNEGLCREATESYNCKHRPROC             eglCreateSyncKHR;
+    PFNEGLGETSYNCATTRIBKHRPROC          eglGetSyncAttribKHR;
+    PFNEGLDESTROYSYNCKHRPROC            eglDestroySyncKHR;
 };
 
 extern struct gl_proc* gl_proc;

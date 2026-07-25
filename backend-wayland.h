@@ -7,6 +7,7 @@
 struct backend_wayland
 {
     struct wayland_client* wc;
+    int                    drm_fd;
     EGLDisplay             egl_display;
     EGLContext             egl_context;
     struct gbm_device*     gbm_dev;
