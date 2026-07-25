@@ -86,6 +86,21 @@ struct redsurface
     struct wl_resource* pending_callback; // set by wl_surface.frame
     int                 configured;       // xdg_surface configure
 
+    struct wl_resource*
+      wp_viewport; /* the viewport object bound to this surface, or NULL */
+
+    /* pending (uncommitted) viewport state */
+    int     pending_viewport_src_set;
+    double  pending_src_x, pending_src_y, pending_src_w, pending_src_h;
+    int     pending_viewport_dst_set;
+    int32_t pending_dst_w, pending_dst_h;
+
+    /* committed (active) viewport state, applied at render time */
+    int     viewport_src_set;
+    double  src_x, src_y, src_w, src_h;
+    int     viewport_dst_set;
+    int32_t dst_w, dst_h;
+
     GLuint              tex;
     int32_t             tex_w;
     int32_t             tex_h;
@@ -149,6 +164,8 @@ struct redstate
     dev_t                          dmabuf_main_device;
 
     dll(struct pending_release) pending_releases;
+
+    struct wl_global* viewporter_global;
 
     GLuint cursor_gl_program;
     GLuint cursor_gl_vao;

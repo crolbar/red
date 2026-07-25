@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
-#include "backend-wayland.h"
 #include "backend-drm.h"
+#include "backend-wayland.h"
 #include "compositor.h"
 #include "config.h"
 #include "dll.h"
@@ -8,6 +8,7 @@
 #include "log.h"
 #include "red.h"
 #include "render.h"
+#include "viewporter-protocol.h"
 #include "xdg-decoration-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
 #include <EGL/egl.h>
@@ -24,6 +25,24 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <wayland-server.h>
+
+static void
+apply_viewport_state_on_commit(struct redsurface* rsurf)
+{
+    rsurf->viewport_src_set = rsurf->pending_viewport_src_set;
+    if (rsurf->viewport_src_set) {
+        rsurf->src_x = rsurf->pending_src_x;
+        rsurf->src_y = rsurf->pending_src_y;
+        rsurf->src_w = rsurf->pending_src_w;
+        rsurf->src_h = rsurf->pending_src_h;
+    }
+
+    rsurf->viewport_dst_set = rsurf->pending_viewport_dst_set;
+    if (rsurf->viewport_dst_set) {
+        rsurf->dst_w = rsurf->pending_dst_w;
+        rsurf->dst_h = rsurf->pending_dst_h;
+    }
+}
 
 int
 wl_send_pending_callback(struct redsurface* rsurf)
@@ -109,6 +128,8 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     // do not need redraw or frame callback
     if (client != rsurf->rs->focused_trc->wl_client)
         return;
+
+    apply_viewport_state_on_commit(rsurf);
 
     request_redraw(rsurf->rs);
 }
@@ -1537,6 +1558,167 @@ dmabuf_query_formats(struct redstate* rs, EGLDisplay dpy)
     rs->dmabuf_formats_len = len;
 }
 
+static struct redsurface*
+viewport_get_surface(struct wl_resource* viewport_res)
+{
+    /* NULL once the backing wl_surface has been destroyed */
+    return wl_resource_get_user_data(viewport_res);
+}
+
+static void
+viewport_destroy(struct wl_client* client, struct wl_resource* res)
+{
+    wl_resource_destroy(res);
+}
+
+static void
+viewport_set_source(struct wl_client*   client,
+                    struct wl_resource* res,
+                    wl_fixed_t          x,
+                    wl_fixed_t          y,
+                    wl_fixed_t          width,
+                    wl_fixed_t          height)
+{
+    struct redsurface* rsurf = viewport_get_surface(res);
+    if (!rsurf) {
+        wl_resource_post_error(res,
+                               WP_VIEWPORT_ERROR_NO_SURFACE,
+                               "wl_surface for wp_viewport no longer exists");
+        return;
+    }
+
+    double dx = wl_fixed_to_double(x);
+    double dy = wl_fixed_to_double(y);
+    double dw = wl_fixed_to_double(width);
+    double dh = wl_fixed_to_double(height);
+
+    /* -1,-1,-1,-1 means "unset the source rectangle" */
+    if (x == wl_fixed_from_int(-1) && y == wl_fixed_from_int(-1) &&
+        width == wl_fixed_from_int(-1) && height == wl_fixed_from_int(-1)) {
+        rsurf->pending_viewport_src_set = 0;
+        return;
+    }
+
+    if (dx < 0 || dy < 0 || dw <= 0 || dh <= 0) {
+        wl_resource_post_error(
+          res, WP_VIEWPORT_ERROR_BAD_VALUE, "invalid source rectangle");
+        return;
+    }
+
+    rsurf->pending_viewport_src_set = 1;
+    rsurf->pending_src_x            = dx;
+    rsurf->pending_src_y            = dy;
+    rsurf->pending_src_w            = dw;
+    rsurf->pending_src_h            = dh;
+}
+
+static void
+viewport_set_destination(struct wl_client*   client,
+                         struct wl_resource* res,
+                         int32_t             width,
+                         int32_t             height)
+{
+    struct redsurface* rsurf = viewport_get_surface(res);
+    if (!rsurf) {
+        wl_resource_post_error(res,
+                               WP_VIEWPORT_ERROR_NO_SURFACE,
+                               "wl_surface for wp_viewport no longer exists");
+        return;
+    }
+
+    if (width == -1 && height == -1) {
+        rsurf->pending_viewport_dst_set = 0;
+        return;
+    }
+
+    if (width <= 0 || height <= 0) {
+        wl_resource_post_error(
+          res, WP_VIEWPORT_ERROR_BAD_VALUE, "invalid destination size");
+        return;
+    }
+
+    rsurf->pending_viewport_dst_set = 1;
+    rsurf->pending_dst_w            = width;
+    rsurf->pending_dst_h            = height;
+}
+
+static void
+viewport_resource_destroy(struct wl_resource* res)
+{
+    struct redsurface* rsurf = wl_resource_get_user_data(res);
+    if (!rsurf)
+        return; /* surface already gone */
+
+    /* destroying the viewport object resets crop/scale to defaults,
+       effective immediately (not double-buffered) per spec */
+    rsurf->wp_viewport              = NULL;
+    rsurf->pending_viewport_src_set = 0;
+    rsurf->pending_viewport_dst_set = 0;
+    rsurf->viewport_src_set         = 0;
+    rsurf->viewport_dst_set         = 0;
+}
+
+static const struct wp_viewport_interface viewport_impl = {
+    .destroy         = viewport_destroy,
+    .set_source      = viewport_set_source,
+    .set_destination = viewport_set_destination,
+};
+
+/* ---------- wp_viewporter ---------- */
+
+static void
+viewporter_destroy(struct wl_client* client, struct wl_resource* res)
+{
+    wl_resource_destroy(res);
+}
+
+static void
+viewporter_get_viewport(struct wl_client*   client,
+                        struct wl_resource* res,
+                        uint32_t            id,
+                        struct wl_resource* surface_res)
+{
+    struct redsurface* rsurf = wl_resource_get_user_data(surface_res);
+
+    if (rsurf->wp_viewport) {
+        wl_resource_post_error(res,
+                               WP_VIEWPORTER_ERROR_VIEWPORT_EXISTS,
+                               "wl_surface already has a wp_viewport");
+        return;
+    }
+
+    struct wl_resource* vp_res = wl_resource_create(
+      client, &wp_viewport_interface, wl_resource_get_version(res), id);
+    if (!vp_res) {
+        wl_client_post_no_memory(client);
+        return;
+    }
+
+    wl_resource_set_implementation(
+      vp_res, &viewport_impl, rsurf, viewport_resource_destroy);
+    rsurf->wp_viewport = vp_res;
+}
+
+static const struct wp_viewporter_interface viewporter_impl = {
+    .destroy      = viewporter_destroy,
+    .get_viewport = viewporter_get_viewport,
+};
+
+static void
+viewporter_bind(struct wl_client* client,
+                void*             data,
+                uint32_t          version,
+                uint32_t          id)
+{
+    struct wl_resource* res =
+      wl_resource_create(client, &wp_viewporter_interface, version, id);
+    if (!res) {
+        wl_client_post_no_memory(client);
+        return;
+    }
+    wl_resource_set_implementation(res, &viewporter_impl, data, NULL);
+}
+
 static void
 handle_wl_log(const char* _fmt, va_list args)
 {
@@ -1651,6 +1833,12 @@ init_compositor(struct redstate* rs)
       rs->wl_display, &zwp_linux_dmabuf_v1_interface, 5, rs, dmabuf_bind);
     if (!rs->linux_dmabuf_global)
         ROG_ERR("failed to create linux-dmabuf-v1 global\n");
+
+    rs->viewporter_global = wl_global_create(
+      rs->wl_display, &wp_viewporter_interface, 1, rs, viewporter_bind);
+
+    if (!rs->viewporter_global)
+        ROG_ERR("failed to create wp_viewporter global\n");
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);
