@@ -357,7 +357,7 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
         render_surface(rs, rs->focused_trc->rsurf);
 
     // software cursor
-    if (!rs->using_hardware_cursor) {
+    if (!rs->is_wayland_client && !rs->using_hardware_cursor) {
         int size = 16;
         render_cursor(
           rs, width, height, rs->cursor_x, rs->cursor_y, size, size / 3);

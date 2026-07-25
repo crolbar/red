@@ -1,5 +1,5 @@
-- [ ]drm cursor + wayland pointer
-- [ ]fix up wayland backend
+- [x]drm cursor + wayland pointer
+- [x]fix up wayland backend
 
 
 - [x]get foot terminal on screen

@@ -4,6 +4,7 @@
 #include "log.h"
 #include "red.h"
 #include "render.h"
+#include "xdg-shell-client-protocol.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <gbm.h>
@@ -24,8 +25,8 @@ backend_wayland_init_data()
     bw->gbm_dev     = NULL;
     bw->rb0         = NULL;
     bw->rb1         = NULL;
-    bw->height      = 300;
-    bw->width       = 300;
+    bw->width       = 1600;
+    bw->height      = 1000;
     bw->used_rb     = 0;
 
     return bw;
@@ -79,9 +80,13 @@ backend_wayland_init(void* data)
 
     wl_buffer_add_listener(bw->rb0->wl_buffer, &wl_buffer_listener, bw->rb0);
     wl_buffer_add_listener(bw->rb1->wl_buffer, &wl_buffer_listener, bw->rb1);
+    wl_keyboard_add_listener(bw->wc->wl_keyboard, &wl_keyboard_listener, rs);
+    wl_pointer_add_listener(bw->wc->wl_pointer, &wl_pointer_listener, rs);
 
     xdg_toplevel_add_listener(bw->wc->xdg_toplevel, &xdg_toplevel_listener, rs);
+    xdg_surface_add_listener(bw->wc->xdg_surface, &xdg_surface_listener, rs);
     xdg_toplevel_set_title(bw->wc->xdg_toplevel, "red");
+    xdg_toplevel_set_app_id(bw->wc->xdg_toplevel, "red");
 
     wl_display_roundtrip(bw->wc->wl_display);
     return 0;

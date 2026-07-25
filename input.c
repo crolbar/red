@@ -279,12 +279,13 @@ press:
 }
 
 int
-input_kb_key(struct redstate* rs, struct libinput_event_keyboard* kbe)
+input_kb_key(struct redstate* rs,
+             uint32_t         time_msec,
+             uint32_t         evdev_key,
+             int              evdev_press)
 {
-    uint32_t      evdev_key    = libinput_event_keyboard_get_key(kbe);
-    int           evdev_press  = libinput_event_keyboard_get_key_state(kbe);
-    xkb_keycode_t xkb_key      = evdev_key + 8;
-    enum xkb_key_direction dir = (evdev_press) ? XKB_KEY_DOWN : XKB_KEY_UP;
+    xkb_keycode_t          xkb_key = evdev_key + 8;
+    enum xkb_key_direction dir     = (evdev_press) ? XKB_KEY_DOWN : XKB_KEY_UP;
 
     xkb_state_update_key(rs->xkb_state, xkb_key, dir);
 
@@ -321,7 +322,8 @@ input_kb_key(struct redstate* rs, struct libinput_event_keyboard* kbe)
 
     // forward key press to client
 
-    if (red_kb_send_keys(rs, kbe, evdev_key, evdev_press, mods_have_changed))
+    if (red_kb_send_keys(
+          rs, time_msec, evdev_key, evdev_press, mods_have_changed))
         return 1;
 
     return 0;
@@ -332,16 +334,40 @@ input_pointer(struct redstate*               rs,
               enum libinput_event_type       event_type,
               struct libinput_event_pointer* pe)
 {
-    if (event_type == LIBINPUT_EVENT_POINTER_BUTTON)
-        return red_pointer_send_button(rs, pe);
+    if (event_type == LIBINPUT_EVENT_POINTER_BUTTON) {
+        uint32_t time_msec = libinput_event_pointer_get_time(pe);
+        uint32_t button    = libinput_event_pointer_get_button(pe);
+        int      state     = (int)libinput_event_pointer_get_button_state(pe);
 
-    if (event_type == LIBINPUT_EVENT_POINTER_MOTION)
-        return red_pointer_send_motion(rs, pe);
+        return red_pointer_send_button(rs, time_msec, button, state);
+    }
+
+    if (event_type == LIBINPUT_EVENT_POINTER_MOTION) {
+        double   dx        = libinput_event_pointer_get_dx_unaccelerated(pe);
+        double   dy        = libinput_event_pointer_get_dy_unaccelerated(pe);
+        uint32_t time_msec = libinput_event_pointer_get_time(pe);
+
+        return red_pointer_send_motion(rs, time_msec, dx, dy, 1);
+    }
 
     if (event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL ||
-        event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER)
-        return red_pointer_send_scroll(
-          rs, pe, event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER);
+        event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER) {
+        int is_vertical_scroll = libinput_event_pointer_has_axis(
+          pe, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL);
+
+        double val = libinput_event_pointer_get_scroll_value(
+          pe,
+          ((is_vertical_scroll) ? LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL
+                                : LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL));
+        uint32_t time_msec = libinput_event_pointer_get_time(pe);
+
+        return red_pointer_send_scroll(rs,
+                                       time_msec,
+                                       val,
+                                       is_vertical_scroll,
+                                       event_type ==
+                                         LIBINPUT_EVENT_POINTER_SCROLL_FINGER);
+    }
 
     return 0;
 }
@@ -351,8 +377,8 @@ input_dispatch(struct redstate* rs)
 {
     libinput_dispatch(rs->li);
 
-    // if (rs->is_wayland_client || getenv("RED_DONT_SPAWN_CLIENT"))
-    //     return 0;
+    if (rs->is_wayland_client)
+        return 0;
 
     struct libinput_event* event;
     while ((event = libinput_get_event(rs->li)) != NULL) {
@@ -362,7 +388,10 @@ input_dispatch(struct redstate* rs)
             struct libinput_event_keyboard* kbe =
               libinput_event_get_keyboard_event(event);
 
-            if (input_kb_key(rs, kbe))
+            uint32_t evdev_key   = libinput_event_keyboard_get_key(kbe);
+            int      evdev_press = libinput_event_keyboard_get_key_state(kbe);
+            uint32_t time_msec   = libinput_event_keyboard_get_time(kbe);
+            if (input_kb_key(rs, time_msec, evdev_key, evdev_press))
                 goto fail;
         } else if (event_type == LIBINPUT_EVENT_POINTER_MOTION ||
                    event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL ||
@@ -383,7 +412,6 @@ input_dispatch(struct redstate* rs)
                 libinput_device_config_tap_set_enabled(
                   device, LIBINPUT_CONFIG_TAP_ENABLED);
             }
-            break;
         }
 
         libinput_event_destroy(event);

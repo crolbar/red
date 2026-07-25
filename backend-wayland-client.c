@@ -1,10 +1,11 @@
 #include "backend-wayland-client.h"
 #include "backend-wayland.h"
-#include "wayland.h"
+#include "compositor.h"
+#include "input.h"
 #include "linux-dmabuf-protocol.h"
 #include "log.h"
-#include "red.h"
 #include "render.h"
+#include "wayland.h"
 #include "xdg-shell-client-protocol.h"
 #include "xdg-shell-server-protocol.h"
 #include <stdlib.h>
@@ -12,6 +13,9 @@
 #include <wayland-client-core.h>
 #include <wayland-client-protocol.h>
 #include <wayland-egl-core.h>
+#include <wayland-server-core.h>
+#include <wayland-server-protocol.h>
+#include <wayland-util.h>
 
 void
 free_wayland(struct wayland_client* cws)
@@ -45,13 +49,14 @@ wl_frame_done(void*               data,
 {
 
     (void)callback_data;
-    struct redstate* rs = data;
+    struct redstate*        rs = data;
     struct backend_wayland* bw = rs->backend->d;
     wl_callback_destroy(wl_callback);
 
     bw->is_ready_for_frame = 1;
 
-    wl_send_pending_callback(rs->focused_trc->rsurf);
+    if (rs->focused_trc)
+        wl_send_pending_callback(rs->focused_trc->rsurf);
 
     redraw(rs);
 }
@@ -79,6 +84,10 @@ wl_registry_global(void*               data,
     if (strcmp(interface, "wl_compositor") == 0) {
         cws->wl_compositor =
           wl_registry_bind(wl_registry, name, &wl_compositor_interface, 6);
+
+    } else if (strcmp(interface, "wl_seat") == 0) {
+        cws->wl_seat =
+          wl_registry_bind(wl_registry, name, &wl_seat_interface, 5);
 
     } else if (strcmp(interface, "xdg_wm_base") == 0) {
         cws->xdg_wm_base =
@@ -118,7 +127,9 @@ xdg_surface_configure(void*               data,
                       uint32_t            serial)
 {
     (void)data;
+    struct redstate* rs = data;
     xdg_surface_ack_configure(xdg_surface, serial);
+    request_redraw(rs);
 }
 
 /* ======== xdg_toplevel  ======== */
@@ -171,6 +182,151 @@ xdg_toplevel_wm_capabilities(void*                data,
     (void)data, (void)xdg_toplevel, (void)capabilities;
 }
 
+void
+wl_keyboard_keymap(void*               data,
+                   struct wl_keyboard* wl_keyboard,
+                   uint32_t            format,
+                   int32_t             fd,
+                   uint32_t            size)
+{
+}
+void
+wl_keyboard_enter(void*               data,
+                  struct wl_keyboard* wl_keyboard,
+                  uint32_t            serial,
+                  struct wl_surface*  surface,
+                  struct wl_array*    keys)
+{
+}
+void
+wl_keyboard_leave(void*               data,
+                  struct wl_keyboard* wl_keyboard,
+                  uint32_t            serial,
+                  struct wl_surface*  surface)
+{
+}
+
+void
+wl_keyboard_repeat_info(void*               data,
+                        struct wl_keyboard* wl_keyboard,
+                        int32_t             rate,
+                        int32_t             delay)
+{
+}
+
+void
+wl_keyboard_key(void*               data,
+                struct wl_keyboard* wl_keyboard,
+                uint32_t            serial,
+                uint32_t            time,
+                uint32_t            key,
+                uint32_t            state)
+{
+    struct redstate* rs = data;
+    input_kb_key(rs, time, key, state);
+}
+
+void
+wl_keyboard_modifiers(void*               data,
+                      struct wl_keyboard* wl_keyboard,
+                      uint32_t            serial,
+                      uint32_t            mods_depressed,
+                      uint32_t            mods_latched,
+                      uint32_t            mods_locked,
+                      uint32_t            group)
+{
+}
+
+void
+wl_pointer_enter(void*              data,
+                 struct wl_pointer* wl_pointer,
+                 uint32_t           serial,
+                 struct wl_surface* surface,
+                 wl_fixed_t         surface_x,
+                 wl_fixed_t         surface_y)
+{
+}
+void
+wl_pointer_leave(void*              data,
+                 struct wl_pointer* wl_pointer,
+                 uint32_t           serial,
+                 struct wl_surface* surface)
+{
+}
+void
+wl_pointer_motion(void*              data,
+                  struct wl_pointer* wl_pointer,
+                  uint32_t           time,
+                  wl_fixed_t         surface_x,
+                  wl_fixed_t         surface_y)
+{
+    struct redstate* rs = data;
+    red_pointer_send_motion(rs, time, wl_fixed_to_double(surface_x), wl_fixed_to_double(surface_y), 0);
+}
+void
+wl_pointer_button(void*              data,
+                  struct wl_pointer* wl_pointer,
+                  uint32_t           serial,
+                  uint32_t           time,
+                  uint32_t           button,
+                  uint32_t           state)
+{
+    struct redstate* rs = data;
+    red_pointer_send_button(rs, time, button, (int)state);
+}
+void
+wl_pointer_axis(void*              data,
+                struct wl_pointer* wl_pointer,
+                uint32_t           time,
+                uint32_t           axis,
+                wl_fixed_t         value)
+{
+    struct redstate* rs = data;
+    red_pointer_send_scroll(rs,
+                            time,
+                            wl_fixed_to_double(value),
+                            (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) ? 1 : 0,
+                            0);
+}
+void
+wl_pointer_frame(void* data, struct wl_pointer* wl_pointer)
+{
+}
+void
+wl_pointer_axis_source(void*              data,
+                       struct wl_pointer* wl_pointer,
+                       uint32_t           axis_source)
+{
+}
+void
+wl_pointer_axis_stop(void*              data,
+                     struct wl_pointer* wl_pointer,
+                     uint32_t           time,
+                     uint32_t           axis)
+{
+}
+void
+wl_pointer_axis_discrete(void*              data,
+                         struct wl_pointer* wl_pointer,
+                         uint32_t           axis,
+                         int32_t            discrete)
+{
+}
+void
+wl_pointer_axis_value120(void*              data,
+                         struct wl_pointer* wl_pointer,
+                         uint32_t           axis,
+                         int32_t            value120)
+{
+}
+void
+wl_pointer_axis_relative_direction(void*              data,
+                                   struct wl_pointer* wl_pointer,
+                                   uint32_t           axis,
+                                   uint32_t           direction)
+{
+}
+
 struct wayland_client*
 init_wayland()
 {
@@ -184,8 +340,11 @@ init_wayland()
     cws->wl_compositor    = NULL;
     cws->xdg_wm_base      = NULL;
     cws->xdg_surface      = NULL;
+    cws->wl_seat          = NULL;
     cws->xdg_toplevel     = NULL;
     cws->zwp_linux_dmabuf = NULL;
+    cws->wl_keyboard      = NULL;
+    cws->wl_pointer       = NULL;
 
     cws->wl_display = wl_display_connect(NULL);
     if (!cws->wl_display) {
@@ -213,12 +372,26 @@ init_wayland()
         ROG_ERR("failed to get zwp_linux_dmabuf");
         goto fail;
     }
+    if (!cws->wl_seat) {
+        ROG_ERR("failed to get wl_seat");
+        goto fail;
+    }
+    cws->wl_keyboard = wl_seat_get_keyboard(cws->wl_seat);
+    if (!cws->wl_keyboard) {
+        ROG_ERR("failed to get wl_keyboard");
+        goto fail;
+    }
+    cws->wl_pointer = wl_seat_get_pointer(cws->wl_seat);
+    if (!cws->wl_pointer) {
+        ROG_ERR("failed to get wl_pointer");
+        goto fail;
+    }
+
     xdg_wm_base_add_listener(cws->xdg_wm_base, &xdg_wm_base_listener, cws);
     cws->wl_surface = wl_compositor_create_surface(cws->wl_compositor);
 
     cws->xdg_surface =
       xdg_wm_base_get_xdg_surface(cws->xdg_wm_base, cws->wl_surface);
-    xdg_surface_add_listener(cws->xdg_surface, &xdg_surface_listener, cws);
 
     cws->xdg_toplevel = xdg_surface_get_toplevel(cws->xdg_surface);
 

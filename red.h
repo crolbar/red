@@ -91,6 +91,7 @@ struct redstate
     double frame_latency;
 
     struct wl_display*    wl_display;
+    const char*           wayland_display;
     struct wl_event_loop* wl_event_loop;
     struct wl_global*     wl_compositor;
     struct wl_global*     xdg_wm_base;

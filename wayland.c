@@ -1042,7 +1042,9 @@ init_compositor(struct redstate* rs)
         ROG_ERR("could not create wl_display socket");
         goto fail;
     }
-    ROG_INFO("Listening on WAYLAND_DISPLAY=%s", wayland_display);
+    rs->wayland_display = wayland_display;
+    ROG_INFO("Listening on WAYLAND_DISPLAY=%s", rs->wayland_display);
+    setenv("WAYLAND_DISPLAY", rs->wayland_display, 1);
 
     rs->wl_event_loop = wl_display_get_event_loop(rs->wl_display);
     if (!rs->wl_event_loop) {
