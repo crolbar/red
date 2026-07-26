@@ -138,6 +138,7 @@ main(int argc, char** argv)
         }
     }
 
+    // render buffers initially
     rs->backend->push_init_buffer(rs);
 
     init_compositor(rs);

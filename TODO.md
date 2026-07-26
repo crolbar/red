@@ -1,3 +1,7 @@
+- [ ]dmabuf
+- [ ]refac gbm.c
+
+
 - [x]drm cursor + wayland pointer
 - [x]fix up wayland backend
 

@@ -6,9 +6,11 @@
 #include "log.h"
 #include "red.h"
 #include <drm/drm_fourcc.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <gbm.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <wayland-client-protocol.h>
 
@@ -357,7 +359,7 @@ init_drm_buffer(struct backend_drm* bd)
 
     return rb;
 fail:
-    ROG("failed to init drm buffer");
+    // TODO free
 
     return NULL;
 }
@@ -374,6 +376,18 @@ init_drm_cursor_buffer(struct backend_drm* bd)
     if (!bo) {
         ROG_ERR("failed to create cursor gbm_bo");
         goto fail;
+    }
+
+    // fill cursor plane
+    {
+        int buf_size = bd->cursor_plane_w * (bd->cursor_plane_h * 4);
+        // suppporting up to 256 * 256 max cursor plane dimensions
+        uint8_t buf[262144];
+        memset(buf, 0, buf_size);
+        if (gbm_bo_write(bo, buf, buf_size)) {
+            ROG_ERR("failed to fill cursor gbm_bo: %s", strerror(errno));
+            goto fail;
+        }
     }
 
     uint32_t buf_id;

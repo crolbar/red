@@ -157,6 +157,7 @@ drm_init_cursor_plane(struct backend_drm* bd)
           "gimp image height or width is bigger than the cursor plane's.");
         goto fail;
     }
+    assert(gimp_image.bytes_per_pixel == 4);
 
     if (init_drm_cursor_buffer(bd))
         goto fail;
