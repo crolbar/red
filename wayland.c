@@ -451,6 +451,32 @@ red_send_configure(struct redsurface* rsurf, int activated, int resizing)
 }
 
 static void
+xdg_popup_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+}
+
+static void
+xdg_popup_grab(struct wl_client*   client,
+               struct wl_resource* resource,
+               struct wl_resource* seat,
+               uint32_t            serial)
+{
+}
+static void
+xdg_popup_reposition(struct wl_client*   client,
+                     struct wl_resource* resource,
+                     struct wl_resource* positioner,
+                     uint32_t            token)
+{
+}
+
+static const struct xdg_popup_interface xdg_popup_implementation = {
+    .destroy    = xdg_popup_destroy,
+    .grab       = xdg_popup_grab,
+    .reposition = xdg_popup_reposition,
+};
+
+static void
 xdg_surface_destroy(struct wl_client* client, struct wl_resource* resource)
 {
     wl_resource_destroy(resource);
@@ -486,7 +512,12 @@ xdg_surface_get_popup(struct wl_client*   client,
                       struct wl_resource* parent,
                       struct wl_resource* positioner)
 {
-    ROG("xdg surface get popup called");
+    struct wl_resource* xdg_popup = wl_resource_create(
+      client, &xdg_popup_interface, wl_resource_get_version(resource), id);
+    wl_resource_set_implementation(xdg_popup,
+                                   &xdg_popup_implementation,
+                                   wl_resource_get_user_data(resource),
+                                   NULL);
 }
 
 static void
@@ -523,6 +554,83 @@ static const struct xdg_surface_interface xdg_surface_implementation = {
 };
 
 static void
+xdg_positioner_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+}
+static void
+xdg_positioner_set_size(struct wl_client*   client,
+                        struct wl_resource* resource,
+                        int32_t             width,
+                        int32_t             height)
+{
+}
+static void
+xdg_positioner_set_anchor_rect(struct wl_client*   client,
+                               struct wl_resource* resource,
+                               int32_t             x,
+                               int32_t             y,
+                               int32_t             width,
+                               int32_t             height)
+{
+}
+static void
+xdg_positioner_set_anchor(struct wl_client*   client,
+                          struct wl_resource* resource,
+                          uint32_t            anchor)
+{
+}
+static void
+xdg_positioner_set_gravity(struct wl_client*   client,
+                           struct wl_resource* resource,
+                           uint32_t            gravity)
+{
+}
+static void
+xdg_positioner_set_constraint_adjustment(struct wl_client*   client,
+                                         struct wl_resource* resource,
+                                         uint32_t constraint_adjustment)
+{
+}
+static void
+xdg_positioner_set_offset(struct wl_client*   client,
+                          struct wl_resource* resource,
+                          int32_t             x,
+                          int32_t             y)
+{
+}
+static void
+xdg_positioner_set_reactive(struct wl_client*   client,
+                            struct wl_resource* resource)
+{
+}
+static void
+xdg_positioner_set_parent_size(struct wl_client*   client,
+                               struct wl_resource* resource,
+                               int32_t             parent_width,
+                               int32_t             parent_height)
+{
+}
+static void
+xdg_positioner_set_parent_configure(struct wl_client*   client,
+                                    struct wl_resource* resource,
+                                    uint32_t            serial)
+{
+}
+
+static const struct xdg_positioner_interface xdg_positioner_implementation = {
+    .destroy                   = xdg_positioner_destroy,
+    .set_size                  = xdg_positioner_set_size,
+    .set_anchor_rect           = xdg_positioner_set_anchor_rect,
+    .set_anchor                = xdg_positioner_set_anchor,
+    .set_gravity               = xdg_positioner_set_gravity,
+    .set_constraint_adjustment = xdg_positioner_set_constraint_adjustment,
+    .set_offset                = xdg_positioner_set_offset,
+    .set_reactive              = xdg_positioner_set_reactive,
+    .set_parent_size           = xdg_positioner_set_parent_size,
+    .set_parent_configure      = xdg_positioner_set_parent_configure,
+};
+
+static void
 xdg_wm_base_destroy(struct wl_client* client, struct wl_resource* resource)
 {
     wl_resource_destroy(resource);
@@ -533,11 +641,12 @@ xdg_wm_base_create_positioner(struct wl_client*   client,
                               struct wl_resource* resource,
                               uint32_t            id)
 {
-    // struct wl_resource* r = wl_resource_create(
-    //   client, &xdg_positioner_interface, wl_resource_get_version(resource),
-    //   id);
-    // wl_resource_set_implementation(r, NULL, NULL, NULL);
-    ROG("wm base create positioner called");
+    struct wl_resource* xdg_positioner = wl_resource_create(
+      client, &xdg_positioner_interface, wl_resource_get_version(resource), id);
+    wl_resource_set_implementation(xdg_positioner,
+                                   &xdg_positioner_implementation,
+                                   wl_resource_get_user_data(resource),
+                                   NULL);
 }
 
 static void

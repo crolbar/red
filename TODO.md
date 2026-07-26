@@ -1,4 +1,4 @@
-- [ ]dmabuf
+- [x]dmabuf
 - [ ]refac gbm.c
 
 
