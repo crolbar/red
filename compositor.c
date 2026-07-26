@@ -4,6 +4,7 @@
 #include "log.h"
 #include "red.h"
 #include "render.h"
+#include "wayland.h"
 #include <libinput.h>
 #include <wayland-server.h>
 
@@ -48,6 +49,9 @@ red_focus_trc(struct redstate* rs, struct redclient* trc)
                                    serial,
                                    rs->focused_trc->rsurf->wl_surface);
         }
+
+        if (rs->focused_trc->rsurf)
+            red_send_configure(rs->focused_trc->rsurf, 0, 0);
     }
 
     rs->focused_trc = trc;
@@ -73,6 +77,9 @@ red_focus_trc(struct redstate* rs, struct redclient* trc)
               trc->wl_keyboard, serial, trc->rsurf->wl_surface, &keys);
             wl_array_release(&keys);
         }
+
+        if (trc->rsurf)
+            red_send_configure(trc->rsurf, 1, 0);
     }
 
     request_redraw(rs);

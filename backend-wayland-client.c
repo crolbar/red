@@ -1,6 +1,7 @@
 #include "backend-wayland-client.h"
 #include "backend-wayland.h"
 #include "compositor.h"
+#include "dll.h"
 #include "input.h"
 #include "linux-dmabuf-protocol.h"
 #include "log.h"
@@ -56,7 +57,7 @@ wl_frame_done(void*               data,
     bw->is_ready_for_frame = 1;
 
     if (rs->focused_trc)
-        wl_send_pending_callback(rs->focused_trc->rsurf);
+        red_send_pending_callback(rs->focused_trc->rsurf);
 
     redraw(rs);
 }
@@ -129,7 +130,10 @@ xdg_surface_configure(void*               data,
     (void)data;
     struct redstate* rs = data;
     xdg_surface_ack_configure(xdg_surface, serial);
-    request_redraw(rs);
+
+    // just so server window is not stuck
+    if (!rs->focused_trc)
+        request_redraw(rs);
 }
 
 /* ======== xdg_toplevel  ======== */
@@ -149,10 +153,24 @@ xdg_toplevel_configure(void*                data,
     if (width <= 0 || height <= 0)
         return;
 
-    if (bw->width != (uint32_t)width || bw->width != (uint32_t)height) {
+    if (bw->width != (uint32_t)width || bw->height != (uint32_t)height) {
         bw->rb0->needs_resize = 1;
         bw->rb1->needs_resize = 1;
+        int       activated   = 0;
+        int       resizing    = 0;
+        uint32_t* pos;
+        wl_array_for_each(pos, states)
+        {
+            if (*pos == XDG_TOPLEVEL_STATE_ACTIVATED)
+                activated = 1;
+            if (*pos == XDG_TOPLEVEL_STATE_RESIZING)
+                resizing = 1;
+        }
+
+        if (rs->focused_trc && rs->focused_trc->rsurf)
+            red_send_configure(rs->focused_trc->rsurf, activated, resizing);
     }
+
     bw->width  = width;
     bw->height = height;
 }
@@ -261,7 +279,11 @@ wl_pointer_motion(void*              data,
                   wl_fixed_t         surface_y)
 {
     struct redstate* rs = data;
-    red_pointer_send_motion(rs, time, wl_fixed_to_double(surface_x), wl_fixed_to_double(surface_y), 0);
+    red_pointer_send_motion(rs,
+                            time,
+                            wl_fixed_to_double(surface_x),
+                            wl_fixed_to_double(surface_y),
+                            0);
 }
 void
 wl_pointer_button(void*              data,

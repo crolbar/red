@@ -235,7 +235,7 @@ page_flip_handler(int          fd,
     // TODO: can we miss a pending callback when we change focus when
     // page_flip_ready == 0 ?
     if (rs->focused_trc)
-        wl_send_pending_callback(rs->focused_trc->rsurf);
+        red_send_pending_callback(rs->focused_trc->rsurf);
 
     // if updates happened on page flip.
     // shouldn't happen much as we have one window

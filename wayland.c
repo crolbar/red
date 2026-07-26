@@ -12,7 +12,7 @@
 #include <wayland-server.h>
 
 int
-wl_send_pending_callback(struct redsurface* rsurf)
+red_send_pending_callback(struct redsurface* rsurf)
 {
     if (!rsurf || !rsurf->pending_callback)
         return 0;
@@ -407,6 +407,41 @@ static const struct xdg_toplevel_interface xdg_toplevel_implementation = {
     .set_minimized    = xdg_toplevel_set_minimized
 };
 
+int
+red_send_configure(struct redsurface* rsurf, int activated, int resizing)
+{
+    rsurf->configured         = 0;
+    rsurf->old_pending_buffer = NULL;
+
+    uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
+    uint32_t height = rsurf->rs->backend->get_height(rsurf->rs->backend->d);
+
+    struct wl_array states;
+    wl_array_init(&states);
+    // setting maximized state as it basicly tells the client to not render csd
+    // also if we have one toplevel drawn at a time,
+    // it might as well be maximized
+    if (activated) {
+        uint32_t* s = wl_array_add(&states, sizeof(uint32_t));
+        *s          = XDG_TOPLEVEL_STATE_ACTIVATED;
+    }
+    if (resizing) {
+        uint32_t* s = wl_array_add(&states, sizeof(uint32_t));
+        *s          = XDG_TOPLEVEL_STATE_RESIZING;
+    }
+    {
+        uint32_t* s = wl_array_add(&states, sizeof(uint32_t));
+        *s          = XDG_TOPLEVEL_STATE_MAXIMIZED;
+    }
+    xdg_toplevel_send_configure(rsurf->xdg_toplevel, width, height, &states);
+    wl_array_release(&states);
+
+    uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
+    xdg_surface_send_configure(rsurf->xdg_surface, serial);
+
+    return 0;
+}
+
 static void
 xdg_surface_destroy(struct wl_client* client, struct wl_resource* resource)
 {
@@ -433,21 +468,7 @@ xdg_surface_get_toplevel(struct wl_client*   client,
     wl_resource_set_implementation(
       rsurf->xdg_toplevel, &xdg_toplevel_implementation, rsurf, NULL);
 
-    uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
-    uint32_t height = rsurf->rs->backend->get_height(rsurf->rs->backend->d);
-
-    struct wl_array states;
-    wl_array_init(&states);
-    // setting maximized state as it basicly tells the client to not render csd
-    // also if we have one toplevel drawn at a time,
-    // it might as well be maximized
-    uint32_t* s = wl_array_add(&states, sizeof(uint32_t));
-    *s          = XDG_TOPLEVEL_STATE_MAXIMIZED;
-    xdg_toplevel_send_configure(rsurf->xdg_toplevel, width, height, &states);
-    wl_array_release(&states);
-
-    uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
-    xdg_surface_send_configure(resource, serial);
+    red_send_configure(rsurf, 1, 0);
 }
 
 static void

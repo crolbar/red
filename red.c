@@ -131,11 +131,12 @@ main(int argc, char** argv)
 
     // gl
     {
-        if (gl_setup_cursor_program(rs)) {
-            ROG_ERR("opengl failed to setup cursor program");
-            ret = 1;
-            goto end;
-        }
+        if (!rs->using_hardware_cursor)
+            if (gl_setup_cursor_program(rs)) {
+                ROG_ERR("opengl failed to setup cursor program");
+                ret = 1;
+                goto end;
+            }
     }
 
     // render buffers initially
