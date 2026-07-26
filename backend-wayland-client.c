@@ -3,7 +3,7 @@
 #include "compositor.h"
 #include "dll.h"
 #include "input.h"
-#include "linux-dmabuf-protocol.h"
+#include "linux-dmabuf-client-protocol.h"
 #include "log.h"
 #include "render.h"
 #include "wayland.h"

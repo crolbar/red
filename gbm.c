@@ -2,7 +2,7 @@
 #include "backend-wayland-client.h"
 #include "backend-wayland.h"
 #include "gbm.h"
-#include "linux-dmabuf-protocol.h"
+#include "linux-dmabuf-client-protocol.h"
 #include "log.h"
 #include "red.h"
 #include <drm/drm_fourcc.h>
@@ -452,6 +452,15 @@ init_gl_proc()
         if (!glProc->glEGLImageTargetRenderbufferStorageOES) {
             ROG_ERR("did not found proc address of "
                     "glEGLImageTargetRenderbufferStorageOES");
+            goto fail;
+        }
+        glProc->glEGLImageTargetTexture2DOES =
+          (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress(
+            "glEGLImageTargetTexture2DOES");
+
+        if (!glProc->glEGLImageTargetTexture2DOES) {
+            ROG_ERR("did not found proc address of "
+                    "glEGLImageTargetTexture2DOES");
             goto fail;
         }
     }

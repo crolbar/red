@@ -28,6 +28,7 @@ backend_wayland_init_data()
     bw->width       = 1600;
     bw->height      = 1000;
     bw->used_rb     = 0;
+    bw->drm_fd      = -1;
 
     return bw;
 }
@@ -89,6 +90,8 @@ backend_wayland_init(void* data)
     xdg_toplevel_set_app_id(bw->wc->xdg_toplevel, "red");
 
     wl_display_roundtrip(bw->wc->wl_display);
+
+    bw->drm_fd = fd;
     return 0;
 fail:
     if (bw->wc)
@@ -200,6 +203,20 @@ backend_wayland_is_ready_for_frame(void* d)
     return bw->is_ready_for_frame;
 }
 
+int
+backend_wayland_get_drm_node(void* d)
+{
+    struct backend_wayland* bw = d;
+    return bw->drm_fd;
+}
+
+EGLDisplay
+backend_wayland_egl_display(void* d)
+{
+    struct backend_wayland* bw = d;
+    return bw->egl_display;
+}
+
 struct backend backend_wayland = {
     .d                  = NULL,
     .init_data          = backend_wayland_init_data,
@@ -214,4 +231,6 @@ struct backend backend_wayland = {
     .flush_events       = backend_wayland_flush_events,
     .handle_events      = backend_wayland_handle_events,
     .is_ready_for_frame = backend_wayland_is_ready_for_frame,
+    .get_drm_node       = backend_wayland_get_drm_node,
+    .get_egl_display    = backend_wayland_egl_display,
 };

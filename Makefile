@@ -55,13 +55,16 @@ xdg-shell-server-protocol.h: $(XDG_SHELL_XML)
 xdg-shell-protocol.c: $(XDG_SHELL_XML)
 	wayland-scanner private-code $< $@
 
-linux-dmabuf-protocol.h: $(LINUX_DMABUF_XML)
+linux-dmabuf-client-protocol.h: $(LINUX_DMABUF_XML)
 	wayland-scanner client-header $< $@
+linux-dmabuf-server-protocol.h: $(LINUX_DMABUF_XML)
+	wayland-scanner server-header $< $@
 linux-dmabuf-protocol.c: $(LINUX_DMABUF_XML)
 	wayland-scanner private-code $< $@
 
 PRO_SRC=linux-dmabuf-protocol.c \
-		 linux-dmabuf-protocol.h \
+		 linux-dmabuf-client-protocol.h \
+		 linux-dmabuf-server-protocol.h \
 		 xdg-shell-protocol.c \
 		 xdg-shell-client-protocol.h \
 		 xdg-shell-server-protocol.h \

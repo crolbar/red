@@ -1,12 +1,20 @@
 #include "compositor.h"
 #include "config.h"
 #include "dll.h"
+#include "linux-dmabuf-server-protocol.h"
 #include "log.h"
 #include "red.h"
 #include "render.h"
 #include "xdg-decoration-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
+#include <assert.h>
+#include <drm/drm_fourcc.h>
+#include <fcntl.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <wayland-server.h>
@@ -455,7 +463,7 @@ xdg_surface_get_toplevel(struct wl_client*   client,
 {
     struct redsurface* rsurf = resource->data;
 
-    rsurf->app_id       = "";
+    rsurf->app_id       = NULL;
     rsurf->xdg_toplevel = wl_resource_create(
       client, &xdg_toplevel_interface, wl_resource_get_version(resource), id);
     if (!rsurf->xdg_toplevel) {
@@ -1035,6 +1043,340 @@ wl_client_created(struct wl_listener* listener, void* data)
     dll_push_tail(rs->rcs, rc);
 }
 
+void
+wl_buffer_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static const struct wl_buffer_interface wl_buffer_implementation = {
+    .destroy = wl_buffer_destroy,
+};
+
+static void
+zwp_linux_buffer_resource_destroy(struct wl_resource* resource)
+{
+    struct dmabuf* dmabuf = wl_resource_get_user_data(resource);
+    free(dmabuf);
+}
+
+struct dmabuf*
+red_get_dmabuf(struct wl_resource* resource)
+{
+    if (!wl_resource_instance_of(
+          resource, &wl_buffer_interface, &wl_buffer_implementation))
+        return NULL;
+    return wl_resource_get_user_data(resource);
+}
+
+static void
+zwp_linux_buffer_params_destroy(struct wl_client*   client,
+                                struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static void
+zwp_linux_buffer_params_add(struct wl_client*   client,
+                            struct wl_resource* resource,
+                            int32_t             fd,
+                            uint32_t            plane_idx,
+                            uint32_t            offset,
+                            uint32_t            stride,
+                            uint32_t            modifier_hi,
+                            uint32_t            modifier_lo)
+{
+    struct dmabuf_params* params = wl_resource_get_user_data(resource);
+    assert(plane_idx < 4);
+
+    params->planes[plane_idx].fd          = fd;
+    params->planes[plane_idx].offset      = offset;
+    params->planes[plane_idx].stride      = stride;
+    params->planes[plane_idx].modifier_hi = modifier_hi;
+    params->planes[plane_idx].modifier_lo = modifier_lo;
+    params->planes_count++;
+}
+
+static struct wl_resource*
+init_linux_buffer(struct wl_client*   client,
+                  struct wl_resource* resource,
+                  int32_t             width,
+                  int32_t             height,
+                  uint32_t            format,
+                  uint32_t            flags,
+                  int                 immed,
+                  uint32_t            buffer_id)
+{
+    struct dmabuf_params* params = wl_resource_get_user_data(resource);
+
+    struct wl_resource* wl_buffer = wl_buffer =
+      wl_resource_create(client, &wl_buffer_interface, 1, buffer_id);
+    if (!wl_buffer) {
+        ROG_ERR("oom?");
+        return NULL;
+    }
+
+    struct dmabuf* dmabuf;
+    dmabuf         = calloc(1, sizeof(*dmabuf));
+    dmabuf->flags  = flags;
+    dmabuf->height = height;
+    dmabuf->width  = width;
+    dmabuf->format = format;
+    dmabuf->rs     = params->rs;
+    for (int i = 0; i < params->planes_count; i++) {
+        dmabuf->planes[i] = params->planes[i];
+        dmabuf->planes_count++;
+    }
+    wl_resource_set_implementation(wl_buffer,
+                                   &wl_buffer_implementation,
+                                   dmabuf,
+                                   zwp_linux_buffer_resource_destroy);
+
+    if (!immed)
+        zwp_linux_buffer_params_v1_send_created(resource, wl_buffer);
+
+    return wl_buffer;
+}
+
+static void
+zwp_linux_buffer_params_create(struct wl_client*   client,
+                               struct wl_resource* resource,
+                               int32_t             width,
+                               int32_t             height,
+                               uint32_t            format,
+                               uint32_t            flags)
+{
+    init_linux_buffer(client, resource, width, height, format, flags, 0, 0);
+}
+
+static void
+zwp_linux_buffer_params_create_immed(struct wl_client*   client,
+                                     struct wl_resource* resource,
+                                     uint32_t            buffer_id,
+                                     int32_t             width,
+                                     int32_t             height,
+                                     uint32_t            format,
+                                     uint32_t            flags)
+{
+    init_linux_buffer(
+      client, resource, width, height, format, flags, 1, buffer_id);
+}
+static void
+zwp_linux_buffer_params_set_sampling_device(struct wl_client*   client,
+                                            struct wl_resource* resource,
+                                            struct wl_array*    device)
+{
+}
+
+static void
+zwp_linux_buffer_params_resource_destroy(struct wl_resource* resource)
+{
+    struct dmabuf_params* params = wl_resource_get_user_data(resource);
+    free(params);
+}
+
+static const struct zwp_linux_buffer_params_v1_interface
+  zwp_linux_buffer_params_implementation = {
+      .destroy             = zwp_linux_buffer_params_destroy,
+      .add                 = zwp_linux_buffer_params_add,
+      .create              = zwp_linux_buffer_params_create,
+      .create_immed        = zwp_linux_buffer_params_create_immed,
+      .set_sampling_device = zwp_linux_buffer_params_set_sampling_device,
+  };
+
+static void
+zwp_linux_dmabuf_feedback_destroy(struct wl_client*   client,
+                                  struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static const struct zwp_linux_dmabuf_feedback_v1_interface
+  zwp_linux_dmabuf_feedback_implementation = {
+      .destroy = zwp_linux_dmabuf_feedback_destroy,
+  };
+
+static void
+zwp_linux_dmabuf_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+struct dmabuf_params*
+init_dmabuf_params()
+{
+    struct dmabuf_params* params;
+    params     = calloc(1, sizeof(*params));
+    params->rs = NULL;
+
+    return params;
+}
+
+static void
+zwp_linux_dmabuf_create_params(struct wl_client*   client,
+                               struct wl_resource* resource,
+                               uint32_t            id)
+{
+    struct redstate* rs = wl_resource_get_user_data(resource);
+
+    struct wl_resource* zwp_linux_dmabuf_params =
+      wl_resource_create(client,
+                         &zwp_linux_buffer_params_v1_interface,
+                         wl_resource_get_version(resource),
+                         id);
+    if (!zwp_linux_dmabuf_params) {
+        ROG_ERR("oom?");
+        return;
+    }
+
+    struct dmabuf_params* params = init_dmabuf_params();
+    params->rs                   = rs;
+    wl_resource_set_implementation(zwp_linux_dmabuf_params,
+                                   &zwp_linux_buffer_params_implementation,
+                                   params,
+                                   zwp_linux_buffer_params_resource_destroy);
+}
+
+static void
+zwp_linux_dmabuf_get_default_feedback(struct wl_client*   client,
+                                      struct wl_resource* resource,
+                                      uint32_t            id)
+{
+    struct redstate*    rs = wl_resource_get_user_data(resource);
+    struct wl_resource* zwp_linux_dmabuf_feedback =
+      wl_resource_create(client,
+                         &zwp_linux_dmabuf_feedback_v1_interface,
+                         wl_resource_get_version(resource),
+                         id);
+    if (!zwp_linux_dmabuf_feedback) {
+        ROG_ERR("oom?");
+        return;
+    }
+    wl_resource_set_implementation(zwp_linux_dmabuf_feedback,
+                                   &zwp_linux_dmabuf_feedback_implementation,
+                                   rs,
+                                   NULL);
+
+    int    fd;
+    int    entry_count = 2;
+    size_t size        = 16 * entry_count;
+    {
+        char name[64];
+        snprintf(name, sizeof(name), "/wl_red_dmabuf_feedback-%d", getpid());
+        fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
+        shm_unlink(name);
+        if (fd < 0) {
+            ROG_ERR(
+              "failed creating shm for zwp_linux_dmabuf_get_default_feedback");
+            return;
+        }
+
+        if (ftruncate(fd, size) == -1) {
+            ROG_ERR("xkb keymap fd shm setting size failed");
+            close(fd);
+            return;
+        }
+        void* ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (ptr == MAP_FAILED) {
+            close(fd);
+            return;
+        }
+
+        struct entry
+        {
+            uint32_t format;
+            uint32_t padding;
+            uint64_t modifier;
+        }* entry;
+        entry             = calloc(entry_count, sizeof(*entry));
+        entry[0].format   = DRM_FORMAT_XRGB8888;
+        entry[0].padding  = 0;
+        entry[0].modifier = 0;
+        entry[1].format   = DRM_FORMAT_ARGB8888;
+        entry[1].padding  = 0;
+        entry[1].modifier = 0;
+
+        memcpy(ptr, entry, size);
+    }
+
+    zwp_linux_dmabuf_feedback_v1_send_format_table(
+      zwp_linux_dmabuf_feedback, fd, size);
+    close(fd);
+
+    int         drm_fd  = rs->backend->get_drm_node(rs->backend->d);
+    int         pass_fd = -1;
+    struct stat st;
+    if (fstat(drm_fd, &st) == 0)
+        pass_fd = st.st_rdev;
+    else {
+        ROG_ERR("fstat on drm_fd failed");
+        return;
+    }
+
+    struct wl_array dev_arr;
+    wl_array_init(&dev_arr);
+    dev_t* devp = wl_array_add(&dev_arr, sizeof(dev_t));
+    *devp       = pass_fd;
+
+    zwp_linux_dmabuf_feedback_v1_send_main_device(zwp_linux_dmabuf_feedback,
+                                                  &dev_arr);
+    zwp_linux_dmabuf_feedback_v1_send_tranche_target_device(
+      zwp_linux_dmabuf_feedback, &dev_arr);
+    wl_array_release(&dev_arr);
+
+    struct wl_array indices_arr;
+    wl_array_init(&indices_arr);
+    for (int i = 0; i < entry_count; i++) {
+        uint16_t* idxp = wl_array_add(&indices_arr, sizeof(uint16_t));
+        *idxp          = (uint16_t)i;
+    }
+    zwp_linux_dmabuf_feedback_v1_send_tranche_formats(zwp_linux_dmabuf_feedback,
+                                                      &indices_arr);
+    wl_array_release(&indices_arr);
+    zwp_linux_dmabuf_feedback_v1_send_tranche_flags(zwp_linux_dmabuf_feedback,
+                                                    0);
+
+    zwp_linux_dmabuf_feedback_v1_send_tranche_done(zwp_linux_dmabuf_feedback);
+    zwp_linux_dmabuf_feedback_v1_send_done(zwp_linux_dmabuf_feedback);
+}
+
+static void
+zwp_linux_dmabuf_get_surface_feedback(struct wl_client*   client,
+                                      struct wl_resource* resource,
+                                      uint32_t            id,
+                                      struct wl_resource* surface)
+{
+    zwp_linux_dmabuf_get_default_feedback(client, resource, id);
+}
+
+static const struct zwp_linux_dmabuf_v1_interface
+  zwp_linux_dmabuf_implementation = {
+      .destroy              = zwp_linux_dmabuf_destroy,
+      .create_params        = zwp_linux_dmabuf_create_params,
+      .get_default_feedback = zwp_linux_dmabuf_get_default_feedback,
+      .get_surface_feedback = zwp_linux_dmabuf_get_surface_feedback,
+  };
+
+static void
+wl_global_bind_zwp_linux_dmabuf(struct wl_client* client,
+                                void*             data,
+                                uint32_t          version,
+                                uint32_t          id)
+{
+    struct wl_resource* zwp_linux_dmabuf =
+      wl_resource_create(client, &zwp_linux_dmabuf_v1_interface, version, id);
+    if (!zwp_linux_dmabuf) {
+        ROG_ERR("oom?");
+        return;
+    }
+    wl_resource_set_implementation(
+      zwp_linux_dmabuf, &zwp_linux_dmabuf_implementation, data, NULL);
+
+    if (version < 4) {
+        ROG_ERR("zwp_linux_dmabuf version < 4 used, implement!!");
+    }
+}
+
 static void
 handle_wl_log(const char* _fmt, va_list args)
 {
@@ -1080,7 +1422,7 @@ init_compositor(struct redstate* rs)
 
     rs->wl_compositor = wl_global_create(rs->wl_display,
                                          &wl_compositor_interface,
-                                         4,
+                                         6,
                                          rs,
                                          wl_global_bind_compositor);
     if (!rs->wl_compositor) {
@@ -1090,7 +1432,7 @@ init_compositor(struct redstate* rs)
 
     rs->xdg_wm_base = wl_global_create(rs->wl_display,
                                        &xdg_wm_base_interface,
-                                       5,
+                                       6,
                                        rs,
                                        wl_global_bind_xdg_wm_base);
     if (!rs->xdg_wm_base) {
@@ -1106,7 +1448,7 @@ init_compositor(struct redstate* rs)
     }
 
     rs->wl_seat = wl_global_create(
-      rs->wl_display, &wl_seat_interface, 5, rs, wl_global_bind_seat);
+      rs->wl_display, &wl_seat_interface, 9, rs, wl_global_bind_seat);
     if (!rs->wl_seat) {
         ROG_ERR("could not create wl_output");
         goto fail;
@@ -1128,6 +1470,12 @@ init_compositor(struct redstate* rs)
                        1,
                        rs,
                        wl_global_bind_xdg_decoration_manager);
+
+    rs->zwp_linux_dmabuf = wl_global_create(rs->wl_display,
+                                            &zwp_linux_dmabuf_v1_interface,
+                                            5,
+                                            rs,
+                                            wl_global_bind_zwp_linux_dmabuf),
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);

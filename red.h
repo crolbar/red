@@ -18,6 +18,32 @@
 #define min(x, y) ((x) < (y)) ? (x) : (y)
 #define max(x, y) ((x) > (y)) ? (x) : (y)
 
+struct dmabuf_plane
+{
+    int32_t  fd;
+    uint32_t offset;
+    uint32_t stride;
+    uint32_t modifier_hi;
+    uint32_t modifier_lo;
+};
+struct dmabuf_params
+{
+    struct redstate*    rs;
+    int                 planes_count;
+    struct dmabuf_plane planes[4];
+};
+
+struct dmabuf
+{
+    struct redstate*    rs;
+    int                 planes_count;
+    int32_t             width;
+    int32_t             height;
+    uint32_t            format;
+    uint32_t            flags;
+    struct dmabuf_plane planes[4];
+};
+
 typedef struct redbuffer
 {
     uint32_t          buf_id;       // drm backend, drm framebuffer id
@@ -102,6 +128,7 @@ struct redstate
     struct wl_global*     xdg_decoration_manager;
     struct wl_global*     wl_output;
     struct wl_global*     wl_seat;
+    struct wl_global*     zwp_linux_dmabuf;
     struct wl_global*     subcompositor_global;
     struct wl_global*     data_device_manager_global;
     struct wl_listener    client_created;
@@ -140,6 +167,7 @@ struct gl_proc
     PFNEGLCREATEIMAGEKHRPROC        eglCreateImageKHR;
     PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC
     glEGLImageTargetRenderbufferStorageOES;
+    PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
 };
 
 extern struct gl_proc* gl_proc;

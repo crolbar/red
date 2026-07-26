@@ -1,6 +1,7 @@
 #pragma once
 
 #include "red.h"
+#include <EGL/egl.h>
 #include <stdint.h>
 
 // current backends: drm and wayland
@@ -32,4 +33,7 @@ struct backend
     int (*handle_events)(void* d);
 
     int (*is_ready_for_frame)(void* d);
+
+    int (*get_drm_node)(void* d);
+    EGLDisplay (*get_egl_display)(void* d);
 };

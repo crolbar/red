@@ -275,6 +275,20 @@ backend_drm_is_ready_for_frame(void* d)
     return bd->page_flip_ready;
 }
 
+int
+backend_drm_get_drm_node(void* d)
+{
+    struct backend_drm* bd = d;
+    return bd->drm_fd;
+}
+
+EGLDisplay
+backend_drm_egl_display(void* d)
+{
+    struct backend_drm* bd = d;
+    return bd->egl_display;
+}
+
 struct backend backend_drm = {
     .d                  = NULL,
     .init_data          = backend_drm_init_data,
@@ -289,4 +303,6 @@ struct backend backend_drm = {
     .flush_events       = backend_drm_flush_events,
     .handle_events      = backend_drm_handle_events,
     .is_ready_for_frame = backend_drm_is_ready_for_frame,
+    .get_drm_node       = backend_drm_get_drm_node,
+    .get_egl_display    = backend_drm_egl_display,
 };

@@ -66,6 +66,7 @@ main(int argc, char** argv)
     rs->xdg_decoration_manager = NULL;
     rs->wl_output              = NULL;
     rs->wl_seat                = NULL;
+    rs->zwp_linux_dmabuf       = NULL;
     rs->needs_redraw           = 1;
     rs->rcs                    = (typeof(rs->rcs))dll_init();
     rs->trcs                   = (typeof(rs->trcs))dll_init();
