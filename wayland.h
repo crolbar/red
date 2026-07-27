@@ -16,3 +16,6 @@ red_send_configure(struct redsurface* rsurf, int activated, int resizing);
 
 struct dmabuf*
 red_get_dmabuf(struct wl_resource* resource);
+
+void
+handle_wl_log(const char* _fmt, va_list args);

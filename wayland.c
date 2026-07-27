@@ -1545,7 +1545,7 @@ wl_global_bind_zwp_linux_dmabuf(struct wl_client* client,
     }
 }
 
-static void
+void
 handle_wl_log(const char* _fmt, va_list args)
 {
     // remove newline at end
@@ -1555,7 +1555,7 @@ handle_wl_log(const char* _fmt, va_list args)
     strcpy(fmt, _fmt);
     fmt[l - 1] = '\0';
 
-    ROG_INFO_VARGS(fmt, args);
+    ROG_ERR_VARGS(fmt, args);
     free(fmt);
 }
 

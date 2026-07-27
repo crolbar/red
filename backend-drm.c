@@ -4,9 +4,10 @@
 #include "drmProps.h"
 #include "gbm.h"
 #include "log.h"
+#include "opengl.h"
 #include "render.h"
 #include "wayland.h"
-#include <errno.h>
+#include <errno.h> // IWYU pragma: keep
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
@@ -27,7 +28,6 @@ backend_drm_init_data()
     bd->conn_id          = 0;
     bd->primary_plane_id = 0;
     bd->cursor_plane_id  = 0;
-    bd->gbm_has_modifier = 0;
     bd->egl_display      = NULL;
     bd->egl_context      = NULL;
     bd->gbm_dev          = NULL;
@@ -155,6 +155,7 @@ backend_drm_init(void* data)
              bd->mode.vrefresh);
 
     drmModeFreeConnector(conn);
+    conn = NULL;
 
     bd->gbm_dev = init_gbm(bd->drm_fd);
     if (!bd->gbm_dev)

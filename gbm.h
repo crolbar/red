@@ -6,13 +6,8 @@
 struct gbm_device*
 init_gbm(int drm_fd);
 
-int
-init_egl(struct gbm_device* gbm_dev,
-         EGLDisplay*        egl_display,
-         EGLContext*        egl_context);
-
-struct gl_proc*
-init_gl_proc();
+EGLImageKHR
+create_egl_image_from_gbm(EGLDisplay egl_display, struct gbm_bo* bo);
 
 struct redbuffer*
 init_drm_buffer(struct backend_drm* bd);
@@ -22,3 +17,6 @@ init_drm_cursor_buffer(struct backend_drm* bd);
 
 struct redbuffer*
 init_wl_buffer(struct backend_wayland* bw);
+
+void
+free_redbuffer(struct redbuffer* rb, EGLDisplay egl_display);

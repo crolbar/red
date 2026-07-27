@@ -2,11 +2,11 @@
 
 #include <stdarg.h>
 
-#define ANSI_RESET "\x1b[0m"
-#define ANSI_RED "\x1b[31m"
+#define ANSI_RESET  "\x1b[0m"
+#define ANSI_RED    "\x1b[31m"
 #define ANSI_YELLOW "\x1b[33m"
-#define ANSI_CYAN "\x1b[36m"
-#define ANSI_BLUE "\x1b[34m"
+#define ANSI_CYAN   "\x1b[36m"
+#define ANSI_BLUE   "\x1b[34m"
 
 int
 create_state_dir();
@@ -22,19 +22,19 @@ close_log_file();
 
 void
 log_log_file(const char* level,
-                   const char* file,
-                   int         line,
-                   const char* func,
-                   const char* fmt,
-                   ...);
-
-void
-vargs_log_log_file(const char* level,
              const char* file,
              int         line,
              const char* func,
              const char* fmt,
-             va_list     args);
+             ...);
+
+void
+vargs_log_log_file(const char* level,
+                   const char* file,
+                   int         line,
+                   const char* func,
+                   const char* fmt,
+                   va_list     args);
 
 #define ROG(fmt, ...)                                                          \
     log_log_file("DEBUG", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__);
@@ -44,8 +44,10 @@ vargs_log_log_file(const char* level,
     log_log_file("WARNING", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define ROG_INFO(fmt, ...)                                                     \
     log_log_file("INFO", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
-#define ROG_INFO_VARGS(fmt, args)                                                     \
+#define ROG_INFO_VARGS(fmt, args)                                              \
     vargs_log_log_file("INFO", __FILE__, __LINE__, __func__, fmt, args)
+#define ROG_ERR_VARGS(fmt, args)                                               \
+    vargs_log_log_file("ERROR", __FILE__, __LINE__, __func__, fmt, args)
 
 #define ROG_INIT()                                                             \
     if (open_log_file())                                                       \

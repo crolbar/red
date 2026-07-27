@@ -11,7 +11,6 @@
 #include "backend-drm.h"
 #include "backend-wayland.h"
 #include "dll.h"
-#include "gbm.h"
 #include "input.h"
 #include "log.h"
 #include "opengl.h"
@@ -84,7 +83,7 @@ main(int argc, char** argv)
     rs->cursor_y              = 0;
     rs->using_hardware_cursor = 0;
 
-    if (!(gl_proc = init_gl_proc())) {
+    if (init_gl_proc()) {
         goto end;
     }
 

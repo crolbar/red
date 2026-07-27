@@ -364,6 +364,7 @@ init_wayland()
     cws->wl_keyboard      = NULL;
     cws->wl_pointer       = NULL;
 
+    wl_log_set_handler_client(handle_wl_log);
     cws->wl_display = wl_display_connect(NULL);
     if (!cws->wl_display) {
         ROG_ERR("failed connecting to display");

@@ -2,6 +2,7 @@
 #include "opengl.h"
 #include "red.h"
 #include <GLES3/gl3.h>
+#include <drm/drm_fourcc.h>
 
 static const char* cursor_fragment_shader_src = "\
 #version 300 es\n\
@@ -106,5 +107,213 @@ gl_setup_cursor_program(struct redstate* rs)
 
     return 0;
 fail:
+    return 1;
+}
+
+// pass pointers to egl_display and context
+int
+init_egl(struct gbm_device* gbm_dev,
+         EGLDisplay*        egl_display,
+         EGLContext*        egl_context)
+{
+    EGLint major, minor;
+    {
+        *egl_display = gl_proc->eglGetPlatformDisplayEXT(
+          EGL_PLATFORM_GBM_KHR, gbm_dev, NULL);
+        if (*egl_display == EGL_NO_DISPLAY) {
+            ROG_ERR("failed to get egl display: %x", eglGetError());
+            return 1;
+        }
+
+        if (!eglInitialize(*egl_display, &major, &minor)) {
+            ROG_ERR("failed to init egl: %x", eglGetError());
+            return 1;
+        }
+    }
+
+    if (eglBindAPI(EGL_OPENGL_ES_API) == EGL_FALSE) {
+        ROG_ERR("failed to bind opengl es api: %x", eglGetError());
+        return 1;
+    };
+
+    {
+        EGLint attrs[] = {
+            EGL_CONTEXT_MAJOR_VERSION,
+            3,
+            EGL_CONTEXT_MINOR_VERSION,
+            2,
+            EGL_NONE,
+        };
+
+        *egl_context = eglCreateContext(
+          *egl_display, EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, attrs);
+        if (*egl_context == EGL_NO_CONTEXT) {
+            ROG_ERR("failed to create egl context: %x", eglGetError());
+            return 1;
+        }
+
+        if (!eglMakeCurrent(
+              *egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, *egl_context)) {
+            ROG_ERR("eglMakeCurrent failed: %x", eglGetError());
+            return 1;
+        }
+    }
+
+    ROG_INFO("EGL version %d.%d", major, minor);
+    ROG_INFO("GL version: %s", glGetString(GL_VERSION));
+    return 0;
+}
+
+int
+gl_add_fb(struct gbm_bo* bo, EGLImageKHR egl_image, GLuint* fbo, GLuint* rbo)
+{
+    CALL(glGenRenderbuffers(1, rbo));
+    CALL(glBindRenderbuffer(GL_RENDERBUFFER, *rbo));
+
+    // attaching egl image to glRenderbuffer
+    CALL(gl_proc->glEGLImageTargetRenderbufferStorageOES(
+      GL_RENDERBUFFER, (GLeglImageOES)egl_image));
+
+    CALL(glBindRenderbuffer(GL_RENDERBUFFER, 0));
+
+    CALL(glGenFramebuffers(1, fbo));
+    CALL(glBindFramebuffer(GL_FRAMEBUFFER, *fbo));
+
+    // attach render buffer to framebuffer object
+    CALL(glFramebufferRenderbuffer(
+      GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, *rbo));
+
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        ROG_ERR("glCheckFramebufferStatus failed: %x, status: %x",
+                glGetError(),
+                status);
+        goto fail;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    return 0;
+fail:
+    return 1;
+}
+
+EGLImageKHR
+init_egl_image(EGLDisplay           egl_display,
+               uint32_t             width,
+               uint32_t             height,
+               uint32_t             format,
+               uint32_t             planes_count,
+               struct dmabuf_plane* planes)
+{
+    EGLint attribs[50];
+    int    a     = 0;
+    attribs[a++] = EGL_WIDTH;
+    attribs[a++] = width;
+    attribs[a++] = EGL_HEIGHT;
+    attribs[a++] = height;
+    attribs[a++] = EGL_LINUX_DRM_FOURCC_EXT;
+    attribs[a++] = format;
+
+    struct
+    {
+        EGLint fd;
+        EGLint offset;
+        EGLint stride;
+        EGLint modifier_lo;
+        EGLint modifier_hi;
+    } attr_names[4] = { { .fd          = EGL_DMA_BUF_PLANE0_FD_EXT,
+                          .offset      = EGL_DMA_BUF_PLANE0_OFFSET_EXT,
+                          .stride      = EGL_DMA_BUF_PLANE0_PITCH_EXT,
+                          .modifier_lo = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,
+                          .modifier_hi = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT },
+                        { .fd          = EGL_DMA_BUF_PLANE1_FD_EXT,
+                          .offset      = EGL_DMA_BUF_PLANE1_OFFSET_EXT,
+                          .stride      = EGL_DMA_BUF_PLANE1_PITCH_EXT,
+                          .modifier_lo = EGL_DMA_BUF_PLANE1_MODIFIER_LO_EXT,
+                          .modifier_hi = EGL_DMA_BUF_PLANE1_MODIFIER_HI_EXT },
+                        { .fd          = EGL_DMA_BUF_PLANE2_FD_EXT,
+                          .offset      = EGL_DMA_BUF_PLANE2_OFFSET_EXT,
+                          .stride      = EGL_DMA_BUF_PLANE2_PITCH_EXT,
+                          .modifier_lo = EGL_DMA_BUF_PLANE2_MODIFIER_LO_EXT,
+                          .modifier_hi = EGL_DMA_BUF_PLANE2_MODIFIER_HI_EXT },
+                        { .fd          = EGL_DMA_BUF_PLANE3_FD_EXT,
+                          .offset      = EGL_DMA_BUF_PLANE3_OFFSET_EXT,
+                          .stride      = EGL_DMA_BUF_PLANE3_PITCH_EXT,
+                          .modifier_lo = EGL_DMA_BUF_PLANE3_MODIFIER_LO_EXT,
+                          .modifier_hi = EGL_DMA_BUF_PLANE3_MODIFIER_HI_EXT } };
+
+    for (uint32_t i = 0; i < planes_count; i++) {
+        attribs[a++] = attr_names[i].fd;
+        attribs[a++] = planes[i].fd;
+        attribs[a++] = attr_names[i].offset;
+        attribs[a++] = planes[i].offset;
+        attribs[a++] = attr_names[i].stride;
+        attribs[a++] = planes[i].stride;
+
+        int has_mods = (((uint64_t)planes[i].modifier_hi << 32) |
+                        planes[i].modifier_lo) != DRM_FORMAT_MOD_INVALID;
+
+        if (has_mods) {
+            attribs[a++] = attr_names[i].modifier_lo;
+            attribs[a++] = (EGLint)(planes[i].modifier_lo);
+            attribs[a++] = attr_names[i].modifier_hi;
+            attribs[a++] = (EGLint)(planes[i].modifier_hi);
+        }
+    }
+    attribs[a++] = EGL_NONE;
+
+    EGLImageKHR img = gl_proc->eglCreateImageKHR(
+      egl_display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attribs);
+    if (img == EGL_NO_IMAGE_KHR) {
+        ROG_ERR("eglCreateImageKHR failed: (0x%x)\n", eglGetError());
+        return NULL;
+    }
+    return img;
+}
+
+__eglMustCastToProperFunctionPointerType
+egl_get_proc(char* addr)
+{
+    __eglMustCastToProperFunctionPointerType proc = eglGetProcAddress(addr);
+    if (!proc) {
+        ROG_ERR("did not found proc address of %s", addr);
+        return NULL;
+    }
+    return proc;
+}
+
+int
+init_gl_proc()
+{
+    gl_proc = malloc(sizeof(*gl_proc));
+    assert(gl_proc);
+    gl_proc->eglCreateImageKHR                      = NULL;
+    gl_proc->glEGLImageTargetRenderbufferStorageOES = NULL;
+    gl_proc->glEGLImageTargetTexture2DOES           = NULL;
+    gl_proc->eglGetPlatformDisplayEXT               = NULL;
+
+    if (!(gl_proc->eglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC)
+            egl_get_proc("eglGetPlatformDisplayEXT")))
+        goto fail;
+
+    if (!(gl_proc->eglCreateImageKHR =
+            (PFNEGLCREATEIMAGEKHRPROC)egl_get_proc("eglCreateImageKHR")))
+        goto fail;
+
+    if (!(gl_proc->glEGLImageTargetRenderbufferStorageOES =
+            (PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC)egl_get_proc(
+              "glEGLImageTargetRenderbufferStorageOES")))
+        goto fail;
+
+    if (!(gl_proc->glEGLImageTargetTexture2DOES =
+            (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)egl_get_proc(
+              "glEGLImageTargetTexture2DOES")))
+        goto fail;
+
+    return 0;
+fail:
+    if (gl_proc)
+        free(gl_proc);
     return 1;
 }

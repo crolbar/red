@@ -1,3 +1,4 @@
+#include "gbm.h"
 #include "log.h"
 #include "opengl.h"
 #include "red.h"
@@ -242,68 +243,13 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
         src_w = dmabuf->width;
         src_h = dmabuf->height;
 
-        EGLint attribs[50];
-        int    a     = 0;
-        attribs[a++] = EGL_WIDTH;
-        attribs[a++] = dmabuf->width;
-        attribs[a++] = EGL_HEIGHT;
-        attribs[a++] = dmabuf->height;
-        attribs[a++] = EGL_LINUX_DRM_FOURCC_EXT;
-        attribs[a++] = dmabuf->format;
-
-        static const EGLint fd_attrs[4]    = { EGL_DMA_BUF_PLANE0_FD_EXT,
-                                               EGL_DMA_BUF_PLANE1_FD_EXT,
-                                               EGL_DMA_BUF_PLANE2_FD_EXT,
-                                               EGL_DMA_BUF_PLANE3_FD_EXT };
-        static const EGLint off_attrs[4]   = { EGL_DMA_BUF_PLANE0_OFFSET_EXT,
-                                               EGL_DMA_BUF_PLANE1_OFFSET_EXT,
-                                               EGL_DMA_BUF_PLANE2_OFFSET_EXT,
-                                               EGL_DMA_BUF_PLANE3_OFFSET_EXT };
-        static const EGLint pitch_attrs[4] = { EGL_DMA_BUF_PLANE0_PITCH_EXT,
-                                               EGL_DMA_BUF_PLANE1_PITCH_EXT,
-                                               EGL_DMA_BUF_PLANE2_PITCH_EXT,
-                                               EGL_DMA_BUF_PLANE3_PITCH_EXT };
-        static const EGLint modlo_attrs[4] = {
-            EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,
-            EGL_DMA_BUF_PLANE1_MODIFIER_LO_EXT,
-            EGL_DMA_BUF_PLANE2_MODIFIER_LO_EXT,
-            EGL_DMA_BUF_PLANE3_MODIFIER_LO_EXT
-        };
-        static const EGLint modhi_attrs[4] = {
-            EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT,
-            EGL_DMA_BUF_PLANE1_MODIFIER_HI_EXT,
-            EGL_DMA_BUF_PLANE2_MODIFIER_HI_EXT,
-            EGL_DMA_BUF_PLANE3_MODIFIER_HI_EXT
-        };
-
-        for (int i = 0; i < dmabuf->planes_count; i++) {
-            attribs[a++] = fd_attrs[i];
-            attribs[a++] = dmabuf->planes[i].fd;
-            attribs[a++] = off_attrs[i];
-            attribs[a++] = dmabuf->planes[i].offset;
-            attribs[a++] = pitch_attrs[i];
-            attribs[a++] = dmabuf->planes[i].stride;
-
-            int has_mods =
-              (((uint64_t)dmabuf->planes[i].modifier_hi << 32) |
-               dmabuf->planes[i].modifier_lo) != DRM_FORMAT_MOD_INVALID;
-            if (has_mods) {
-                attribs[a++] = modlo_attrs[i];
-                attribs[a++] = (EGLint)(dmabuf->planes[i].modifier_lo);
-                attribs[a++] = modhi_attrs[i];
-                attribs[a++] = (EGLint)(dmabuf->planes[i].modifier_hi);
-            }
-        }
-        attribs[a++] = EGL_NONE;
-
         EGLDisplay  egl_display = rs->backend->get_egl_display(rs->backend->d);
-        EGLImageKHR img         = gl_proc->eglCreateImageKHR(
-          egl_display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attribs);
-        if (img == EGL_NO_IMAGE_KHR) {
-            ROG_ERR("eglCreateImageKHR failed for dmabuf buffer (0x%x)\n",
-                    eglGetError());
-            return 1;
-        }
+        EGLImageKHR img         = init_egl_image(egl_display,
+                                         dmabuf->width,
+                                         dmabuf->height,
+                                         dmabuf->format,
+                                         dmabuf->planes_count,
+                                         dmabuf->planes);
 
         if (rs->tex == 0)
             glGenTextures(1, &rs->tex);

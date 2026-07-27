@@ -2,6 +2,7 @@
 #include "backend-wayland.h"
 #include "gbm.h"
 #include "log.h"
+#include "opengl.h"
 #include "red.h"
 #include "render.h"
 #include "xdg-shell-client-protocol.h"

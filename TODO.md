@@ -1,5 +1,5 @@
 - [x]dmabuf
-- [ ]refac gbm.c
+- [x]refac gbm.c
 
 
 - [x]drm cursor + wayland pointer

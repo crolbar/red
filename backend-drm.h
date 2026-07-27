@@ -19,7 +19,6 @@ struct backend_drm
     uint32_t        width, height;
 
     struct gbm_device* gbm_dev;
-    int                gbm_has_modifier;
     EGLDisplay         egl_display;
     EGLContext         egl_context;
 

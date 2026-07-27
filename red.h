@@ -5,7 +5,6 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -159,15 +158,6 @@ struct redstate
     xkb_mod_mask_t     xkb_mods_latched;
     xkb_mod_mask_t     xkb_mods_locked;
     xkb_layout_index_t xkb_group;
-};
-
-struct gl_proc
-{
-    PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
-    PFNEGLCREATEIMAGEKHRPROC        eglCreateImageKHR;
-    PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC
-    glEGLImageTargetRenderbufferStorageOES;
-    PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
 };
 
 extern struct gl_proc* gl_proc;
