@@ -1,146 +1,10 @@
-#include "gbm.h"
 #include "log.h"
 #include "opengl.h"
 #include "red.h"
 #include "render.h"
 #include "time.h"
 #include "wayland.h"
-#include "xdg-shell-server-protocol.h"
-#include <EGL/egl.h>
 #include <GLES3/gl3.h>
-#include <assert.h>
-#include <drm/drm_fourcc.h>
-#include <stdio.h>
-#include <string.h>
-#include <wayland-server-protocol.h>
-
-static GLuint quad_program  = 0;
-static GLuint quad_vao      = 0;
-static GLuint quad_vbo      = 0;
-static GLint  u_texture_loc = -1;
-
-static GLuint
-compile_shader(GLenum type, const char* src)
-{
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &src, NULL);
-    glCompileShader(shader);
-
-    GLint ok = 0;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
-    if (!ok) {
-        char log[512];
-        glGetShaderInfoLog(shader, sizeof(log), NULL, log);
-        ROG_ERR("shader compile error: %s", log);
-        glDeleteShader(shader);
-        return 0;
-    }
-    return shader;
-}
-
-static bool
-ensure_quad_resources(void)
-{
-    if (quad_program != 0)
-        return true;
-
-    static const char* vs_src = "#version 300 es\n"
-                                "layout(location = 0) in vec2 a_pos;\n"
-                                "layout(location = 1) in vec2 a_uv;\n"
-                                "out vec2 v_uv;\n"
-                                "void main() {\n"
-                                "    v_uv = a_uv;\n"
-                                "    gl_Position = vec4(a_pos, 0.0, 1.0);\n"
-                                "}\n";
-
-    static const char* fs_src = "#version 300 es\n"
-                                "precision mediump float;\n"
-                                "in vec2 v_uv;\n"
-                                "out vec4 frag_color;\n"
-                                "uniform sampler2D u_texture;\n"
-                                "void main() {\n"
-                                "    vec4 c = texture(u_texture, v_uv);\n"
-                                "    frag_color = c;\n"
-                                "}\n";
-
-    GLuint vs = compile_shader(GL_VERTEX_SHADER, vs_src);
-    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, fs_src);
-    if (!vs || !fs)
-        return false;
-
-    quad_program = glCreateProgram();
-    glAttachShader(quad_program, vs);
-    glAttachShader(quad_program, fs);
-    glLinkProgram(quad_program);
-
-    GLint linked = 0;
-    glGetProgramiv(quad_program, GL_LINK_STATUS, &linked);
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-    if (!linked) {
-        char log[512];
-        glGetProgramInfoLog(quad_program, sizeof(log), NULL, log);
-        fprintf(stderr, "shader link error: %s\n", log);
-        glDeleteProgram(quad_program);
-        quad_program = 0;
-        return false;
-    }
-
-    u_texture_loc = glGetUniformLocation(quad_program, "u_texture");
-
-    /* fullscreen quad: pos.xy, uv.xy per vertex
-       (uv flipped in Y since wl_shm data is top-down, GL tex origin is
-       bottom-left) */
-    float verts[] = {
-        /* pos        uv */
-        -1.0f, -1.0f, 0.0f, 0.0f, //
-        1.0f,  -1.0f, 1.0f, 0.0f, //
-        -1.0f, 1.0f,  0.0f, 1.0f, //
-        1.0f,  1.0f,  1.0f, 1.0f,
-    };
-
-    glGenVertexArrays(1, &quad_vao);
-    glGenBuffers(1, &quad_vbo);
-
-    glBindVertexArray(quad_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(
-      0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(
-      1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-
-    glBindVertexArray(0);
-
-    return true;
-}
-
-static void
-draw_textured_quad(struct redstate* rs, GLuint tex, int w, int h)
-{
-    (void)rs;
-    (void)w;
-    (void)h; /* unused for now; kept for future scaling/positioning */
-
-    if (!ensure_quad_resources())
-        return;
-
-    glUseProgram(quad_program);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glUniform1i(u_texture_loc, 0);
-
-    glBindVertexArray(quad_vao);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glBindVertexArray(0);
-
-    glUseProgram(0);
-}
 
 int
 render_surface(struct redstate* rs, struct redsurface* rsurf)
@@ -265,7 +129,15 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
         rs->tex_h = dmabuf->height;
     }
 
-    draw_textured_quad(rs, rs->tex, src_w, src_h);
+    glUseProgram(rs->program);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, rs->tex);
+    glUniform1i(rs->texture_loc, 0);
+
+    glBindVertexArray(rs->vao);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+    glUseProgram(0);
 
     if (rsurf->pending_buffer) {
         rsurf->old_pending_buffer = buffer;

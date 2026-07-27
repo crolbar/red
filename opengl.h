@@ -47,3 +47,6 @@ init_egl_image(EGLDisplay           egl_display,
 
 int
 gl_setup_cursor_program(struct redstate* rs);
+
+int
+gl_setup_program(struct redstate* rs);

@@ -4,6 +4,26 @@
 #include <GLES3/gl3.h>
 #include <drm/drm_fourcc.h>
 
+static const char* vertex_shader_src = "\
+#version 300 es\n\
+precision highp float;\n\
+in vec2 pos;\n\
+out vec2 v_uv;\n\
+void main() {\n\
+    gl_Position = vec4(pos, 0.0, 1.0);\n\
+    v_uv = (pos + 1.0) / 2.0;\n\
+}";
+
+static const char* fragment_shader_src = "\
+#version 300 es\n\
+precision highp float;\n\
+uniform sampler2D u_texture;\n\
+in vec2 v_uv;\n\
+out vec4 frag_color;\n\
+void main(){\n\
+   frag_color = texture(u_texture, v_uv);\n\
+}";
+
 static const char* cursor_fragment_shader_src = "\
 #version 300 es\n\
 precision highp float;\n\
@@ -46,13 +66,61 @@ gl_compile_shader(GLenum type, const char* src)
 }
 
 int
+gl_setup_program(struct redstate* rs)
+{
+    GLuint vs = gl_compile_shader(GL_VERTEX_SHADER, vertex_shader_src);
+    GLuint fs = gl_compile_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
+
+    rs->program = glCreateProgram();
+    glAttachShader(rs->program, vs);
+    glAttachShader(rs->program, fs);
+    glLinkProgram(rs->program);
+
+    glDetachShader(rs->program, vs);
+    glDetachShader(rs->program, fs);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    GLint ok;
+    glGetProgramiv(rs->program, GL_LINK_STATUS, &ok);
+    if (ok == GL_FALSE)
+        return 0;
+
+    rs->texture_loc = glGetAttribLocation(rs->program, "u_texture");
+    GLuint pos      = glGetAttribLocation(rs->program, "pos");
+
+    const float vertices[] = {
+        -1, -1, // top left
+        1,  -1, // top right
+        -1, 1,  // btm left
+        1,  1,  // btm right
+    };
+
+    glGenVertexArrays(1, &rs->vao);
+    glBindVertexArray(rs->vao);
+
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(pos);
+    glVertexAttribPointer(pos, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), NULL);
+
+    glBindVertexArray(0);
+
+    return 0;
+fail:
+    return 1;
+}
+
+int
 gl_setup_cursor_program(struct redstate* rs)
 {
     GLuint vs = gl_compile_shader(GL_VERTEX_SHADER, cursor_vertex_shader_src);
     GLuint fs =
       gl_compile_shader(GL_FRAGMENT_SHADER, cursor_fragment_shader_src);
     if (!vs || !fs)
-        return 0;
+        goto fail;
 
     GLuint program = glCreateProgram();
 

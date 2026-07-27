@@ -136,6 +136,11 @@ struct redstate
     int32_t tex_h;
     GLuint  tex;
 
+    GLuint program;
+    GLuint vao;
+    GLuint vbo;
+    GLint  texture_loc;
+
     GLuint cursor_gl_program;
     GLuint cursor_gl_vao;
     double cursor_x;

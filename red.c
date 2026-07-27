@@ -83,6 +83,11 @@ main(int argc, char** argv)
     rs->cursor_y              = 0;
     rs->using_hardware_cursor = 0;
 
+    rs->program     = 0;
+    rs->vao         = 0;
+    rs->vbo         = 0;
+    rs->texture_loc = 0;
+
     if (init_gl_proc()) {
         goto end;
     }
@@ -116,6 +121,11 @@ main(int argc, char** argv)
                 ROG_ERR("opengl failed to setup cursor program");
                 goto end;
             }
+
+        if (gl_setup_program(rs)) {
+            ROG_ERR("opengl failed to setup program");
+            goto end;
+        }
     }
 
     // render buffers initially
