@@ -33,6 +33,20 @@ red_send_pending_callback(struct redsurface* rsurf)
     return 0;
 }
 
+int
+red_on_frame_done(struct redstate* rs)
+{
+    // TODO: can we miss a pending callback when we change focus when
+    // page_flip_ready == 0 ?
+    if (rs->focused_trc)
+        red_send_pending_callback(rs->focused_trc->rsurf);
+
+    // if updates happened on page flip.
+    // shouldn't happen much as we have one window
+    redraw(rs);
+    return 0;
+}
+
 static void
 wl_surface_destroy(struct wl_client* client, struct wl_resource* resource)
 {
@@ -47,7 +61,8 @@ wl_surface_attach(struct wl_client*   client,
                   int32_t             y)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
-    rsurf->pending_buffer    = buffer;
+    assert(rsurf);
+    rsurf->pending_buffer = buffer;
 }
 
 static void
@@ -65,32 +80,21 @@ wl_surface_frame(struct wl_client*   client,
                  struct wl_resource* resource,
                  uint32_t            callback)
 {
-    struct redsurface*  rsurf = wl_resource_get_user_data(resource);
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    assert(rsurf);
     struct wl_resource* cb =
       wl_resource_create(client, &wl_callback_interface, 1, callback);
+    assert(cb);
     wl_resource_set_implementation(cb, NULL, NULL, NULL);
 
     rsurf->pending_callback = cb;
 }
 
 static void
-wl_surface_set_opaque_region(struct wl_client*   client,
-                             struct wl_resource* resource,
-                             struct wl_resource* region)
-{
-}
-
-static void
-wl_surface_set_input_region(struct wl_client*   client,
-                            struct wl_resource* resource,
-                            struct wl_resource* region)
-{
-}
-
-static void
 wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    assert(rsurf);
 
     if (!rsurf->rs->focused_trc)
         return;
@@ -105,6 +109,20 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
         return;
 
     request_redraw(rsurf->rs);
+}
+
+static void
+wl_surface_set_opaque_region(struct wl_client*   client,
+                             struct wl_resource* resource,
+                             struct wl_resource* region)
+{
+}
+
+static void
+wl_surface_set_input_region(struct wl_client*   client,
+                            struct wl_resource* resource,
+                            struct wl_resource* region)
+{
 }
 
 static void
@@ -153,7 +171,8 @@ wl_surface_resource_destroy(struct wl_resource* resource)
 
     if (rsurf->app_id)
         free(rsurf->app_id);
-    free(rsurf);
+    if (rsurf)
+        free(rsurf);
 }
 
 static const struct wl_surface_interface wl_surface_implementation = {
@@ -234,6 +253,7 @@ wl_compositor_create_surface(struct wl_client*   client,
                              uint32_t            id)
 {
     struct redstate* rs = resource->data;
+    assert(rs);
 
     struct redsurface* rsurf = init_redsurface();
     if (!rsurf) {
@@ -259,9 +279,11 @@ wl_compositor_create_region(struct wl_client*   client,
                             struct wl_resource* resource,
                             uint32_t            id)
 {
-    struct wl_resource* r = wl_resource_create(
+    struct wl_resource* wl_region = wl_resource_create(
       client, &wl_region_interface, wl_resource_get_version(resource), id);
-    wl_resource_set_implementation(r, &wl_region_implementation, NULL, NULL);
+    assert(wl_region);
+    wl_resource_set_implementation(
+      wl_region, &wl_region_implementation, NULL, NULL);
 }
 
 static void
@@ -295,6 +317,7 @@ static void
 xdg_toplevel_destroy(struct wl_client* client, struct wl_resource* resource)
 {
     struct redsurface* rsurf = resource->data;
+    assert(rsurf && rsurf->rs);
     red_destroy_trc(rsurf->rs, rsurf);
     wl_resource_destroy(resource);
 }
@@ -319,7 +342,11 @@ xdg_toplevel_set_app_id(struct wl_client*   client,
                         const char*         app_id)
 {
     struct redsurface* rsurf = resource->data;
-    rsurf->app_id            = malloc(strlen(app_id) + 1);
+    assert(rsurf);
+
+    rsurf->app_id = malloc(strlen(app_id) + 1);
+    assert(rsurf->app_id);
+
     strcpy(rsurf->app_id, app_id);
     ROG("app id: %s", rsurf->app_id);
 }
@@ -418,7 +445,8 @@ static const struct xdg_toplevel_interface xdg_toplevel_implementation = {
 int
 red_send_configure(struct redsurface* rsurf, int activated, int resizing)
 {
-    rsurf->configured         = 0;
+    rsurf->configured = 0;
+    // TODO
     rsurf->old_pending_buffer = NULL;
 
     uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
@@ -441,9 +469,12 @@ red_send_configure(struct redsurface* rsurf, int activated, int resizing)
         uint32_t* s = wl_array_add(&states, sizeof(uint32_t));
         *s          = XDG_TOPLEVEL_STATE_MAXIMIZED;
     }
+    assert(rsurf->xdg_toplevel);
     xdg_toplevel_send_configure(rsurf->xdg_toplevel, width, height, &states);
     wl_array_release(&states);
 
+    assert(rsurf->xdg_surface);
+    assert(rsurf->rs && rsurf->rs->wl_display);
     uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
     xdg_surface_send_configure(rsurf->xdg_surface, serial);
 
@@ -488,6 +519,7 @@ xdg_surface_get_toplevel(struct wl_client*   client,
                          uint32_t            id)
 {
     struct redsurface* rsurf = resource->data;
+    assert(rsurf);
 
     rsurf->app_id       = NULL;
     rsurf->xdg_toplevel = wl_resource_create(
@@ -529,11 +561,12 @@ xdg_surface_set_window_geometry(struct wl_client*   client,
                                 int32_t             height)
 {
     struct redsurface* rsurf = resource->data;
-    rsurf->geom_configured   = 1;
-    rsurf->geom_width        = width;
-    rsurf->geom_height       = height;
-    rsurf->geom_x            = x;
-    rsurf->geom_y            = y;
+    assert(rsurf);
+    rsurf->geom_configured = 1;
+    rsurf->geom_width      = width;
+    rsurf->geom_height     = height;
+    rsurf->geom_x          = x;
+    rsurf->geom_y          = y;
 }
 
 static void
@@ -542,7 +575,8 @@ xdg_surface_ack_configure(struct wl_client*   client,
                           uint32_t            serial)
 {
     struct redsurface* rsurf = resource->data;
-    rsurf->configured        = 1;
+    assert(rsurf);
+    rsurf->configured = 1;
 }
 
 static const struct xdg_surface_interface xdg_surface_implementation = {
@@ -643,6 +677,7 @@ xdg_wm_base_create_positioner(struct wl_client*   client,
 {
     struct wl_resource* xdg_positioner = wl_resource_create(
       client, &xdg_positioner_interface, wl_resource_get_version(resource), id);
+    assert(xdg_positioner);
     wl_resource_set_implementation(xdg_positioner,
                                    &xdg_positioner_implementation,
                                    wl_resource_get_user_data(resource),
@@ -656,9 +691,11 @@ xdg_wm_base_get_xdg_surface(struct wl_client*   client,
                             struct wl_resource* surface)
 {
     struct redsurface* rsurf = surface->data;
+    assert(rsurf);
 
     rsurf->xdg_surface = wl_resource_create(
       client, &xdg_surface_interface, wl_resource_get_version(resource), id);
+    assert(rsurf->xdg_surface);
     wl_resource_set_implementation(
       rsurf->xdg_surface, &xdg_surface_implementation, rsurf, NULL);
 }
@@ -710,11 +747,13 @@ wl_global_bind_output(struct wl_client* client,
                       uint32_t          id)
 {
     struct redstate*    rs = data;
-    struct wl_resource* r =
+    struct wl_resource* wl_output =
       wl_resource_create(client, &wl_output_interface, version, id);
-    wl_resource_set_implementation(r, &wl_output_implementation, data, NULL);
+    assert(wl_output);
+    wl_resource_set_implementation(
+      wl_output, &wl_output_implementation, data, NULL);
 
-    wl_output_send_geometry(r,
+    wl_output_send_geometry(wl_output,
                             0,
                             0,
                             300,
@@ -727,16 +766,16 @@ wl_global_bind_output(struct wl_client* client,
     uint32_t width  = rs->backend->get_width(rs->backend->d);
     uint32_t height = rs->backend->get_height(rs->backend->d);
 
-    wl_output_send_mode(r,
+    wl_output_send_mode(wl_output,
                         WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED,
                         width,
                         height,
                         60 * 1000);
     if (version >= 2)
-        wl_output_send_scale(r, 1);
+        wl_output_send_scale(wl_output, 1);
     if (version >= 4)
-        wl_output_send_name(r, "red-1");
-    wl_output_send_done(r);
+        wl_output_send_name(wl_output, "red-1");
+    wl_output_send_done(wl_output);
 }
 
 static void
@@ -775,9 +814,11 @@ wl_seat_get_pointer(struct wl_client*   client,
                     struct wl_resource* resource,
                     uint32_t            id)
 {
-    struct redstate*    rs         = wl_resource_get_user_data(resource);
+    struct redstate* rs = wl_resource_get_user_data(resource);
+
     struct wl_resource* wl_pointer = wl_resource_create(
       client, &wl_pointer_interface, wl_resource_get_version(resource), id);
+    assert(wl_pointer);
     wl_resource_set_implementation(
       wl_pointer, &wl_pointer_implementation, rs, NULL);
 
@@ -799,9 +840,11 @@ wl_seat_get_keyboard(struct wl_client*   client,
     struct redstate*    rs          = wl_resource_get_user_data(resource);
     struct wl_resource* wl_keyboard = wl_resource_create(
       client, &wl_keyboard_interface, wl_resource_get_version(resource), id);
+    assert(wl_keyboard);
     wl_resource_set_implementation(
       wl_keyboard, &wl_keyboard_implementation, wl_keyboard, NULL);
 
+    assert(rs->xkb_keymap_fd >= 0);
     wl_keyboard_send_keymap(wl_keyboard,
                             WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
                             rs->xkb_keymap_fd,
@@ -851,13 +894,18 @@ wl_global_bind_seat(struct wl_client* client,
                     uint32_t          version,
                     uint32_t          id)
 {
-    struct wl_resource* r =
+    struct wl_resource* wl_seat =
       wl_resource_create(client, &wl_seat_interface, version, id);
-    wl_resource_set_implementation(r, &wl_seat_implementation, data, NULL);
+    assert(wl_seat);
+
+    wl_resource_set_implementation(
+      wl_seat, &wl_seat_implementation, data, NULL);
+
     wl_seat_send_capabilities(
-      r, WL_SEAT_CAPABILITY_KEYBOARD | WL_SEAT_CAPABILITY_POINTER);
+      wl_seat, WL_SEAT_CAPABILITY_KEYBOARD | WL_SEAT_CAPABILITY_POINTER);
+
     if (version >= 2)
-        wl_seat_send_name(r, "seat0");
+        wl_seat_send_name(wl_seat, "seat0");
 }
 
 static void
@@ -1080,6 +1128,7 @@ xdg_decoration_manager_get_toplevel_decoration(struct wl_client*   client,
                          &zxdg_toplevel_decoration_v1_interface,
                          wl_resource_get_version(resource),
                          id);
+    assert(xdg_toplevel_decoration);
 
     wl_resource_set_implementation(xdg_toplevel_decoration,
                                    &zxdg_toplevel_decoration_v1_implementation,
@@ -1105,6 +1154,7 @@ wl_global_bind_xdg_decoration_manager(struct wl_client* client,
 {
     struct wl_resource* xdg_decoration_manager = wl_resource_create(
       client, &zxdg_decoration_manager_v1_interface, version, id);
+    assert(xdg_decoration_manager);
     wl_resource_set_implementation(xdg_decoration_manager,
                                    &zxdg_decoration_manager_v1_implementation,
                                    data,
@@ -1123,13 +1173,16 @@ wl_client_destroyed(struct wl_listener* listener, void* data)
         int is_trcs = 0;
         dll_for_each(rc->rs->trcs, v)
         {
-            if (v->val == rc)
+            if (v->val == rc) {
                 is_trcs = 1;
+                break;
+            }
         }
         if (is_trcs)
             red_destroy_trc(rc->rs, rc->rsurf);
     }
-    free(rc);
+    if (rc)
+        free(rc);
 }
 
 static void
@@ -1138,9 +1191,11 @@ wl_client_created(struct wl_listener* listener, void* data)
     struct redstate* rs = wl_container_of(listener, rs, client_created);
 
     struct wl_client* wl_client = data;
+    assert(wl_client);
 
     struct redclient* rc;
-    rc                          = malloc(sizeof(*rc));
+    rc = malloc(sizeof(*rc));
+    assert(rc);
     rc->rs                      = rs;
     rc->rsurf                   = NULL;
     rc->wl_keyboard             = NULL;
@@ -1166,7 +1221,8 @@ static void
 zwp_linux_buffer_resource_destroy(struct wl_resource* resource)
 {
     struct dmabuf* dmabuf = wl_resource_get_user_data(resource);
-    free(dmabuf);
+    if (dmabuf)
+        free(dmabuf);
 }
 
 struct dmabuf*
@@ -1226,7 +1282,8 @@ init_linux_buffer(struct wl_client*   client,
     }
 
     struct dmabuf* dmabuf;
-    dmabuf         = calloc(1, sizeof(*dmabuf));
+    dmabuf = calloc(1, sizeof(*dmabuf));
+    assert(dmabuf);
     dmabuf->flags  = flags;
     dmabuf->height = height;
     dmabuf->width  = width;
@@ -1281,7 +1338,8 @@ static void
 zwp_linux_buffer_params_resource_destroy(struct wl_resource* resource)
 {
     struct dmabuf_params* params = wl_resource_get_user_data(resource);
-    free(params);
+    if (params)
+        free(params);
 }
 
 static const struct zwp_linux_buffer_params_v1_interface
@@ -1315,7 +1373,8 @@ struct dmabuf_params*
 init_dmabuf_params()
 {
     struct dmabuf_params* params;
-    params     = calloc(1, sizeof(*params));
+    params = calloc(1, sizeof(*params));
+    assert(params);
     params->rs = NULL;
 
     return params;
@@ -1492,6 +1551,7 @@ handle_wl_log(const char* _fmt, va_list args)
     // remove newline at end
     int   l   = strlen(_fmt);
     char* fmt = malloc(l + 1);
+    assert(fmt);
     strcpy(fmt, _fmt);
     fmt[l - 1] = '\0';
 
@@ -1565,6 +1625,7 @@ init_compositor(struct redstate* rs)
 
     rs->subcompositor_global = wl_global_create(
       rs->wl_display, &wl_subcompositor_interface, 1, rs, bind_subcompositor);
+    assert(rs->subcompositor_global);
 
     rs->data_device_manager_global =
       wl_global_create(rs->wl_display,
@@ -1572,6 +1633,7 @@ init_compositor(struct redstate* rs)
                        3,
                        rs,
                        bind_data_device_manager);
+    assert(rs->data_device_manager_global);
 
     rs->xdg_decoration_manager =
       wl_global_create(rs->wl_display,
@@ -1579,12 +1641,14 @@ init_compositor(struct redstate* rs)
                        1,
                        rs,
                        wl_global_bind_xdg_decoration_manager);
+    assert(rs->xdg_decoration_manager);
 
     rs->zwp_linux_dmabuf = wl_global_create(rs->wl_display,
                                             &zwp_linux_dmabuf_v1_interface,
                                             5,
                                             rs,
                                             wl_global_bind_zwp_linux_dmabuf),
+    assert(rs->zwp_linux_dmabuf);
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);

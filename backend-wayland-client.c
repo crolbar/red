@@ -55,11 +55,7 @@ wl_frame_done(void*               data,
     wl_callback_destroy(wl_callback);
 
     bw->is_ready_for_frame = 1;
-
-    if (rs->focused_trc)
-        red_send_pending_callback(rs->focused_trc->rsurf);
-
-    redraw(rs);
+    red_on_frame_done(rs);
 }
 
 /* ======== wl_buffer ======== */

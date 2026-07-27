@@ -1,4 +1,5 @@
 #include "time.h"
+#include <assert.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -7,6 +8,7 @@ time_get_now()
 {
     struct timespec* tp;
     tp = malloc(sizeof(*tp));
+    assert(tp);
     clock_gettime(CLOCK_MONOTONIC, tp);
     return tp;
 }

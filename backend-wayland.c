@@ -63,6 +63,7 @@ backend_wayland_init(void* data)
         ROG_ERR("failed oppening drm device: %s", strerror(errno));
         goto fail;
     }
+    bw->drm_fd = fd;
 
     bw->gbm_dev = init_gbm(fd);
     if (!bw->gbm_dev)
@@ -91,7 +92,6 @@ backend_wayland_init(void* data)
 
     wl_display_roundtrip(bw->wc->wl_display);
 
-    bw->drm_fd = fd;
     return 0;
 fail:
     if (bw->wc)

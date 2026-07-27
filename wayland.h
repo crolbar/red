@@ -6,6 +6,9 @@ int
 init_compositor(struct redstate* rs);
 
 int
+red_on_frame_done(struct redstate* rs);
+
+int
 red_send_pending_callback(struct redsurface* rsurf);
 
 int

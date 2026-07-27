@@ -61,7 +61,7 @@ red_focus_trc(struct redstate* rs, struct redclient* trc)
         // pointer enter new trc
         if (trc->wl_pointer) {
             uint32_t serial = wl_display_next_serial(rs->wl_display);
-            wl_pointer_send_enter(rs->focused_trc->wl_pointer,
+            wl_pointer_send_enter(trc->wl_pointer,
                                   serial,
                                   trc->rsurf->wl_surface,
                                   red_get_lc_x(rs),
@@ -186,7 +186,6 @@ red_pointer_send_motion(struct redstate* rs,
                         double           y,
                         int              delta)
 {
-
     uint32_t width  = rs->backend->get_width(rs->backend->d);
     uint32_t height = rs->backend->get_height(rs->backend->d);
     if (delta) {

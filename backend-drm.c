@@ -74,7 +74,7 @@ backend_drm_init(void* data)
 
     char* dri_dev_path;
     if (strcmp(cfg.dri_dev, "auto") == 0) {
-        dri_dev_path = drm_get_first_dri_dev();
+        dri_dev_path = drm_get_first_primary_node();
         if (!dri_dev_path) {
             goto fail;
         }
@@ -88,6 +88,7 @@ backend_drm_init(void* data)
         ROG_ERR("failed oppening drm device: %s", strerror(errno));
         goto fail;
     }
+    free(dri_dev_path);
     drm_print_driver_version(fd);
 
     if (drm_set_client_caps(fd))
@@ -172,6 +173,9 @@ backend_drm_init(void* data)
     if (drm_init_cursor_plane(bd))
         goto fail;
 
+    rs->cursor_x = (float)bd->width / 2;
+    rs->cursor_y = (float)bd->height / 2;
+
     return 0;
 fail:
     if (fd)
@@ -231,15 +235,7 @@ page_flip_handler(int          fd,
     struct backend_drm* bd = rs->backend->d;
 
     bd->page_flip_ready = 1;
-
-    // TODO: can we miss a pending callback when we change focus when
-    // page_flip_ready == 0 ?
-    if (rs->focused_trc)
-        red_send_pending_callback(rs->focused_trc->rsurf);
-
-    // if updates happened on page flip.
-    // shouldn't happen much as we have one window
-    redraw(rs);
+    red_on_frame_done(rs);
 }
 
 static drmEventContext drmevctx = {

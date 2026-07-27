@@ -15,7 +15,7 @@ int
 drm_set_client_caps(int fd);
 
 char*
-drm_get_first_dri_dev();
+drm_get_first_primary_node();
 
 void
 drm_print_driver_version(int fd);

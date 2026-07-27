@@ -17,7 +17,6 @@
 int
 xkb_init_keyboard(struct redstate* rs)
 {
-
     struct xkb_keymap*    keymap;
     struct xkb_rule_names names = {
         .rules   = cfg.xkb_rules,

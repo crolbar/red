@@ -33,8 +33,11 @@ get_prop_value(int fd, drmModeObjectPropertiesPtr props, char* name)
             return -1;
 
         if (strcmp(prop->name, name) == 0) {
-            return props->prop_values[0];
+            uint64_t val = props->prop_values[0];
+            drmModeFreeProperty(prop);
+            return val;
         }
+        drmModeFreeProperty(prop);
     }
     return -1;
 }
@@ -48,8 +51,11 @@ get_prop_id(int fd, drmModeObjectPropertiesPtr props, char* name)
             return -1;
 
         if (strcmp(prop->name, name) == 0) {
-            return prop->prop_id;
+            uint32_t id = prop->prop_id;
+            drmModeFreeProperty(prop);
+            return id;
         }
+        drmModeFreeProperty(prop);
     }
     return -1;
 }
@@ -80,6 +86,7 @@ init_prop_ids(struct backend_drm* bd)
             }
             dp->conn_crtc_id = v;
         }
+        drmModeFreeObjectProperties(props);
     }
     // crtc
     {
@@ -106,6 +113,7 @@ init_prop_ids(struct backend_drm* bd)
             }
             dp->crtc_mode_id = v;
         }
+        drmModeFreeObjectProperties(props);
     }
 
     // primary plane
@@ -197,7 +205,9 @@ init_prop_ids(struct backend_drm* bd)
             }
             dp->pp_crtc_id = v;
         }
+        drmModeFreeObjectProperties(props);
     }
+
     // cursor plane
     {
         drmModeObjectPropertiesPtr props = drmModeObjectGetProperties(
@@ -287,6 +297,7 @@ init_prop_ids(struct backend_drm* bd)
             }
             dp->cp_crtc_id = v;
         }
+        drmModeFreeObjectProperties(props);
     }
 
     bd->props = dp;

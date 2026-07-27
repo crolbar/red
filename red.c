@@ -27,10 +27,12 @@ int
 main(int argc, char** argv)
 {
     ROG_INIT();
-    int ret = 0;
+    int ret = -1;
 
     struct redstate* rs;
-    rs                    = malloc(sizeof(*rs));
+    rs = malloc(sizeof(*rs));
+    assert(rs);
+
     rs->sig_fd            = -1;
     rs->tty_fd            = -1;
     rs->li                = NULL;
@@ -48,6 +50,7 @@ main(int argc, char** argv)
     rs->backend    = (rs->is_wayland_client) ? &backend_wayland : &backend_drm;
     rs->backend->d = rs->backend->init_data();
     rs->xkb        = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    assert(rs->xkb);
     rs->xkb_keymap_fd      = -1;
     rs->xkb_keymap_string  = NULL;
     rs->xkb_keymap_size    = 0;
@@ -81,53 +84,30 @@ main(int argc, char** argv)
     rs->cursor_y              = 0;
     rs->using_hardware_cursor = 0;
 
-    {
-        gl_proc = init_gl_proc();
-        if (!gl_proc) {
-            ret = 1;
-            goto end;
-        }
+    if (!(gl_proc = init_gl_proc())) {
+        goto end;
     }
 
     // backend
     if (rs->backend->init(rs)) {
-        ret = 1;
         goto end;
     }
-    rs->cursor_x = (float)rs->backend->get_width(rs->backend->d) / 2;
-    rs->cursor_y = (float)rs->backend->get_height(rs->backend->d) / 2;
 
     // signals
-    {
-        int signal_fd = init_signals();
-        if (signal_fd < 0) {
-            ret = -1;
-            goto end;
-        }
-        rs->sig_fd = signal_fd;
+    if ((rs->sig_fd = init_signals()) < 0) {
+        goto end;
     }
 
     // VT
-    if (!getenv("RED_DONT_SPAWN_CLIENT"))
-        if (!rs->is_wayland_client) //
-        {
-            int tty_fd = init_vt();
-            if (tty_fd == -1) {
-                ret = 1;
-                goto end;
-            }
-            rs->tty_fd = tty_fd;
+    if (!getenv("RED_DONT_SPAWN_CLIENT") && !rs->is_wayland_client)
+        if ((rs->tty_fd = init_vt()) == -1) {
+            goto end;
         }
 
     // libinput
-    {
-        struct libinput* li = init_input();
-        if (!li) {
-            ROG_ERR("failed to init libinput");
-            ret = 1;
-            goto end;
-        }
-        rs->li = li;
+    if (!(rs->li = init_input())) {
+        ROG_ERR("failed to init libinput");
+        goto end;
     }
 
     // gl
@@ -135,7 +115,6 @@ main(int argc, char** argv)
         if (!rs->using_hardware_cursor)
             if (gl_setup_cursor_program(rs)) {
                 ROG_ERR("opengl failed to setup cursor program");
-                ret = 1;
                 goto end;
             }
     }
@@ -153,20 +132,17 @@ main(int argc, char** argv)
         int li_fd = libinput_get_fd(rs->li);
         if (li_fd < 0) {
             ROG_ERR("failed get libinput fd: %s", strerror(errno));
-            ret = 1;
             goto end;
         }
 
         int backend_fd = rs->backend->get_fd(rs->backend->d);
         if (backend_fd < 0) {
-            ret = 1;
             goto end;
         }
 
         int wl_event_loop_fd = wl_event_loop_get_fd(rs->wl_event_loop);
         if (wl_event_loop_fd < 0) {
             ROG_ERR("failed to get event loop fd");
-            ret = 1;
             goto end;
         }
 
@@ -186,7 +162,6 @@ main(int argc, char** argv)
 
             if (poll(fds, fds_size, -1) == -1) {
                 ROG_ERR("poll fds error");
-                ret = 1;
                 goto end;
             }
 
@@ -205,7 +180,6 @@ main(int argc, char** argv)
                 int prev_active = rs->active;
 
                 if (handle_signal(rs) == -1) {
-                    ret = 1;
                     goto end;
                 }
 
@@ -217,15 +191,15 @@ main(int argc, char** argv)
 
             // input event
             if (fds[0].revents & POLLIN) {
-                if (input_dispatch(rs)) {
-                    ret = 1;
+                if (input_dispatch(rs))
                     goto end;
-                }
             }
         }
     }
 
+    ret = 0;
 end:
+    ret *= -1;
     ROG_WARN("Closing..");
 
     // if (rs->drm && rs->drm->fd != -1)
@@ -240,7 +214,8 @@ end:
     if (rs->li)
         libinput_unref(rs->li);
 
-    free(rs->time_start);
+    if (rs->time_start)
+        free(rs->time_start);
 
     // if (drm)
     //     free(drm);

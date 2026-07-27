@@ -32,7 +32,9 @@ drm_flip(struct backend_drm* bd, uint32_t buf_id, struct redstate* rs)
 
     bd->page_flip_ready = 0;
 
+    // NOTE: do we need atomic for this?
     drmModeAtomicReqPtr req = drmModeAtomicAlloc();
+    assert(req);
 
     add_prop(req, bd->primary_plane_id, bd->props->pp_fb_id, buf_id);
 
@@ -51,6 +53,7 @@ int
 drm_set_crct(struct backend_drm* bd, uint32_t buf_id)
 {
     drmModeAtomicReqPtr req = drmModeAtomicAlloc();
+    assert(req);
 
     // set mode
     drmModeModeInfo mode = bd->mode;
@@ -120,8 +123,8 @@ drm_set_crct(struct backend_drm* bd, uint32_t buf_id)
         ROG_ERR("failed set crtc: %s", strerror(errno));
         return 1;
     }
-
     drmModeAtomicFree(req);
+
     return 0;
 }
 
@@ -222,15 +225,17 @@ drm_set_client_caps(int fd)
 }
 
 char*
-drm_get_first_dri_dev()
+drm_get_first_primary_node()
 {
     char* fmt = "/dev/dri/card%d";
     for (int i = 0; i <= 50; i++) {
         int   l    = snprintf(NULL, 0, fmt, i);
-        char* path = malloc(l + 1);
+        char* path = calloc(1, l + 1);
+        assert(path);
         sprintf(path, fmt, i);
         struct stat sb;
         if (stat(path, &sb) != 0) {
+            free(path);
             continue;
         }
 
@@ -238,11 +243,13 @@ drm_get_first_dri_dev()
             int fd = open(path, O_RDWR | O_CLOEXEC);
             if (fd < 0) {
                 ROG_ERR("failed oppening drm device: %s", strerror(errno));
+                free(path);
                 return "";
             }
             if (drmIsMaster(fd) == 0) {
                 close(fd);
                 ROG_WARN("found dri dev %s, but its used, skipping it.", path);
+                free(path);
                 continue;
             }
             close(fd);
@@ -275,6 +282,7 @@ drm_get_crtc_idx(int fd, uint32_t crtc_id)
 
     for (int i = 0; i < res->count_crtcs; i++) {
         drmModeCrtcPtr crtc = drmModeGetCrtc(fd, res->crtcs[i]);
+        assert(crtc);
         if (crtc->crtc_id == crtc_id) {
             drmModeFreeCrtc(crtc);
             drmModeFreeResources(res);
@@ -331,7 +339,7 @@ drm_get_connector(int fd)
     int       count = res->count_connectors;
     uint32_t* conns = res->connectors;
 
-    // get first found connected connector
+    // get first connected connector
     for (int i = 0; i < count; i++) {
         drmModeConnector* conn = drmModeGetConnector(fd, conns[i]);
         if (!conn)

@@ -93,14 +93,14 @@ gl_setup_cursor_program(struct redstate* rs)
     CALL(glBufferData(
       GL_ELEMENT_ARRAY_BUFFER, sizeof(indecies), indecies, GL_STATIC_DRAW));
 
-    glVertexAttribPointer(0,
-                          2, // vec2
-                          GL_FLOAT,
-                          GL_FALSE,
-                          2 * sizeof(float), // size of vec
-                          (void*)0);
+    CALL(glVertexAttribPointer(0,
+                               2, // vec2
+                               GL_FLOAT,
+                               GL_FALSE,
+                               2 * sizeof(float), // size of vec
+                               (void*)0));
 
-    glEnableVertexAttribArray(0);
+    CALL(glEnableVertexAttribArray(0));
     rs->cursor_gl_program = program;
     rs->cursor_gl_vao     = vao;
 

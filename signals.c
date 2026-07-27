@@ -45,19 +45,21 @@ init_signals()
 int
 handle_signal(struct redstate* rs)
 {
-    struct signalfd_siginfo si;
-    ssize_t                 n = read(rs->sig_fd, &si, sizeof(si));
+    struct signalfd_siginfo si = { 0 };
+    ssize_t                 n  = read(rs->sig_fd, &si, sizeof(si));
 
     if (n != sizeof(si)) {
-        perror("read signalfd");
+        ROG_ERR("read signalfd: %s", strerror(errno));
         return -1;
     }
 
     switch (si.ssi_signo) {
         case SIGUSR1:
             assert(!rs->is_wayland_client);
+
             ROG_INFO("Releasing drm_master and vt_display");
             struct backend_drm* bd = rs->backend->d;
+
             while (!bd->page_flip_ready) {
                 rs->backend->handle_events(bd);
             }
@@ -84,6 +86,7 @@ handle_signal(struct redstate* rs)
 
         case SIGUSR2:
             assert(!rs->is_wayland_client);
+
             ROG_INFO("Acquiring drm_master and vt_display");
             bd = rs->backend->d;
 
