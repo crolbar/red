@@ -68,15 +68,7 @@ struct redsurface
     int32_t geom_height;
     int     geom_configured;
 
-    struct redsurface* parent;
-    int                sub_x, sub_y;
-
     struct wl_resource* pending_buffer; // set by wl_surface.attach
-    // TODO: very unsafe, how we are doing this right now.
-    // but we need something like this for when rerender is needed
-    // but its not triggered by the user and the user's client should be
-    // rendered.
-    struct wl_resource* old_pending_buffer;
     struct wl_resource* pending_callback; // set by wl_surface.frame
     int                 configured;       // xdg_surface configure
 };
@@ -128,6 +120,7 @@ struct redstate
     struct wl_global*     wl_output;
     struct wl_global*     wl_seat;
     struct wl_global*     zwp_linux_dmabuf;
+    struct wl_global*     wp_viewporter;
     struct wl_global*     subcompositor_global;
     struct wl_global*     data_device_manager_global;
     struct wl_listener    client_created;

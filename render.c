@@ -11,8 +11,6 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
 {
     struct wl_resource* buffer = rsurf->pending_buffer;
     if (!buffer)
-        buffer = rsurf->old_pending_buffer;
-    if (!buffer)
         return 1;
 
     int32_t               src_w;
@@ -140,7 +138,6 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
     glUseProgram(0);
 
     if (rsurf->pending_buffer) {
-        rsurf->old_pending_buffer = buffer;
         wl_buffer_send_release(buffer);
         rsurf->pending_buffer = NULL;
     }
@@ -268,7 +265,8 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     glClear(GL_COLOR_BUFFER_BIT);
 
     if (rs->focused_trc && rs->focused_trc->rsurf)
-        render_surface(rs, rs->focused_trc->rsurf);
+        if (render_surface(rs, rs->focused_trc->rsurf))
+            return 1;
 
     // software cursor
     if (!rs->is_wayland_client && !rs->using_hardware_cursor) {
@@ -306,7 +304,8 @@ redraw(struct redstate* rs)
             return;
         }
 
-    render_frame(rs, rb);
+    if (render_frame(rs, rb))
+        ROG_ERR("error occured when rending frame");
 
     rs->backend->push_buffer(rs, rb);
     rs->needs_redraw = 0;

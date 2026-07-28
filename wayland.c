@@ -5,6 +5,7 @@
 #include "log.h"
 #include "red.h"
 #include "render.h"
+#include "viewporter-server-protocol.h"
 #include "xdg-decoration-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
 #include <assert.h>
@@ -18,6 +19,7 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <wayland-server.h>
+#include <wayland-util.h>
 
 int
 red_send_pending_callback(struct redsurface* rsurf)
@@ -62,6 +64,12 @@ wl_surface_attach(struct wl_client*   client,
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     assert(rsurf);
+
+    if (rsurf->pending_buffer) {
+        wl_buffer_send_release(rsurf->pending_buffer);
+        rsurf->pending_buffer = NULL;
+    }
+
     rsurf->pending_buffer = buffer;
 }
 
@@ -230,19 +238,18 @@ init_redsurface()
     if (!rsurf) {
         return NULL;
     }
-    rsurf->rs                 = NULL;
-    rsurf->configured         = 0;
-    rsurf->pending_buffer     = NULL;
-    rsurf->pending_callback   = NULL;
-    rsurf->wl_surface         = NULL;
-    rsurf->xdg_toplevel       = NULL;
-    rsurf->app_id             = NULL;
-    rsurf->old_pending_buffer = NULL;
-    rsurf->geom_x             = 0;
-    rsurf->geom_y             = 0;
-    rsurf->geom_width         = 0;
-    rsurf->geom_height        = 0;
-    rsurf->geom_configured    = 0;
+    rsurf->rs               = NULL;
+    rsurf->configured       = 0;
+    rsurf->pending_buffer   = NULL;
+    rsurf->pending_callback = NULL;
+    rsurf->wl_surface       = NULL;
+    rsurf->xdg_toplevel     = NULL;
+    rsurf->app_id           = NULL;
+    rsurf->geom_x           = 0;
+    rsurf->geom_y           = 0;
+    rsurf->geom_width       = 0;
+    rsurf->geom_height      = 0;
+    rsurf->geom_configured  = 0;
 
     return rsurf;
 }
@@ -446,8 +453,6 @@ int
 red_send_configure(struct redsurface* rsurf, int activated, int resizing)
 {
     rsurf->configured = 0;
-    // TODO
-    rsurf->old_pending_buffer = NULL;
 
     uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
     uint32_t height = rsurf->rs->backend->get_height(rsurf->rs->backend->d);
@@ -920,9 +925,6 @@ subsurface_set_position(struct wl_client*   client,
                         int32_t             x,
                         int32_t             y)
 {
-    struct redsurface* surf = wl_resource_get_user_data(resource);
-    surf->sub_x             = x;
-    surf->sub_y             = y;
 }
 
 static void
@@ -968,13 +970,9 @@ subcompositor_get_subsurface(struct wl_client*   client,
                              struct wl_resource* surface_resource,
                              struct wl_resource* parent_resource)
 {
-    struct redsurface* surf   = wl_resource_get_user_data(surface_resource);
-    struct redsurface* parent = wl_resource_get_user_data(parent_resource);
-    surf->parent              = parent;
-
     struct wl_resource* r = wl_resource_create(
       client, &wl_subsurface_interface, wl_resource_get_version(resource), id);
-    wl_resource_set_implementation(r, &subsurface_impl, surf, NULL);
+    wl_resource_set_implementation(r, &subsurface_impl, NULL, NULL);
 }
 
 static const struct wl_subcompositor_interface subcompositor_impl = {
@@ -1545,6 +1543,79 @@ wl_global_bind_zwp_linux_dmabuf(struct wl_client* client,
     }
 }
 
+static void
+wp_viewport_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+}
+static void
+wp_viewport_set_source(struct wl_client*   client,
+                       struct wl_resource* resource,
+                       wl_fixed_t          x,
+                       wl_fixed_t          y,
+                       wl_fixed_t          width,
+                       wl_fixed_t          height)
+{
+    // ROG("src: %d, %d (%dx%d)",
+    //     wl_fixed_to_int(x),
+    //     wl_fixed_to_int(y),
+    //     wl_fixed_to_int(width),
+    //     wl_fixed_to_int(height));
+}
+static void
+wp_viewport_set_destination(struct wl_client*   client,
+                            struct wl_resource* resource,
+                            int32_t             width,
+                            int32_t             height)
+{
+    struct redstate* rs      = wl_resource_get_user_data(resource);
+    uint32_t         _width  = rs->backend->get_width(rs->backend->d);
+    uint32_t         _height = rs->backend->get_height(rs->backend->d);
+    // ROG("dst: %dx%d when %dx%d", width, height, _width, _height);
+}
+
+static const struct wp_viewport_interface wp_viewport_implementation = {
+    .destroy         = wp_viewport_destroy,
+    .set_source      = wp_viewport_set_source,
+    .set_destination = wp_viewport_set_destination,
+};
+
+static void
+wp_viewporter_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static void
+wp_viewporter_get_viewport(struct wl_client*   client,
+                           struct wl_resource* resource,
+                           uint32_t            id,
+                           struct wl_resource* surface)
+{
+    struct wl_resource* wp_viewport = wl_resource_create(
+      client, &wp_viewport_interface, wl_resource_get_version(resource), id);
+    wl_resource_set_implementation(wp_viewport,
+                                   &wp_viewport_implementation,
+                                   wl_resource_get_user_data(resource),
+                                   NULL);
+}
+
+static const struct wp_viewporter_interface wp_viewporter_implementation = {
+    .destroy      = wp_viewporter_destroy,
+    .get_viewport = wp_viewporter_get_viewport,
+};
+
+static void
+wl_global_bind_wp_viewporter(struct wl_client* client,
+                             void*             data,
+                             uint32_t          version,
+                             uint32_t          id)
+{
+    struct wl_resource* wp_viewporter =
+      wl_resource_create(client, &wp_viewporter_interface, version, id);
+    wl_resource_set_implementation(
+      wp_viewporter, &wp_viewporter_implementation, data, NULL);
+}
+
 void
 handle_wl_log(const char* _fmt, va_list args)
 {
@@ -1649,6 +1720,13 @@ init_compositor(struct redstate* rs)
                                             rs,
                                             wl_global_bind_zwp_linux_dmabuf),
     assert(rs->zwp_linux_dmabuf);
+
+    rs->wp_viewporter = wl_global_create(rs->wl_display,
+                                         &wp_viewporter_interface,
+                                         1,
+                                         rs,
+                                         wl_global_bind_wp_viewporter);
+    assert(rs->wp_viewporter);
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);

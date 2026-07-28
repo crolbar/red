@@ -82,7 +82,9 @@ red_focus_trc(struct redstate* rs, struct redclient* trc)
             red_send_configure(trc->rsurf, 1, 0);
     }
 
-    request_redraw(rs);
+    if (rs->backend->is_ready_for_frame(rs->backend->d))
+        if (rs->focused_trc)
+            red_send_pending_callback(rs->focused_trc->rsurf);
     return 0;
 }
 

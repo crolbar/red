@@ -40,8 +40,14 @@ WAYLAND_PROTOCOLS_DIR = $(shell pkg-config --variable=pkgdatadir wayland-protoco
 XDG_SHELL_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/xdg-shell/xdg-shell.xml
 XDG_DECORATION_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
 LINUX_DMABUF_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/linux-dmabuf/linux-dmabuf-v1.xml
+VIEWPORTER_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/viewporter/viewporter.xml
 
 all: $(BINS)
+
+viewporter-server-protocol.h: $(VIEWPORTER_XML)
+	wayland-scanner server-header $< $@
+viewporter-protocol.c: $(VIEWPORTER_XML)
+	wayland-scanner private-code $< $@
 
 xdg-decoration-server-protocol.h: $(XDG_DECORATION_XML)
 	wayland-scanner server-header $< $@
@@ -65,6 +71,8 @@ linux-dmabuf-protocol.c: $(LINUX_DMABUF_XML)
 PRO_SRC=linux-dmabuf-protocol.c \
 		 linux-dmabuf-client-protocol.h \
 		 linux-dmabuf-server-protocol.h \
+		 viewporter-server-protocol.h \
+		 viewporter-protocol.c \
 		 xdg-shell-protocol.c \
 		 xdg-shell-client-protocol.h \
 		 xdg-shell-server-protocol.h \
