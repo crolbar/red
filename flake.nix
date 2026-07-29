@@ -6,6 +6,7 @@
     pkgs = import inputs.nixpkgs {inherit system;};
 
     nativeBuildInputs = with pkgs; [
+      gdb
       clang-tools
       wayland-scanner
       pkg-config

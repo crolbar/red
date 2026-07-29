@@ -14,140 +14,159 @@ double
 red_get_lc_x(struct redstate* rs)
 {
     // add decorations in account
-    if (rs->focused_trc && rs->focused_trc->rsurf) {
-        if (rs->focused_trc->rsurf->geom_configured)
-            return rs->cursor_x + rs->focused_trc->rsurf->geom_x;
+    if (rs->focused_rt && rs->focused_rt->rsurf) {
+        if (rs->focused_rt->rsurf->geom_configured)
+            return rs->cursor_x + rs->focused_rt->rsurf->geom_x;
     }
     return rs->cursor_x;
 }
 double
 red_get_lc_y(struct redstate* rs)
 {
-    if (rs->focused_trc && rs->focused_trc->rsurf) {
-        if (rs->focused_trc->rsurf->geom_configured)
-            return rs->cursor_y + rs->focused_trc->rsurf->geom_y;
+    if (rs->focused_rt && rs->focused_rt->rsurf) {
+        if (rs->focused_rt->rsurf->geom_configured)
+            return rs->cursor_y + rs->focused_rt->rsurf->geom_y;
     }
     return rs->cursor_y;
 }
 
-int
-red_focus_trc(struct redstate* rs, struct redclient* trc)
+struct redclient*
+red_get_client(struct redstate* rs, struct wl_client* wl_client)
 {
-    if (rs->focused_trc) {
-        // pointer leave old trc
-        if (rs->focused_trc->wl_pointer) {
-            uint32_t serial = wl_display_next_serial(rs->wl_display);
-            wl_pointer_send_leave(rs->focused_trc->wl_pointer,
-                                  serial,
-                                  rs->focused_trc->rsurf->wl_surface);
-            wl_pointer_send_frame(rs->focused_trc->wl_pointer);
+    dll_for_each(rs->rcs, v)
+    {
+        if (v->val->wl_client == wl_client)
+            return v->val;
+    }
+    return NULL;
+}
+struct redclient*
+red_get_client_by_rsurf(struct redstate* rs, struct redsurface* rsurf)
+{
+    dll_for_each(rs->rcs, v_rc)
+    {
+        dll_for_each(v_rc->val->rsurfs, v)
+        {
+            if (v->val == rsurf)
+                return v_rc->val;
         }
-        // keyboard leave old trc
-        if (rs->focused_trc->wl_keyboard) {
-            uint32_t serial = wl_display_next_serial(rs->wl_display);
-            wl_keyboard_send_leave(rs->focused_trc->wl_keyboard,
-                                   serial,
-                                   rs->focused_trc->rsurf->wl_surface);
-        }
+    }
+    return NULL;
+}
 
-        if (rs->focused_trc->rsurf)
-            red_send_configure(rs->focused_trc->rsurf, 0, 0);
+// check if rc is not freed.
+// we have some states where we could do a use after free on redclient.
+int
+red_is_client_valid(struct redstate* rs, struct redclient* rc)
+{
+    dll_for_each(rs->rcs, v)
+    {
+        if (v->val != rc)
+            continue;
+
+        return 1;
+    }
+    return 0;
+}
+
+int
+red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
+{
+    // send leave on keyboard, pointer and surface to old focus
+    struct redtoplevel* frt = rs->focused_rt;
+    if (frt && red_is_client_valid(rs, frt->rc)) {
+        if (frt->rc->wl_pointer)
+            red_pointer_send_leave(frt->rc, frt->rsurf->wl_surface);
+
+        if (frt->rc->wl_keyboard)
+            red_keyboard_send_leave(frt->rc, frt->rsurf->wl_surface);
+
+        if (frt->rsurf)
+            red_send_configure(frt->rsurf, 0, 0);
+    }
+    frt = NULL;
+
+    // send enter + frame callback on new focus
+    if (rt) {
+        if (rt->rc->wl_pointer)
+            red_pointer_send_enter(rt->rc, rt->rsurf->wl_surface);
+
+        if (rt->rc->wl_keyboard)
+            red_keyboard_send_enter(rt->rc, rt->rsurf->wl_surface);
+
+        if (rt->rsurf)
+            red_send_configure(rt->rsurf, 1, 0);
+
+        if (rs->backend->is_ready_for_frame(rs->backend->d))
+            red_send_pending_callback(rt->rsurf);
     }
 
-    rs->focused_trc = trc;
+    rs->focused_rt = rt;
 
-    // trc can be null
-    if (trc) {
-        // pointer enter new trc
-        if (trc->wl_pointer) {
-            uint32_t serial = wl_display_next_serial(rs->wl_display);
-            wl_pointer_send_enter(trc->wl_pointer,
-                                  serial,
-                                  trc->rsurf->wl_surface,
-                                  red_get_lc_x(rs),
-                                  red_get_lc_y(rs));
-            wl_pointer_send_frame(trc->wl_pointer);
-        }
-        // keyboard enter new trc
-        if (trc->wl_keyboard && trc->rsurf->wl_surface) {
-            uint32_t        serial = wl_display_next_serial(rs->wl_display);
-            struct wl_array keys;
-            wl_array_init(&keys);
-            wl_keyboard_send_enter(
-              trc->wl_keyboard, serial, trc->rsurf->wl_surface, &keys);
-            wl_array_release(&keys);
-        }
-
-        if (trc->rsurf)
-            red_send_configure(trc->rsurf, 1, 0);
-    }
-
-    if (rs->backend->is_ready_for_frame(rs->backend->d))
-        if (rs->focused_trc)
-            red_send_pending_callback(rs->focused_trc->rsurf);
+    if (!rt)
+        request_redraw(rs);
     return 0;
 }
 
 // on window close
 int
-red_destroy_trc(struct redstate* rs, struct redsurface* rsurf)
+red_destroy_rt(struct redstate* rs, struct redtoplevel* rt)
 {
-    struct redclient* rc = NULL;
-    dll_for_each(rs->trcs, v)
-    {
-        // find our rc
-        if (v->val->rsurf != rsurf)
-            continue;
-        rc = v->val;
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("destroy rt %d(%s) %d", rt, rt->app_id, rt->rc->wl_client);
+#endif
+    // move focus to prev or next for now.
+    // later we should do prev focus
+    if (rs->focused_rt == rt) {
+        dll_for_each(rs->rts, v)
+        {
+            if (v->val != rt)
+                continue;
 
-        // change focused trc only if the destroyed one is on focus
-        if (v->val != rs->focused_trc)
+            if (v->prev)
+                red_focus_rt(rs, v->prev->val);
+            else if (v->next)
+                red_focus_rt(rs, v->next->val);
+            else
+                red_focus_rt(rs, NULL);
             break;
-
-        struct redclient* new_focus = NULL;
-        if (v->prev)
-            new_focus = v->prev->val;
-        else if (v->next)
-            new_focus = v->next->val;
-
-        red_focus_trc(rs, new_focus);
-        break;
+        }
     }
 
-    if (!rc)
-        ROG_ERR("toplevel destroy: did not find trc in trcs list");
-    else
-        dll_remove_val(rs->trcs, rc);
+    dll_remove_val(rs->rts, rt);
 
+    free(rt->app_id);
+    free(rt);
     return 0;
 }
 
-int
-red_create_trc(struct redstate*   rs,
-               struct redsurface* rsurf,
-               struct wl_client*  wl_client)
+struct redtoplevel*
+red_create_rt(struct redstate*   rs,
+              struct redsurface* rsurf,
+              struct wl_client*  wl_client)
 {
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("creating rt client: %d, rsurf: %d", wl_client, rsurf);
+#endif
 
-    struct redclient* rc = NULL;
-    dll_for_each(rs->rcs, v)
-    {
-        if (v->val->wl_client == wl_client)
-            rc = v->val;
-    }
-    if (!rc) {
-        ROG_ERR("toplevel create: did not find rc in rcs list");
-        return 1;
-    }
+    struct redtoplevel* rt;
+    rt = calloc(1, sizeof(*rt));
+    assert(rt);
 
-    // NOTE: maybe move this on creation of wl_surface
-    // not needed for now
-    rc->rsurf = rsurf;
-    dll_push_tail(rs->trcs, rc);
+    struct redclient* rc = red_get_client(rs, wl_client);
+    assert(rc);
+
+    rt->rs     = rs;
+    rt->rc     = rc;
+    rt->rsurf  = rsurf;
+    rt->app_id = NULL;
+
+    dll_push_tail(rs->rts, rt);
 
     // instantly focusing new toplevel
-    red_focus_trc(rs, rc);
+    red_focus_rt(rs, rt);
 
-    return 0;
+    return rt;
 }
 
 int
@@ -157,20 +176,19 @@ red_kb_send_keys(struct redstate* rs,
                  int              press,
                  int              mods_have_changed)
 {
-
-    if (!rs->focused_trc)
+    if (!rs->focused_rt)
         return 0;
 
-    if (!rs->focused_trc->wl_keyboard)
+    if (!rs->focused_rt->rc->wl_keyboard)
         return 0;
 
     uint32_t serial = wl_display_next_serial(rs->wl_display);
     wl_keyboard_send_key(
-      rs->focused_trc->wl_keyboard, serial, time_msec, key, press);
+      rs->focused_rt->rc->wl_keyboard, serial, time_msec, key, press);
 
     if (mods_have_changed) {
         serial = wl_display_next_serial(rs->wl_display);
-        wl_keyboard_send_modifiers(rs->focused_trc->wl_keyboard,
+        wl_keyboard_send_modifiers(rs->focused_rt->rc->wl_keyboard,
                                    serial,
                                    rs->xkb_mods_depressed,
                                    rs->xkb_mods_latched,
@@ -201,12 +219,12 @@ red_pointer_send_motion(struct redstate* rs,
         if (drm_update_cursor_plane(rs))
             return 1;
 
-    if (rs->focused_trc && rs->focused_trc->wl_pointer) {
-        wl_pointer_send_motion(rs->focused_trc->wl_pointer,
+    if (rs->focused_rt && rs->focused_rt->rc->wl_pointer) {
+        wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
                                time_msec,
                                wl_fixed_from_double(red_get_lc_x(rs)),
                                wl_fixed_from_double(red_get_lc_y(rs)));
-        wl_pointer_send_frame(rs->focused_trc->wl_pointer);
+        wl_pointer_send_frame(rs->focused_rt->rc->wl_pointer);
     }
 
     // need to redraw the whole frame on software cursor
@@ -222,13 +240,13 @@ red_pointer_send_button(struct redstate* rs,
                         uint32_t         button,
                         int              state)
 {
-    if (!rs->focused_trc || !rs->focused_trc->wl_pointer)
+    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
         return 0;
 
     uint32_t serial = wl_display_next_serial(rs->wl_display);
     wl_pointer_send_button(
-      rs->focused_trc->wl_pointer, serial, time_msec, button, state);
-    wl_pointer_send_frame(rs->focused_trc->wl_pointer);
+      rs->focused_rt->rc->wl_pointer, serial, time_msec, button, state);
+    wl_pointer_send_frame(rs->focused_rt->rc->wl_pointer);
 
     return 0;
 }
@@ -239,20 +257,20 @@ red_pointer_send_scroll(struct redstate* rs,
                         int              is_vertical_scroll,
                         int              is_finger)
 {
-    if (!rs->focused_trc || !rs->focused_trc->wl_pointer)
+    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
         return 0;
 
     if (is_finger)
-        wl_pointer_send_axis_source(rs->focused_trc->wl_pointer,
+        wl_pointer_send_axis_source(rs->focused_rt->rc->wl_pointer,
                                     WL_POINTER_AXIS_SOURCE_FINGER);
 
-    wl_pointer_send_axis(rs->focused_trc->wl_pointer,
+    wl_pointer_send_axis(rs->focused_rt->rc->wl_pointer,
                          time_msec,
                          (is_vertical_scroll)
                            ? WL_POINTER_AXIS_VERTICAL_SCROLL
                            : WL_POINTER_AXIS_HORIZONTAL_SCROLL,
                          wl_fixed_from_double(val));
-    wl_pointer_send_frame(rs->focused_trc->wl_pointer);
+    wl_pointer_send_frame(rs->focused_rt->rc->wl_pointer);
 
     return 0;
 }

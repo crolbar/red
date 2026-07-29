@@ -6,6 +6,7 @@
 #include "red.h"
 #include "render.h"
 #include "viewporter-server-protocol.h"
+#include "wayland.h"
 #include "xdg-decoration-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
 #include <assert.h>
@@ -40,8 +41,8 @@ red_on_frame_done(struct redstate* rs)
 {
     // TODO: can we miss a pending callback when we change focus when
     // page_flip_ready == 0 ?
-    if (rs->focused_trc)
-        red_send_pending_callback(rs->focused_trc->rsurf);
+    if (rs->focused_rt)
+        red_send_pending_callback(rs->focused_rt->rsurf);
 
     // if updates happened on page flip.
     // shouldn't happen much as we have one window
@@ -103,17 +104,18 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     assert(rsurf);
+    assert(rsurf->rs);
 
-    if (!rsurf->rs->focused_trc)
+    if (!rsurf->rs->focused_rt)
         return;
 
     // on first commit, client is not sending a buffer
     if (rsurf->xdg_surface && !rsurf->configured)
         return;
 
-    // NOTE: clients that are on background
+    // NOTE: redsurfaces that are on background
     // do not need redraw or frame callback
-    if (client != rsurf->rs->focused_trc->wl_client)
+    if (rsurf != rsurf->rs->focused_rt->rsurf)
         return;
 
     request_redraw(rsurf->rs);
@@ -172,17 +174,6 @@ wl_surface_get_release(struct wl_client*   client,
 {
 }
 
-static void
-wl_surface_resource_destroy(struct wl_resource* resource)
-{
-    struct redsurface* rsurf = wl_resource_get_user_data(resource);
-
-    if (rsurf->app_id)
-        free(rsurf->app_id);
-    if (rsurf)
-        free(rsurf);
-}
-
 static const struct wl_surface_interface wl_surface_implementation = {
     .destroy              = wl_surface_destroy,
     .attach               = wl_surface_attach,
@@ -197,6 +188,25 @@ static const struct wl_surface_interface wl_surface_implementation = {
     .offset               = wl_surface_offset,
     .get_release          = wl_surface_get_release,
 };
+
+static void
+wl_surface_resource_destroy(struct wl_resource* resource)
+{
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    assert(rsurf);
+
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("destroing wl_surf: %d", rsurf);
+#endif
+
+    // remove wl_surf from rsurfs of redclient
+    if (red_is_client_valid(rsurf->rs, rsurf->rc))
+        dll_remove_val(rsurf->rc->rsurfs, rsurf);
+
+    if (rsurf)
+        free(rsurf);
+    rsurf = NULL;
+}
 
 static void
 wl_region_destroy(struct wl_client* c, struct wl_resource* r)
@@ -239,12 +249,12 @@ init_redsurface()
         return NULL;
     }
     rsurf->rs               = NULL;
+    rsurf->rc               = NULL;
     rsurf->configured       = 0;
     rsurf->pending_buffer   = NULL;
     rsurf->pending_callback = NULL;
     rsurf->wl_surface       = NULL;
     rsurf->xdg_toplevel     = NULL;
-    rsurf->app_id           = NULL;
     rsurf->geom_x           = 0;
     rsurf->geom_y           = 0;
     rsurf->geom_width       = 0;
@@ -262,12 +272,16 @@ wl_compositor_create_surface(struct wl_client*   client,
     struct redstate* rs = resource->data;
     assert(rs);
 
+    struct redclient* rc = red_get_client(rs, client);
+    assert(rc);
+
     struct redsurface* rsurf = init_redsurface();
     if (!rsurf) {
         ROG_ERR("oom?");
         return;
     }
     rsurf->rs         = rs;
+    rsurf->rc         = rc;
     rsurf->wl_surface = wl_resource_create(
       client, &wl_surface_interface, wl_resource_get_version(resource), id);
     if (!rsurf->wl_surface) {
@@ -279,6 +293,8 @@ wl_compositor_create_surface(struct wl_client*   client,
                                    &wl_surface_implementation,
                                    rsurf,
                                    wl_surface_resource_destroy);
+
+    dll_push_tail(rc->rsurfs, rsurf);
 }
 
 static void
@@ -323,9 +339,6 @@ wl_global_bind_compositor(struct wl_client* client,
 static void
 xdg_toplevel_destroy(struct wl_client* client, struct wl_resource* resource)
 {
-    struct redsurface* rsurf = resource->data;
-    assert(rsurf && rsurf->rs);
-    red_destroy_trc(rsurf->rs, rsurf);
     wl_resource_destroy(resource);
 }
 
@@ -348,14 +361,16 @@ xdg_toplevel_set_app_id(struct wl_client*   client,
                         struct wl_resource* resource,
                         const char*         app_id)
 {
-    struct redsurface* rsurf = resource->data;
-    assert(rsurf);
+    struct redtoplevel* rt = resource->data;
+    assert(rt);
 
-    rsurf->app_id = malloc(strlen(app_id) + 1);
-    assert(rsurf->app_id);
+    rt->app_id = malloc(strlen(app_id) + 1);
+    assert(rt->app_id);
 
-    strcpy(rsurf->app_id, app_id);
-    ROG("app id: %s", rsurf->app_id);
+    strcpy(rt->app_id, app_id);
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("app id: %s", rt->app_id);
+#endif
 }
 
 static void
@@ -449,6 +464,14 @@ static const struct xdg_toplevel_interface xdg_toplevel_implementation = {
     .set_minimized    = xdg_toplevel_set_minimized
 };
 
+static void
+xdg_toplevel_resource_destroy(struct wl_resource* resource)
+{
+    struct redtoplevel* rt = resource->data;
+    assert(rt && rt->rs);
+    red_destroy_rt(rt->rs, rt);
+}
+
 int
 red_send_configure(struct redsurface* rsurf, int activated, int resizing)
 {
@@ -489,6 +512,7 @@ red_send_configure(struct redsurface* rsurf, int activated, int resizing)
 static void
 xdg_popup_destroy(struct wl_client* client, struct wl_resource* resource)
 {
+    wl_resource_destroy(resource);
 }
 
 static void
@@ -526,7 +550,6 @@ xdg_surface_get_toplevel(struct wl_client*   client,
     struct redsurface* rsurf = resource->data;
     assert(rsurf);
 
-    rsurf->app_id       = NULL;
     rsurf->xdg_toplevel = wl_resource_create(
       client, &xdg_toplevel_interface, wl_resource_get_version(resource), id);
     if (!rsurf->xdg_toplevel) {
@@ -534,10 +557,13 @@ xdg_surface_get_toplevel(struct wl_client*   client,
         return;
     }
 
-    red_create_trc(rsurf->rs, rsurf, client);
+    struct redtoplevel* rt = red_create_rt(rsurf->rs, rsurf, client);
+    assert(rt);
 
-    wl_resource_set_implementation(
-      rsurf->xdg_toplevel, &xdg_toplevel_implementation, rsurf, NULL);
+    wl_resource_set_implementation(rsurf->xdg_toplevel,
+                                   &xdg_toplevel_implementation,
+                                   rt,
+                                   xdg_toplevel_resource_destroy);
 
     red_send_configure(rsurf, 1, 0);
 }
@@ -595,6 +621,7 @@ static const struct xdg_surface_interface xdg_surface_implementation = {
 static void
 xdg_positioner_destroy(struct wl_client* client, struct wl_resource* resource)
 {
+    wl_resource_destroy(resource);
 }
 static void
 xdg_positioner_set_size(struct wl_client*   client,
@@ -793,6 +820,24 @@ static const struct wl_keyboard_interface wl_keyboard_implementation = {
     .release = wl_keyboard_release,
 };
 
+int
+red_keyboard_send_enter(struct redclient* rc, struct wl_resource* wl_surface)
+{
+    uint32_t        serial = wl_display_next_serial(rc->rs->wl_display);
+    struct wl_array keys;
+    wl_array_init(&keys);
+    wl_keyboard_send_enter(rc->wl_keyboard, serial, wl_surface, &keys);
+    wl_array_release(&keys);
+    return 0;
+}
+int
+red_keyboard_send_leave(struct redclient* rc, struct wl_resource* wl_surface)
+{
+    uint32_t serial = wl_display_next_serial(rc->rs->wl_display);
+    wl_keyboard_send_leave(rc->wl_keyboard, serial, wl_surface);
+    return 0;
+}
+
 static void
 wl_pointer_set_cursor(struct wl_client*   client,
                       struct wl_resource* resource,
@@ -814,11 +859,35 @@ static const struct wl_pointer_interface wl_pointer_implementation = {
     .release    = wl_pointer_release,
 };
 
+int
+red_pointer_send_enter(struct redclient* rc, struct wl_resource* wl_surface)
+{
+    uint32_t   serial = wl_display_next_serial(rc->rs->wl_display);
+    wl_fixed_t x      = wl_fixed_from_double(red_get_lc_x(rc->rs));
+    wl_fixed_t y      = wl_fixed_from_double(red_get_lc_y(rc->rs));
+    wl_pointer_send_enter(rc->wl_pointer, serial, wl_surface, x, y);
+    wl_pointer_send_frame(rc->wl_pointer);
+    return 0;
+}
+
+int
+red_pointer_send_leave(struct redclient* rc, struct wl_resource* wl_surface)
+{
+    uint32_t serial = wl_display_next_serial(rc->rs->wl_display);
+    wl_pointer_send_leave(rc->wl_pointer, serial, wl_surface);
+    wl_pointer_send_frame(rc->wl_pointer);
+    return 0;
+}
+
 static void
 wl_seat_get_pointer(struct wl_client*   client,
                     struct wl_resource* resource,
                     uint32_t            id)
 {
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("get poniter %d", client)
+#endif
+
     struct redstate* rs = wl_resource_get_user_data(resource);
 
     struct wl_resource* wl_pointer = wl_resource_create(
@@ -1163,22 +1232,14 @@ static void
 wl_client_destroyed(struct wl_listener* listener, void* data)
 {
     struct redclient* rc = wl_container_of(listener, rc, client_destroyed);
+    assert(rc);
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("destroing wl_client %d", rc->wl_client);
+#endif
 
     dll_remove_val(rc->rs->rcs, rc);
-    // just in case client doesn't call xdg_toplevel destroy.
-    // client destroy, should be called so its a safe fallback
-    {
-        int is_trcs = 0;
-        dll_for_each(rc->rs->trcs, v)
-        {
-            if (v->val == rc) {
-                is_trcs = 1;
-                break;
-            }
-        }
-        if (is_trcs)
-            red_destroy_trc(rc->rs, rc->rsurf);
-    }
+
+    dll_destroy(rc->rsurfs);
     if (rc)
         free(rc);
 }
@@ -1190,18 +1251,22 @@ wl_client_created(struct wl_listener* listener, void* data)
 
     struct wl_client* wl_client = data;
     assert(wl_client);
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("creating wl_client %d", wl_client);
+#endif
 
     struct redclient* rc;
     rc = malloc(sizeof(*rc));
     assert(rc);
     rc->rs                      = rs;
-    rc->rsurf                   = NULL;
+    rc->rsurfs                  = (typeof(rc->rsurfs))dll_init();
     rc->wl_keyboard             = NULL;
     rc->wl_pointer              = NULL;
     rc->wl_client               = wl_client;
     rc->client_destroyed.notify = wl_client_destroyed;
 
     wl_client_add_destroy_listener(wl_client, &rc->client_destroyed);
+
     dll_push_tail(rs->rcs, rc);
 }
 
@@ -1546,6 +1611,7 @@ wl_global_bind_zwp_linux_dmabuf(struct wl_client* client,
 static void
 wp_viewport_destroy(struct wl_client* client, struct wl_resource* resource)
 {
+    wl_resource_destroy(resource);
 }
 static void
 wp_viewport_set_source(struct wl_client*   client,

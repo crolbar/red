@@ -264,8 +264,8 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    if (rs->focused_trc && rs->focused_trc->rsurf)
-        if (render_surface(rs, rs->focused_trc->rsurf))
+    if (rs->focused_rt && rs->focused_rt->rsurf)
+        if (render_surface(rs, rs->focused_rt->rsurf))
             return 1;
 
     // software cursor

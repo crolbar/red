@@ -57,10 +57,10 @@ typedef struct redbuffer
 struct redsurface
 {
     struct redstate*    rs;
+    struct redclient*   rc;
     struct wl_resource* wl_surface;
     struct wl_resource* xdg_surface;
     struct wl_resource* xdg_toplevel;
-    char*               app_id; // xdg_toplevel title
 
     int32_t geom_x;
     int32_t geom_y;
@@ -68,19 +68,28 @@ struct redsurface
     int32_t geom_height;
     int     geom_configured;
 
-    struct wl_resource* pending_buffer; // set by wl_surface.attach
+    struct wl_resource* pending_buffer;   // set by wl_surface.attach
     struct wl_resource* pending_callback; // set by wl_surface.frame
     int                 configured;       // xdg_surface configure
 };
 
 struct redclient
 {
-    struct redstate*    rs;
-    struct redsurface*  rsurf;
+    struct redstate* rs;
+    dll(struct redsurface*) rsurfs;
+
     struct wl_client*   wl_client;
     struct wl_resource* wl_keyboard;
     struct wl_resource* wl_pointer;
     struct wl_listener  client_destroyed;
+};
+
+struct redtoplevel
+{
+    struct redstate*   rs;
+    struct redclient*  rc;
+    struct redsurface* rsurf;
+    char*              app_id;
 };
 
 // mods is a bitmask
@@ -144,8 +153,8 @@ struct redstate
     dll(struct redclient*) rcs; // red clients
 
     // clients that have xdg_toplevel as wl_surface
-    dll(struct redclient*) trcs; // top red clients
-    struct redclient* focused_trc;
+    dll(struct redtoplevel*) rts; // top red clients
+    struct redtoplevel* focused_rt;
 
     int                xkb_keymap_fd;
     char*              xkb_keymap_string;

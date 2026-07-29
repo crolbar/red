@@ -69,10 +69,10 @@
 
 #define dll_push_tail(dll, new_val) dll_push_after((dll), (dll).tail, new_val);
 #define dll_push_head(dll, new_val) dll_push_before((dll), (dll).head, new_val);
-#define dll_for_each(d, v) for (_gt(d)* v = (d).head; v != NULL; v = v->next)
-#define dll_rfor_each(d, v) for (_gt(d)* v = (d).tail; v != NULL; v = v->prev)
-#define dll_pop(dll) _dll_pop(dll, (dll).tail)
-#define dll_hpop(dll) _dll_pop(dll, (dll).head)
+#define dll_for_each(d, v)          for (_gt(d)* v = (d).head; v != NULL; v = v->next)
+#define dll_rfor_each(d, v)         for (_gt(d)* v = (d).tail; v != NULL; v = v->prev)
+#define dll_pop(dll)                _dll_pop(dll, (dll).tail)
+#define dll_hpop(dll)               _dll_pop(dll, (dll).head)
 
 #define dll_destroy(dll)                                                       \
     do {                                                                       \
@@ -102,7 +102,7 @@
 #define dll_remove_val(dll, _val)                                              \
     do {                                                                       \
         _gt(dll)* _n = NULL;                                                   \
-        dll_for_each(dll, v)                                                     \
+        dll_for_each(dll, v)                                                   \
         {                                                                      \
             if (v->val == (_val))                                              \
                 _n = v;                                                        \

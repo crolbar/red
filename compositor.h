@@ -4,13 +4,13 @@
 #include <libinput.h>
 
 int
-red_focus_trc(struct redstate* rs, struct redclient* trc);
+red_focus_rt(struct redstate* rs, struct redtoplevel* rt);
 
 int
-red_destroy_trc(struct redstate* rs, struct redsurface* rsurf);
+red_destroy_rt(struct redstate* rs, struct redtoplevel* rt);
 
-int
-red_create_trc(struct redstate*   rs,
+struct redtoplevel*
+red_create_rt(struct redstate*   rs,
                struct redsurface* rsurf,
                struct wl_client*  wl_client);
 
@@ -45,3 +45,10 @@ double
 red_get_lc_x(struct redstate* rs);
 double
 red_get_lc_y(struct redstate* rs);
+struct redclient*
+red_get_client(struct redstate* rs, struct wl_client* wl_client);
+struct redclient*
+red_get_client_by_rsurf(struct redstate* rs, struct redsurface* rsurf);
+
+int
+red_is_client_valid(struct redstate* rs, struct redclient* rc);

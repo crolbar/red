@@ -128,7 +128,7 @@ xdg_surface_configure(void*               data,
     xdg_surface_ack_configure(xdg_surface, serial);
 
     // just so server window is not stuck
-    if (!rs->focused_trc)
+    if (!rs->focused_rt)
         request_redraw(rs);
 }
 
@@ -163,8 +163,8 @@ xdg_toplevel_configure(void*                data,
                 resizing = 1;
         }
 
-        if (rs->focused_trc && rs->focused_trc->rsurf)
-            red_send_configure(rs->focused_trc->rsurf, activated, resizing);
+        if (rs->focused_rt && rs->focused_rt->rsurf)
+            red_send_configure(rs->focused_rt->rsurf, activated, resizing);
     }
 
     bw->width  = width;

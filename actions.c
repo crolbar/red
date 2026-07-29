@@ -1,8 +1,8 @@
 #include "actions.h"
+#include "compositor.h"
 #include "log.h"
 #include "red.h"
-#include "compositor.h"
-#include <errno.h>
+#include <errno.h> // IWYU pragma: keep
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
@@ -16,11 +16,11 @@ redaction_quit(struct redstate* rs, char** args, size_t args_len)
 void
 redaction_focus_next(struct redstate* rs, char** args, size_t args_len)
 {
-    dll_for_each(rs->trcs, v)
+    dll_for_each(rs->rts, v)
     {
-        if (rs->focused_trc == v->val) {
+        if (rs->focused_rt == v->val) {
             if (v->next) {
-                red_focus_trc(rs, v->next->val);
+                red_focus_rt(rs, v->next->val);
                 break;
             }
         }
@@ -30,11 +30,11 @@ redaction_focus_next(struct redstate* rs, char** args, size_t args_len)
 void
 redaction_focus_prev(struct redstate* rs, char** args, size_t args_len)
 {
-    dll_for_each(rs->trcs, v)
+    dll_for_each(rs->rts, v)
     {
-        if (rs->focused_trc == v->val) {
+        if (rs->focused_rt == v->val) {
             if (v->prev) {
-                red_focus_trc(rs, v->prev->val);
+                red_focus_rt(rs, v->prev->val);
                 break;
             }
         }
@@ -74,8 +74,7 @@ void
 redaction_debug(struct redstate* rs, char** args, size_t args_len)
 {
     ROG("tops: \n");
-    dll_for_each(rs->trcs, v)
-      ROG("  top: %s %d", v->val->rsurf->app_id, v->val->wl_keyboard)
+    dll_for_each(rs->rts, v) ROG("  top: %s", v->val->app_id)
 }
 
 #define ACTIONS(...)                                                           \

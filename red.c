@@ -71,8 +71,8 @@ main(int argc, char** argv)
     rs->zwp_linux_dmabuf       = NULL;
     rs->needs_redraw           = 1;
     rs->rcs                    = (typeof(rs->rcs))dll_init();
-    rs->trcs                   = (typeof(rs->trcs))dll_init();
-    rs->focused_trc            = NULL;
+    rs->rts                    = (typeof(rs->rts))dll_init();
+    rs->focused_rt             = NULL;
 
     rs->tex                   = 0;
     rs->tex_h                 = 0;
