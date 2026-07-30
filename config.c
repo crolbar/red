@@ -55,46 +55,44 @@ redconfig cfg = (redconfig){
     // key - if it is a char (a - Z) - to uppercase
     // clang-format off
     BINDS(
-       {
-         .key = "F4",
-         .mods = RED_MOD_NO_MODS,
-         A( RED_ACTION_QUIT )
-       },
-       {
-         .key = "F4",
-         .mods = RED_MOD_SUPER | RED_MOD_ALT | RED_MOD_CTRL | RED_MOD_SHIFT,
-         A( RED_ACTION_QUIT )
-       },
-       {
-         .key = "k",
-         .mods = RED_MOD_SUPER,
-         A( RED_ACTION_FOCUS_PREV )
-       },
-       {
-         .key = "j",
-         .mods = RED_MOD_SUPER,
-         A( RED_ACTION_FOCUS_NEXT )
-       },
-       {
-         .key = "x",
-         .mods = RED_MOD_SUPER,
-         A( RED_ACTION_SPAWN, "foot" )
-       },
-       {
-         .key = "d",
-         .mods = RED_MOD_SUPER,
-         A( RED_ACTION_SPAWN, "bash", "-c", "dunstify HELLO DUDE" )
-       },
+        {
+          .key = "F4",
+          .mods = RED_MOD_NO_MODS,
+          A( RED_ACTION_QUIT )
+        },
+        {
+          .key = "F4",
+          .mods = RED_MOD_SUPER | RED_MOD_ALT | RED_MOD_CTRL | RED_MOD_SHIFT,
+          A( RED_ACTION_QUIT )
+        },
+        {
+          .key = "k",
+          .mods = RED_MOD_SUPER,
+          A( RED_ACTION_FOCUS_PREV )
+        },
+        {
+          .key = "j",
+          .mods = RED_MOD_SUPER,
+          A( RED_ACTION_FOCUS_NEXT )
+        },
+        {
+          .key = "x",
+          .mods = RED_MOD_SUPER,
+          A( RED_ACTION_SPAWN, "foot" )
+        },
+        {
+          .key = "d",
+          .mods = RED_MOD_SUPER,
+          A( RED_ACTION_DEBUG )
+        },
     )
 
     AUTO_START(
-      {
-         PROG("bash", "-c", "xwayland-satellite :67")
-      },
+        PROG("bash", "-c", "xwayland-satellite :67"),
     )
 
     ENV(
-      {"DISPLAY", ":67"},
+        {"DISPLAY", ":67"},
     )
     // clang-format on
 };

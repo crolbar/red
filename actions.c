@@ -81,7 +81,9 @@ redaction_spawn(struct redstate* rs, char** args, size_t args_len)
 void
 redaction_debug(struct redstate* rs, char** args, size_t args_len)
 {
-    ROG("tops: \n");
+    ROG("")
+    ROG("focus: %s", rs->focused_rt->app_id);
+    ROG("tops:");
     dll_for_each(rs->rts, v) ROG("  top: %s", v->val->app_id)
 }
 

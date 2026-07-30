@@ -1,7 +1,4 @@
-- [ ]xwayland issues
-  - changing focus with gpu render windows casues them to freeze
-  - sync issues
-  - mouse scrolling not working
+- mouse scrolling not working some xwayland progs
 
 - [x]dmabuf
 - [x]refac gbm.c

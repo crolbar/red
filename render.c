@@ -57,24 +57,21 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
             }
         }
 
-        /* create/reuse a texture on rsurf so we don't alloc every frame */
-        if (rs->tex == 0) {
-            glGenTextures(1, &rs->tex);
-            glBindTexture(GL_TEXTURE_2D, rs->tex);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        } else {
-            glBindTexture(GL_TEXTURE_2D, rs->tex);
-        }
+        if (rsurf->tex == 0)
+            glGenTextures(1, &rsurf->tex);
+
+        glBindTexture(GL_TEXTURE_2D, rsurf->tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
         /* row length in pixels, since stride may include padding */
         glPixelStorei(GL_UNPACK_ROW_LENGTH, src_stride / 4);
         glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
         glPixelStorei(GL_UNPACK_SKIP_ROWS, y);
 
-        if (rs->tex_w != src_w || rs->tex_h != src_h) {
+        if (rsurf->tex_w != src_w || rsurf->tex_h != src_h) {
             glTexImage2D(GL_TEXTURE_2D,
                          0,
                          GL_RGBA,
@@ -84,8 +81,8 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
                          gl_fmt,
                          GL_UNSIGNED_BYTE,
                          src);
-            rs->tex_w = src_w;
-            rs->tex_h = src_h;
+            rsurf->tex_w = src_w;
+            rsurf->tex_h = src_h;
         } else {
             glTexSubImage2D(
               GL_TEXTURE_2D, 0, 0, 0, w, h, gl_fmt, GL_UNSIGNED_BYTE, src);
@@ -113,27 +110,28 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
                                          dmabuf->planes_count,
                                          dmabuf->planes);
 
-        if (rs->tex == 0)
-            glGenTextures(1, &rs->tex);
+        if (rsurf->tex == 0)
+            glGenTextures(1, &rsurf->tex);
 
-        glBindTexture(GL_TEXTURE_2D, rs->tex);
+        glBindTexture(GL_TEXTURE_2D, rsurf->tex);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         gl_proc->glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, img);
 
-        rs->tex_w = dmabuf->width;
-        rs->tex_h = dmabuf->height;
+        rsurf->tex_w = dmabuf->width;
+        rsurf->tex_h = dmabuf->height;
     }
 
     glUseProgram(rs->program);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, rs->tex);
+    glBindTexture(GL_TEXTURE_2D, rsurf->tex);
     glUniform1i(rs->texture_loc, 0);
 
     glBindVertexArray(rs->vao);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glBindVertexArray(0);
     glUseProgram(0);
 
@@ -144,19 +142,6 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
 
     return 0;
 }
-
-// yoinked out of aquamarine
-static char* vertex_shader_src = "\
-#version 300 es\n\
-precision highp float;\n\
-uniform mat3 proj;\n\
-in vec2 pos;\n\
-in vec2 texcoord;\n\
-out vec2 v_texcoord;\n\
-void main() {\n\
-    gl_Position = vec4(proj * vec3(pos, 1.0), 1.0);\n\
-    v_texcoord = texcoord;\n\
-}";
 
 int
 _render_cursor_part(struct redstate* rs,
@@ -259,14 +244,15 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     uint32_t height = rs->backend->get_height(rs->backend->d);
 
     glBindFramebuffer(GL_FRAMEBUFFER, rb->fbo);
-
     glViewport(0, 0, width, height);
-    glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
 
-    if (rs->focused_rt && rs->focused_rt->rsurf)
+    if (rs->focused_rt && rs->focused_rt->rsurf) {
         if (render_surface(rs, rs->focused_rt->rsurf))
             return 1;
+    } else {
+        glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
 
     // software cursor
     if (!rs->is_wayland_client && !rs->using_hardware_cursor) {
@@ -276,6 +262,7 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     }
 
     glFinish();
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     return 0;
 }
 

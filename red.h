@@ -62,6 +62,10 @@ struct redsurface
     struct wl_resource* xdg_surface;
     struct wl_resource* xdg_toplevel;
 
+    int32_t tex_w;
+    int32_t tex_h;
+    GLuint  tex;
+
     int32_t geom_x;
     int32_t geom_y;
     int32_t geom_width;
@@ -134,10 +138,6 @@ struct redstate
     struct wl_global*     data_device_manager_global;
     struct wl_listener    client_created;
 
-    int32_t tex_w;
-    int32_t tex_h;
-    GLuint  tex;
-
     GLuint program;
     GLuint vao;
     GLuint vbo;
@@ -153,7 +153,7 @@ struct redstate
     dll(struct redclient*) rcs; // red clients
 
     // clients that have xdg_toplevel as wl_surface
-    dll(struct redtoplevel*) rts; // top red clients
+    dll(struct redtoplevel*) rts; // red toplevels
     struct redtoplevel* focused_rt;
 
     int                xkb_keymap_fd;

@@ -91,6 +91,11 @@ wl_surface_frame(struct wl_client*   client,
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     assert(rsurf);
+
+    // TODO: works for now, later we should do if rsurf is not on focus
+    // we should throttle it with some timer
+    red_send_pending_callback(rsurf);
+
     struct wl_resource* cb =
       wl_resource_create(client, &wl_callback_interface, 1, callback);
     assert(cb);
@@ -260,6 +265,9 @@ init_redsurface()
     rsurf->geom_width       = 0;
     rsurf->geom_height      = 0;
     rsurf->geom_configured  = 0;
+    rsurf->tex              = 0;
+    rsurf->tex_h            = 0;
+    rsurf->tex_w            = 0;
 
     return rsurf;
 }

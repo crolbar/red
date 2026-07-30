@@ -19,9 +19,11 @@
       (sizeof((struct redautostartprog[]){ __VA_ARGS__ }) /                    \
        sizeof(((struct redautostartprog[]){ __VA_ARGS__ })[0])),
 #define PROG(...)                                                              \
-    .args     = (char*[]){ __VA_ARGS__ },                                      \
-    .args_len = (sizeof((char*[]){ __VA_ARGS__ }) /                            \
-                 sizeof(((char*[]){ __VA_ARGS__ })[0])),
+    {                                                                          \
+        .args     = (char*[]){ __VA_ARGS__ },                                  \
+        .args_len = (sizeof((char*[]){ __VA_ARGS__ }) /                        \
+                     sizeof(((char*[]){ __VA_ARGS__ })[0])),                   \
+    }
 
 #define ENV(...)                                                               \
     .env_vars     = (envvar[]){ __VA_ARGS__ },                                 \

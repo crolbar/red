@@ -91,9 +91,6 @@ main(int argc, char** argv)
     rs->rts                    = (typeof(rs->rts))dll_init();
     rs->focused_rt             = NULL;
 
-    rs->tex                   = 0;
-    rs->tex_h                 = 0;
-    rs->tex_w                 = 0;
     rs->cursor_gl_program     = 0;
     rs->cursor_gl_vao         = 0;
     rs->cursor_x              = 0;
