@@ -6,6 +6,7 @@
 #include "render.h"
 #include "wayland.h"
 #include <libinput.h>
+#include <wayland-server-protocol.h>
 #include <wayland-server.h>
 
 // local cursor to the focused surface
@@ -203,34 +204,31 @@ int
 red_pointer_send_motion(struct redstate* rs,
                         uint32_t         time_msec,
                         double           x,
-                        double           y,
-                        int              delta)
+                        double           y)
 {
+    assert(!rs->is_wayland_client);
+
     uint32_t width  = rs->backend->get_width(rs->backend->d);
     uint32_t height = rs->backend->get_height(rs->backend->d);
-    if (delta) {
-        x = rs->cursor_x + x * 0.4;
-        y = rs->cursor_y + y * 0.4;
-    }
-    rs->cursor_x = max(min(x, (double)width), 0);
-    rs->cursor_y = max(min(y, (double)height), 0);
+    x               = rs->cursor_x + x * 0.4;
+    y               = rs->cursor_y + y * 0.4;
+    rs->cursor_x    = max(min(x, (double)width), 0);
+    rs->cursor_y    = max(min(y, (double)height), 0);
 
-    if (rs->using_hardware_cursor)
+    if (rs->using_hardware_cursor) {
         if (drm_update_cursor_plane(rs))
             return 1;
+    }
+    // need to redraw the whole frame on software cursor
+    else
+        request_redraw(rs);
 
     if (rs->focused_rt && rs->focused_rt->rc->wl_pointer) {
         wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
                                time_msec,
                                wl_fixed_from_double(red_get_lc_x(rs)),
                                wl_fixed_from_double(red_get_lc_y(rs)));
-        wl_pointer_send_frame(rs->focused_rt->rc->wl_pointer);
     }
-
-    // need to redraw the whole frame on software cursor
-    if (!rs->is_wayland_client && !rs->using_hardware_cursor)
-        request_redraw(rs);
-
     return 0;
 }
 
@@ -246,31 +244,56 @@ red_pointer_send_button(struct redstate* rs,
     uint32_t serial = wl_display_next_serial(rs->wl_display);
     wl_pointer_send_button(
       rs->focused_rt->rc->wl_pointer, serial, time_msec, button, state);
-    wl_pointer_send_frame(rs->focused_rt->rc->wl_pointer);
 
     return 0;
 }
 int
-red_pointer_send_scroll(struct redstate* rs,
-                        uint32_t         time_msec,
-                        double           val,
-                        int              is_vertical_scroll,
-                        int              is_finger)
+red_pointer_send_scroll(struct redstate*                  rs,
+                        uint32_t                          time_msec,
+                        double                            value,
+                        double                            value120,
+                        enum libinput_pointer_axis_source source,
+                        enum libinput_pointer_axis        axis)
 {
     if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
         return 0;
 
-    if (is_finger)
-        wl_pointer_send_axis_source(rs->focused_rt->rc->wl_pointer,
-                                    WL_POINTER_AXIS_SOURCE_FINGER);
+    uint32_t axis_source;
+    switch (source) {
+        case LIBINPUT_POINTER_AXIS_SOURCE_WHEEL:
+            axis_source = WL_POINTER_AXIS_SOURCE_WHEEL;
+            break;
+        case LIBINPUT_POINTER_AXIS_SOURCE_WHEEL_TILT:
+            axis_source = WL_POINTER_AXIS_SOURCE_WHEEL_TILT;
+            break;
+        case LIBINPUT_POINTER_AXIS_SOURCE_CONTINUOUS:
+            axis_source = WL_POINTER_AXIS_SOURCE_CONTINUOUS;
+            break;
+        case LIBINPUT_POINTER_AXIS_SOURCE_FINGER:
+            axis_source = WL_POINTER_AXIS_SOURCE_FINGER;
+            break;
+        default:
+            assert(NULL);
+    };
+
+    uint32_t wl_axis;
+    if (axis == LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL)
+        wl_axis = WL_POINTER_AXIS_VERTICAL_SCROLL;
+    else if (axis == LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL)
+        wl_axis = WL_POINTER_AXIS_HORIZONTAL_SCROLL;
+    else
+        assert(NULL);
+
+    wl_pointer_send_axis_source(rs->focused_rt->rc->wl_pointer, axis_source);
 
     wl_pointer_send_axis(rs->focused_rt->rc->wl_pointer,
                          time_msec,
-                         (is_vertical_scroll)
-                           ? WL_POINTER_AXIS_VERTICAL_SCROLL
-                           : WL_POINTER_AXIS_HORIZONTAL_SCROLL,
-                         wl_fixed_from_double(val));
-    wl_pointer_send_frame(rs->focused_rt->rc->wl_pointer);
+                         wl_axis,
+                         wl_fixed_from_double(value));
+
+    if (value120 != 0)
+        wl_pointer_send_axis_value120(
+          rs->focused_rt->rc->wl_pointer, wl_axis, (int32_t)value120);
 
     return 0;
 }

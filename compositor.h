@@ -11,8 +11,8 @@ red_destroy_rt(struct redstate* rs, struct redtoplevel* rt);
 
 struct redtoplevel*
 red_create_rt(struct redstate*   rs,
-               struct redsurface* rsurf,
-               struct wl_client*  wl_client);
+              struct redsurface* rsurf,
+              struct wl_client*  wl_client);
 
 int
 red_kb_send_keys(struct redstate* rs,
@@ -25,8 +25,7 @@ int
 red_pointer_send_motion(struct redstate* rs,
                         uint32_t         time_msec,
                         double           x,
-                        double           y,
-                        int              delta);
+                        double           y);
 
 int
 red_pointer_send_button(struct redstate* rs,
@@ -35,11 +34,12 @@ red_pointer_send_button(struct redstate* rs,
                         int              state);
 
 int
-red_pointer_send_scroll(struct redstate* rs,
-                        uint32_t         time_msec,
-                        double           val,
-                        int              is_vertical_scroll,
-                        int              is_finger);
+red_pointer_send_scroll(struct redstate*                  rs,
+                        uint32_t                          time_msec,
+                        double                            value,
+                        double                            value120,
+                        enum libinput_pointer_axis_source source,
+                        enum libinput_pointer_axis        axis);
 
 double
 red_get_lc_x(struct redstate* rs);
