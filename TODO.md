@@ -3,14 +3,11 @@
   - sync issues
   - mouse scrolling not working
 
-
 - [x]dmabuf
 - [x]refac gbm.c
 
-
 - [x]drm cursor + wayland pointer
 - [x]fix up wayland backend
-
 
 - [x]get foot terminal on screen
 - [x]figure out frames

@@ -82,7 +82,10 @@ PRO_SRC=linux-dmabuf-protocol.c \
 pro: $(PRO_SRC)
 
 $(BINS): $(SRC) $(PRO_SRC)
-	$(CC) -g $(CFLAGS) -o $@ $(SRC) $(PRO_SRC) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ $(SRC) $(PRO_SRC) $(LDLIBS)
+
+run: all
+	./run.sh
 
 install: all
 	install -D -t $(DESTDIR)$(PREFIX)/bin $(BINS)
