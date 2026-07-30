@@ -1,15 +1,13 @@
 #include <errno.h> // IWYU pragma: keep
-#include <fcntl.h>
 #include <libinput.h>
 #include <poll.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <wayland-server-core.h>
-#include <xkbcommon/xkbcommon.h>
 
+#include "actions.h"
 #include "backend-drm.h"
 #include "backend-wayland.h"
+#include "config.h"
 #include "dll.h"
 #include "input.h"
 #include "log.h"
@@ -21,6 +19,25 @@
 #include "wayland.h"
 
 struct gl_proc* gl_proc = NULL;
+
+int
+init_env_vars()
+{
+    for (size_t i = 0; i < cfg.env_vars_len; i++) {
+        setenv(cfg.env_vars[i][0], cfg.env_vars[i][1], 1);
+    }
+    return 0;
+}
+
+int
+init_auto_start_progs()
+{
+    for (size_t i = 0; i < cfg.auto_start_progs_len; i++) {
+        spawn_program(cfg.auto_start_progs[i].args,
+                      cfg.auto_start_progs[i].args_len);
+    }
+    return 0;
+}
 
 int
 main(int argc, char** argv)
@@ -132,6 +149,9 @@ main(int argc, char** argv)
     rs->backend->push_init_buffer(rs);
 
     init_compositor(rs);
+
+    init_env_vars();
+    init_auto_start_progs();
 
     // loop
     {

@@ -14,6 +14,14 @@ typedef struct redaction
     void (*f)(struct redstate* rs, char** args, size_t args_len);
 } redaction;
 
+#define SPAWN_PROG(...)                                                        \
+    spawn_program((char*[]){ __VA_ARGS__, NULL },                              \
+                  (sizeof((char*[]){ __VA_ARGS__ }) /                          \
+                   sizeof(((char*[]){ __VA_ARGS__ })[0])));
+
+int
+spawn_program(char** args, size_t args_len);
+
 // the action param is straight from the bind
 void
 exec_action(struct redstate* rs, char** action, size_t action_len);

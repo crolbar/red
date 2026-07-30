@@ -86,5 +86,15 @@ redconfig cfg = (redconfig){
          A( RED_ACTION_SPAWN, "bash", "-c", "dunstify HELLO DUDE" )
        },
     )
+
+    AUTO_START(
+      {
+         PROG("bash", "-c", "xwayland-satellite :67")
+      },
+    )
+
+    ENV(
+      {"DISPLAY", ":67"},
+    )
     // clang-format on
 };

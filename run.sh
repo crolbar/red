@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
-gdb -ex run ./red
+~/toggle_binds.sh
+gdb -x debug.gdb --args ./red
+~/toggle_binds.sh

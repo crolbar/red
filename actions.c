@@ -41,14 +41,9 @@ redaction_focus_prev(struct redstate* rs, char** args, size_t args_len)
     }
 }
 
-void
-redaction_spawn(struct redstate* rs, char** args, size_t args_len)
+int
+spawn_program(char** args, size_t args_len)
 {
-    if (args_len < 1) {
-        ROG_ERR("called spawn action without argument");
-        return;
-    }
-
     pid_t pid = fork();
 
     if (pid == 0) {
@@ -58,7 +53,7 @@ redaction_spawn(struct redstate* rs, char** args, size_t args_len)
         int fd = open("/dev/null", O_WRONLY);
         if (fd == -1) {
             ROG_ERR("open: %s", strerror(errno));
-            return;
+            return 1;
         }
         dup2(fd, STDOUT_FILENO);
         dup2(fd, STDERR_FILENO);
@@ -68,6 +63,19 @@ redaction_spawn(struct redstate* rs, char** args, size_t args_len)
 
         _exit(1);
     }
+
+    return 0;
+}
+
+void
+redaction_spawn(struct redstate* rs, char** args, size_t args_len)
+{
+    if (args_len < 1) {
+        ROG_ERR("called spawn action without argument");
+        return;
+    }
+
+    spawn_program(args, args_len);
 }
 
 void
