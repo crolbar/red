@@ -72,16 +72,16 @@ gl_setup_program(struct redstate* rs)
     GLuint fs = gl_compile_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
 
     rs->program = glCreateProgram();
-    glAttachShader(rs->program, vs);
-    glAttachShader(rs->program, fs);
-    glLinkProgram(rs->program);
+    CALL(glAttachShader(rs->program, vs));
+    CALL(glAttachShader(rs->program, fs));
+    CALL(glLinkProgram(rs->program));
 
-    glDetachShader(rs->program, vs);
-    glDetachShader(rs->program, fs);
-    glDeleteShader(vs);
-    glDeleteShader(fs);
+    CALL(glDetachShader(rs->program, vs));
+    CALL(glDetachShader(rs->program, fs));
+    CALL(glDeleteShader(vs));
+    CALL(glDeleteShader(fs));
     GLint ok;
-    glGetProgramiv(rs->program, GL_LINK_STATUS, &ok);
+    CALL(glGetProgramiv(rs->program, GL_LINK_STATUS, &ok));
     if (ok == GL_FALSE)
         return 0;
 
@@ -95,16 +95,18 @@ gl_setup_program(struct redstate* rs)
         1,  1,  // btm right
     };
 
-    glGenVertexArrays(1, &rs->vao);
-    glBindVertexArray(rs->vao);
+    CALL(glGenVertexArrays(1, &rs->vao));
+    CALL(glBindVertexArray(rs->vao));
 
     GLuint vbo;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    CALL(glGenBuffers(1, &vbo));
+    CALL(glBindBuffer(GL_ARRAY_BUFFER, vbo));
+    CALL(glBufferData(
+      GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW));
 
-    glEnableVertexAttribArray(pos);
-    glVertexAttribPointer(pos, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), NULL);
+    CALL(glEnableVertexAttribArray(pos));
+    CALL(glVertexAttribPointer(
+      pos, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), NULL));
 
     glBindVertexArray(0);
 

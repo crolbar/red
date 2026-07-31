@@ -367,7 +367,7 @@ input_pointer(struct redstate*               rs,
             else if (is_vertical_scroll)
                 pointer_axis = LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL;
             else
-                assert(NULL);
+                continue;
 
             enum libinput_pointer_axis_source pointer_axis_source;
             if (event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL)

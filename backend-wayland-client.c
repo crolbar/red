@@ -276,7 +276,6 @@ wl_pointer_motion(void*              data,
     struct redstate* rs = data;
     if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
         return;
-    uint32_t _serial = wl_display_next_serial(rs->wl_display);
     wl_pointer_send_motion(
       rs->focused_rt->rc->wl_pointer, time, surface_x, surface_y);
 }

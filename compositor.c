@@ -260,9 +260,6 @@ red_pointer_send_scroll(struct redstate*                  rs,
 
     uint32_t axis_source;
     switch (source) {
-        case LIBINPUT_POINTER_AXIS_SOURCE_WHEEL:
-            axis_source = WL_POINTER_AXIS_SOURCE_WHEEL;
-            break;
         case LIBINPUT_POINTER_AXIS_SOURCE_WHEEL_TILT:
             axis_source = WL_POINTER_AXIS_SOURCE_WHEEL_TILT;
             break;
@@ -273,16 +270,16 @@ red_pointer_send_scroll(struct redstate*                  rs,
             axis_source = WL_POINTER_AXIS_SOURCE_FINGER;
             break;
         default:
-            assert(NULL);
+        case LIBINPUT_POINTER_AXIS_SOURCE_WHEEL:
+            axis_source = WL_POINTER_AXIS_SOURCE_WHEEL;
+            break;
     };
 
     uint32_t wl_axis;
     if (axis == LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL)
         wl_axis = WL_POINTER_AXIS_VERTICAL_SCROLL;
-    else if (axis == LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL)
-        wl_axis = WL_POINTER_AXIS_HORIZONTAL_SCROLL;
     else
-        assert(NULL);
+        wl_axis = WL_POINTER_AXIS_HORIZONTAL_SCROLL;
 
     wl_pointer_send_axis_source(rs->focused_rt->rc->wl_pointer, axis_source);
 

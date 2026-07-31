@@ -1641,9 +1641,9 @@ wp_viewport_set_destination(struct wl_client*   client,
                             int32_t             width,
                             int32_t             height)
 {
-    struct redstate* rs      = wl_resource_get_user_data(resource);
-    uint32_t         _width  = rs->backend->get_width(rs->backend->d);
-    uint32_t         _height = rs->backend->get_height(rs->backend->d);
+    // struct redstate* rs      = wl_resource_get_user_data(resource);
+    // uint32_t         _width  = rs->backend->get_width(rs->backend->d);
+    // uint32_t         _height = rs->backend->get_height(rs->backend->d);
     // ROG("dst: %dx%d when %dx%d", width, height, _width, _height);
 }
 

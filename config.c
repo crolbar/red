@@ -89,6 +89,8 @@ redconfig cfg = (redconfig){
 
     AUTO_START(
         PROG("bash", "-c", "xwayland-satellite :67"),
+        PROG("bash", "-c", "spotify"),
+        PROG("bash", "-c", "foot")
     )
 
     ENV(

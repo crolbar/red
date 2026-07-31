@@ -29,8 +29,10 @@ DEPS = wayland-server \
 		glesv2
 
 CC      ?= gcc
-CFLAGS  += -Wall -Wextra -Wno-unused-parameter -g \
+CFLAGS  += -Wall -Wextra -Wno-unused-parameter \
            $(shell pkg-config --cflags $(DEPS))
+CFLAGS_DEBUG = -g
+CFLAGS_RELEASE = -O2 -DNDEBUG -flto
 LDLIBS  += $(shell pkg-config --libs $(DEPS))
 
 PREFIX ?= /usr/local
@@ -82,7 +84,10 @@ PRO_SRC=linux-dmabuf-protocol.c \
 pro: $(PRO_SRC)
 
 $(BINS): $(SRC) $(PRO_SRC)
-	$(CC) $(CFLAGS) -o $@ $(SRC) $(PRO_SRC) $(LDLIBS)
+	$(CC) $(CFLAGS) $(CFLAGS_DEBUG) -o $@ $(SRC) $(PRO_SRC) $(LDLIBS)
+
+release: $(SRC) $(PRO_SRC)
+	$(CC) $(CFLAGS) $(CFLAGS_RELEASE) -o red $(SRC) $(PRO_SRC) $(LDLIBS)
 
 run: all
 	./run.sh
@@ -93,4 +98,4 @@ install: all
 clean:
 	rm -f red *protocol.c *protocol.h *.o
 
-.PHONY: all clean red
+.PHONY: all clean red release
