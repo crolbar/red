@@ -146,6 +146,18 @@ drm_update_cursor_plane(struct redstate* rs)
 }
 
 int
+drm_hide_cursor(struct redstate* rs)
+{
+    struct backend_drm* bd = rs->backend->d;
+    if (drmModeMoveCursor(
+          bd->drm_fd, bd->crtc_id, -gimp_image.width, -gimp_image.height)) {
+        ROG_ERR("drmMode move cursor failed: %s", strerror(errno));
+        return 1;
+    };
+    return 0;
+}
+
+int
 drm_init_cursor_plane(struct backend_drm* bd)
 {
     drmGetCap(bd->drm_fd, DRM_CAP_CURSOR_WIDTH, &bd->cursor_plane_w);

@@ -2,6 +2,7 @@
 #include <libinput.h>
 #include <poll.h>
 #include <string.h>
+#include <sys/timerfd.h>
 #include <unistd.h>
 
 #include "actions.h"
@@ -9,6 +10,7 @@
 #include "backend-wayland.h"
 #include "config.h"
 #include "dll.h"
+#include "drm.h"
 #include "input.h"
 #include "log.h"
 #include "opengl.h"
@@ -96,8 +98,9 @@ main(int argc, char** argv)
     rs->cursor_x                = 0;
     rs->cursor_y                = 0;
     rs->using_hardware_cursor   = 0;
-    rs->last_cursor_motion_time = 0;
-    rs->last_cursor_scroll_time = 0;
+    rs->cursor_last_motion_time = 0;
+    rs->cursor_last_scroll_time = 0;
+    rs->cursor_hide_timer       = timerfd_create(CLOCK_REALTIME, 0);
 
     rs->program     = 0;
     rs->vao         = 0;
@@ -154,7 +157,7 @@ main(int argc, char** argv)
 
     // loop
     {
-        size_t        fds_size = 4;
+        size_t        fds_size = 5;
         struct pollfd fds[fds_size];
 
         int li_fd = libinput_get_fd(rs->li);
@@ -182,6 +185,8 @@ main(int argc, char** argv)
         fds[2].events = POLLIN;
         fds[3].fd     = wl_event_loop_fd;
         fds[3].events = POLLIN;
+        fds[4].fd     = rs->cursor_hide_timer;
+        fds[4].events = POLLIN;
 
         ROG_INFO("Starting loop...");
         while (!rs->should_quit) {
@@ -220,6 +225,14 @@ main(int argc, char** argv)
             // input event
             if (fds[0].revents & POLLIN) {
                 if (input_dispatch(rs))
+                    goto end;
+            }
+
+            if (fds[4].revents & POLLIN) {
+                uint64_t expirations;
+                int n = read(rs->cursor_hide_timer, &expirations, sizeof(expirations));
+                assert(n == sizeof(expirations));
+                if (drm_hide_cursor(rs))
                     goto end;
             }
         }

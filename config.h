@@ -52,6 +52,8 @@ typedef struct redconfig
     char* xkb_variant;
     char* xkb_options;
 
+    uint32_t cursor_autohide_time;
+
     redbind* binds;
     size_t   binds_len;
 

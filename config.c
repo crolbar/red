@@ -51,6 +51,10 @@ redconfig cfg = (redconfig){
     // exported image in red_cursor.c
     .center_cursor_hotspot = true,
 
+    // time in miliseconds that the cursor
+    // will get hidden after the last motion event
+    .cursor_autohide_time = 2000,
+
     // bind that use the shift mod, should change the
     // key - if it is a char (a - Z) - to uppercase
     // clang-format off

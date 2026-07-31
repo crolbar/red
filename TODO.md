@@ -1,4 +1,3 @@
-- mouse scrolling not working some xwayland progs
 
 - [x]dmabuf
 - [x]refac gbm.c

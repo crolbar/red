@@ -25,6 +25,8 @@ drm_get_plane(int fd, int crtc_idx, int type);
 
 int
 drm_update_cursor_plane(struct redstate* rs);
+int
+drm_hide_cursor(struct redstate* rs);
 
 int
 drm_init_cursor_plane(struct backend_drm* bd);

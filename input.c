@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/time.h>
+#include <sys/timerfd.h>
 #include <unistd.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -354,10 +355,19 @@ input_pointer_motion(struct redstate* rs,
     rs->cursor_x    = max(min(x, (double)width), 0);
     rs->cursor_y    = max(min(y, (double)height), 0);
 
-    if (time_msec - rs->last_cursor_motion_time < 8)
+    if (time_msec - rs->cursor_last_motion_time < 8)
         return 0;
 
-    rs->last_cursor_motion_time = time_msec;
+    struct itimerspec its = {
+        .it_value    = { .tv_sec = cfg.cursor_autohide_time / 1000,
+                         .tv_nsec =
+                           (cfg.cursor_autohide_time % 1000) * 1000 * 1000 },
+        .it_interval = { 0, 0 },
+    };
+
+    timerfd_settime(rs->cursor_hide_timer, 0, &its, NULL);
+
+    rs->cursor_last_motion_time = time_msec;
     if (red_pointer_send_motion(rs, time_msec))
         return 1;
     red_pointer_send_frame(rs);
@@ -372,7 +382,7 @@ input_pointer_scroll(struct redstate*                  rs,
                      double                            value,
                      double                            value120)
 {
-    rs->last_cursor_scroll_time = time_msec;
+    rs->cursor_last_scroll_time = time_msec;
     if (red_pointer_send_scroll(rs, time_msec, axis, source, value, value120))
         return 1;
     red_pointer_send_frame(rs);

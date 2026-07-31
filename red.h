@@ -5,6 +5,7 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
+#include <libinput.h>
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -148,7 +149,9 @@ struct redstate
     double   cursor_x;
     double   cursor_y;
     int      using_hardware_cursor;
-    uint32_t last_cursor_motion_time;
+    uint32_t cursor_last_motion_time;
+    uint32_t cursor_last_scroll_time;
+    int      cursor_hide_timer;
 
     // all clients
     dll(struct redclient*) rcs; // red clients
