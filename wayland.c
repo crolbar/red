@@ -858,6 +858,11 @@ wl_pointer_set_cursor(struct wl_client*   client,
                       int32_t             hotspot_y)
 {
     struct redstate* rs = wl_resource_get_user_data(resource);
+
+    // as a client we don't do cursors
+    if (rs->is_wayland_client)
+        return;
+
     if (surface == NULL)
         drm_hide_cursor(rs);
     else // currently not using surface to change cursor, just update.
