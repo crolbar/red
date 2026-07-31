@@ -23,6 +23,13 @@ red_kb_send_keys(struct redstate* rs,
 
 int
 red_pointer_send_motion(struct redstate* rs, uint32_t time_msec);
+int
+red_pointer_send_relative_motion(struct redstate* rs,
+                                 uint64_t         time_usec,
+                                 double           dx,
+                                 double           dy,
+                                 double           udx,
+                                 double           udy);
 
 int
 red_pointer_send_button(struct redstate* rs,

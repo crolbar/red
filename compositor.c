@@ -1,11 +1,14 @@
 #include "compositor.h"
+#include "config.h"
 #include "dll.h"
 #include "drm.h"
 #include "log.h"
 #include "red.h"
+#include "relative-pointer-server-protocol.h"
 #include "render.h"
 #include "wayland.h"
 #include <libinput.h>
+#include <sys/timerfd.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <wayland-server.h>
@@ -202,9 +205,44 @@ red_kb_send_keys(struct redstate* rs,
 }
 
 int
+red_pointer_send_relative_motion(struct redstate* rs,
+                                 uint64_t         time_usec,
+                                 double           dx,
+                                 double           dy,
+                                 double           udx,
+                                 double           udy)
+{
+    if (rs->relative_pointers.size == 0)
+        return 0;
+
+    uint32_t time_hi = time_usec >> 32;
+    uint32_t time_lo = time_usec & 0xffffffff;
+    dll_for_each(rs->relative_pointers, v)
+    {
+        zwp_relative_pointer_v1_send_relative_motion(v->val,
+                                                     time_hi,
+                                                     time_lo,
+                                                     wl_fixed_from_double(dx),
+                                                     wl_fixed_from_double(dy),
+                                                     wl_fixed_from_double(udx),
+                                                     wl_fixed_from_double(udy));
+    }
+
+    return 0;
+}
+
+int
 red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
 {
     assert(!rs->is_wayland_client);
+
+    struct itimerspec its = {
+        .it_value    = { .tv_sec = cfg.cursor_autohide_time / 1000,
+                         .tv_nsec =
+                           (cfg.cursor_autohide_time % 1000) * 1000 * 1000 },
+        .it_interval = { 0, 0 },
+    };
+    timerfd_settime(rs->cursor_hide_timer, 0, &its, NULL);
 
     if (rs->using_hardware_cursor) {
         if (drm_update_cursor_plane(rs))

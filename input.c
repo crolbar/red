@@ -345,29 +345,29 @@ input_pointer_button(struct redstate* rs,
 int
 input_pointer_motion(struct redstate* rs,
                      uint32_t         time_msec,
+                     uint64_t         time_usec,
                      double           dx,
-                     double           dy)
+                     double           dy,
+                     double           udx,
+                     double           udy)
 {
     uint32_t width  = rs->backend->get_width(rs->backend->d);
     uint32_t height = rs->backend->get_height(rs->backend->d);
-    double   x      = rs->cursor_x + dx * 0.4;
-    double   y      = rs->cursor_y + dy * 0.4;
-    rs->cursor_x    = max(min(x, (double)width), 0);
-    rs->cursor_y    = max(min(y, (double)height), 0);
+
+    // TODO: add setting for this in cfg
+    double x = rs->cursor_x + udx * 0.4;
+    double y = rs->cursor_y + udy * 0.4;
+
+    rs->cursor_x = max(min(x, (double)width), 0);
+    rs->cursor_y = max(min(y, (double)height), 0);
+
+    if (red_pointer_send_relative_motion(rs, time_usec, dx, dy, udx, udy))
+        return 1;
 
     if (time_msec - rs->cursor_last_motion_time < 8)
         return 0;
-
-    struct itimerspec its = {
-        .it_value    = { .tv_sec = cfg.cursor_autohide_time / 1000,
-                         .tv_nsec =
-                           (cfg.cursor_autohide_time % 1000) * 1000 * 1000 },
-        .it_interval = { 0, 0 },
-    };
-
-    timerfd_settime(rs->cursor_hide_timer, 0, &its, NULL);
-
     rs->cursor_last_motion_time = time_msec;
+
     if (red_pointer_send_motion(rs, time_msec))
         return 1;
     red_pointer_send_frame(rs);
@@ -430,10 +430,14 @@ input_dispatch(struct redstate* rs)
                 struct libinput_event_pointer* pe =
                   libinput_event_get_pointer_event(event);
 
-                double   dx = libinput_event_pointer_get_dx_unaccelerated(pe);
-                double   dy = libinput_event_pointer_get_dy_unaccelerated(pe);
+                double   udx = libinput_event_pointer_get_dx_unaccelerated(pe);
+                double   udy = libinput_event_pointer_get_dy_unaccelerated(pe);
+                double   dx  = libinput_event_pointer_get_dx(pe);
+                double   dy  = libinput_event_pointer_get_dy(pe);
                 uint32_t time_msec = libinput_event_pointer_get_time(pe);
-                if (input_pointer_motion(rs, time_msec, dx, dy))
+                uint64_t time_usec = libinput_event_pointer_get_time_usec(pe);
+                if (input_pointer_motion(
+                      rs, time_msec, time_usec, dx, dy, udx, udy))
                     goto fail;
                 break;
             }

@@ -43,8 +43,14 @@ XDG_SHELL_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/xdg-shell/xdg-shell.xml
 XDG_DECORATION_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
 LINUX_DMABUF_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/linux-dmabuf/linux-dmabuf-v1.xml
 VIEWPORTER_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/viewporter/viewporter.xml
+RELATIVE_POINTER_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/relative-pointer/relative-pointer-unstable-v1.xml
 
 all: $(BINS)
+
+relative-pointer-server-protocol.h: $(RELATIVE_POINTER_XML)
+	wayland-scanner server-header $< $@
+relative-pointer-protocol.c: $(RELATIVE_POINTER_XML)
+	wayland-scanner private-code $< $@
 
 viewporter-server-protocol.h: $(VIEWPORTER_XML)
 	wayland-scanner server-header $< $@
@@ -73,6 +79,8 @@ linux-dmabuf-protocol.c: $(LINUX_DMABUF_XML)
 PRO_SRC=linux-dmabuf-protocol.c \
 		 linux-dmabuf-client-protocol.h \
 		 linux-dmabuf-server-protocol.h \
+		 relative-pointer-server-protocol.h \
+		 relative-pointer-protocol.c \
 		 viewporter-server-protocol.h \
 		 viewporter-protocol.c \
 		 xdg-shell-protocol.c \

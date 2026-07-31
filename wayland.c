@@ -4,6 +4,7 @@
 #include "linux-dmabuf-server-protocol.h"
 #include "log.h"
 #include "red.h"
+#include "relative-pointer-server-protocol.h"
 #include "render.h"
 #include "viewporter-server-protocol.h"
 #include "wayland.h"
@@ -1691,6 +1692,73 @@ wl_global_bind_wp_viewporter(struct wl_client* client,
 }
 
 void
+zwp_relative_pointer_destroy(struct wl_client*   client,
+                             struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+static const struct zwp_relative_pointer_v1_interface
+  zwp_relative_pointer_implementation = {
+      .destroy = zwp_relative_pointer_destroy,
+  };
+
+static void
+zwp_relative_pointer_resource_destroy(struct wl_resource* resource)
+{
+    struct redstate* rs = wl_resource_get_user_data(resource);
+    assert(rs);
+
+    dll_remove_val(rs->relative_pointers, resource);
+}
+
+static void
+zwp_relative_pointer_manager_destroy(struct wl_client*   client,
+                                     struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+static void
+zwp_relative_pointer_manager_get_relative_pointer(struct wl_client*   client,
+                                                  struct wl_resource* resource,
+                                                  uint32_t            id,
+                                                  struct wl_resource* pointer)
+{
+    struct redstate* rs = wl_resource_get_user_data(resource);
+
+    struct wl_resource* zwp_relative_pointer =
+      wl_resource_create(client,
+                         &zwp_relative_pointer_v1_interface,
+                         wl_resource_get_version(resource),
+                         id);
+    wl_resource_set_implementation(zwp_relative_pointer,
+                                   &zwp_relative_pointer_implementation,
+                                   wl_resource_get_user_data(resource),
+                                   zwp_relative_pointer_resource_destroy);
+
+    dll_push_tail(rs->relative_pointers, zwp_relative_pointer);
+}
+
+static const struct zwp_relative_pointer_manager_v1_interface
+  zwp_relative_pointer_manager_implementation = {
+      .destroy              = zwp_relative_pointer_manager_destroy,
+      .get_relative_pointer = zwp_relative_pointer_manager_get_relative_pointer,
+  };
+
+static void
+wl_global_bind_zwp_relative_pointer(struct wl_client* client,
+                                    void*             data,
+                                    uint32_t          version,
+                                    uint32_t          id)
+{
+    struct wl_resource* zwp_relative_pointer_manager = wl_resource_create(
+      client, &zwp_relative_pointer_manager_v1_interface, version, id);
+    wl_resource_set_implementation(zwp_relative_pointer_manager,
+                                   &zwp_relative_pointer_manager_implementation,
+                                   data,
+                                   NULL);
+}
+
+void
 handle_wl_log(const char* _fmt, va_list args)
 {
     // remove newline at end
@@ -1801,6 +1869,14 @@ init_compositor(struct redstate* rs)
                                          rs,
                                          wl_global_bind_wp_viewporter);
     assert(rs->wp_viewporter);
+
+    rs->zwp_relative_pointer_manager =
+      wl_global_create(rs->wl_display,
+                       &zwp_relative_pointer_manager_v1_interface,
+                       1,
+                       rs,
+                       wl_global_bind_zwp_relative_pointer);
+    assert(rs->zwp_relative_pointer_manager);
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);
