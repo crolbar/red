@@ -69,6 +69,13 @@ redconfig cfg = (redconfig){
           .mods = RED_MOD_SUPER | RED_MOD_ALT | RED_MOD_CTRL | RED_MOD_SHIFT,
           A( RED_ACTION_QUIT )
         },
+
+        {
+          .key = "Q",
+          .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
+          A( RED_ACTION_CLOSE )
+        },
+
         {
           .key = "k",
           .mods = RED_MOD_SUPER,
@@ -79,11 +86,13 @@ redconfig cfg = (redconfig){
           .mods = RED_MOD_SUPER,
           A( RED_ACTION_FOCUS_NEXT )
         },
+
         {
           .key = "x",
           .mods = RED_MOD_SUPER,
           A( RED_ACTION_SPAWN, "foot" )
         },
+
         {
           .key = "d",
           .mods = RED_MOD_SUPER,

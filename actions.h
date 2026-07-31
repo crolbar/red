@@ -2,11 +2,18 @@
 
 #include "red.h"
 
-#define RED_ACTION_QUIT       "quit"
-#define RED_ACTION_DEBUG      "debug"
+// quit the server
+#define RED_ACTION_QUIT "quit"
+// close toplevel window
+#define RED_ACTION_CLOSE "close"
+// spawn program from PATH
+#define RED_ACTION_SPAWN "spawn"
+// focus next toplevel
 #define RED_ACTION_FOCUS_NEXT "focus_next"
+// focus prev toplevel
 #define RED_ACTION_FOCUS_PREV "focus_prev"
-#define RED_ACTION_SPAWN      "spawn"
+
+#define RED_ACTION_DEBUG "debug"
 
 typedef struct redaction
 {

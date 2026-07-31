@@ -2,6 +2,7 @@
 #include "compositor.h"
 #include "log.h"
 #include "red.h"
+#include "xdg-shell-server-protocol.h"
 #include <errno.h> // IWYU pragma: keep
 #include <fcntl.h>
 #include <string.h>
@@ -39,6 +40,15 @@ redaction_focus_prev(struct redstate* rs, char** args, size_t args_len)
             }
         }
     }
+}
+
+void
+redaction_close(struct redstate* rs, char** args, size_t args_len)
+{
+    if (!rs->focused_rt || !rs->focused_rt->rsurf ||
+        !rs->focused_rt->rsurf->xdg_toplevel)
+        return;
+    xdg_toplevel_send_close(rs->focused_rt->rsurf->xdg_toplevel);
 }
 
 int
@@ -99,6 +109,7 @@ ACTIONS(
     { .action_type = RED_ACTION_FOCUS_PREV, redaction_focus_prev },
     { .action_type = RED_ACTION_FOCUS_NEXT, redaction_focus_next },
     { .action_type = RED_ACTION_SPAWN, redaction_spawn },
+    { .action_type = RED_ACTION_CLOSE, redaction_close },
 )
 // clang-format on
 
