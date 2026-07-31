@@ -10,9 +10,8 @@
 #include <linux/vt.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 #include <unistd.h>
-#include <wayland-client-protocol.h>
-#include <xkbcommon/xkbcommon-names.h>
 #include <xkbcommon/xkbcommon.h>
 
 int
@@ -330,87 +329,52 @@ input_kb_key(struct redstate* rs,
 }
 
 int
-input_pointer(struct redstate*               rs,
-              enum libinput_event_type       event_type,
-              struct libinput_event_pointer* pe)
+input_pointer_button(struct redstate* rs,
+                     uint32_t         time_msec,
+                     uint32_t         button,
+                     int              press)
 {
-    struct libinput_event* event = NULL;
+    if (red_pointer_send_button(rs, time_msec, button, press))
+        return 1;
 
-    do {
-        uint32_t time_msec = libinput_event_pointer_get_time(pe);
-        if (event_type == LIBINPUT_EVENT_POINTER_BUTTON) {
-            uint32_t button = libinput_event_pointer_get_button(pe);
-            int      state  = (int)libinput_event_pointer_get_button_state(pe);
+    red_pointer_send_frame(rs);
+    return 0;
+}
 
-            red_pointer_send_button(rs, time_msec, button, state);
-        }
+int
+input_pointer_motion(struct redstate* rs,
+                     uint32_t         time_msec,
+                     double           dx,
+                     double           dy)
+{
+    uint32_t width  = rs->backend->get_width(rs->backend->d);
+    uint32_t height = rs->backend->get_height(rs->backend->d);
+    double   x      = rs->cursor_x + dx * 0.4;
+    double   y      = rs->cursor_y + dy * 0.4;
+    rs->cursor_x    = max(min(x, (double)width), 0);
+    rs->cursor_y    = max(min(y, (double)height), 0);
 
-        if (event_type == LIBINPUT_EVENT_POINTER_MOTION) {
-            double dx = libinput_event_pointer_get_dx_unaccelerated(pe);
-            double dy = libinput_event_pointer_get_dy_unaccelerated(pe);
+    if (time_msec - rs->last_cursor_motion_time < 10)
+        return 0;
 
-            red_pointer_send_motion(rs, time_msec, dx, dy);
-        }
+    rs->last_cursor_motion_time = time_msec;
+    if (red_pointer_send_motion(rs, time_msec))
+        return 1;
+    red_pointer_send_frame(rs);
+    return 0;
+}
 
-        if (event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL ||
-            event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER) {
-
-            int is_vertical_scroll = libinput_event_pointer_has_axis(
-              pe, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL);
-
-            int is_horizontal_scroll = libinput_event_pointer_has_axis(
-              pe, LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL);
-
-            enum libinput_pointer_axis pointer_axis;
-            if (is_horizontal_scroll)
-                pointer_axis = LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL;
-            else if (is_vertical_scroll)
-                pointer_axis = LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL;
-            else
-                continue;
-
-            enum libinput_pointer_axis_source pointer_axis_source;
-            if (event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL)
-                pointer_axis_source = LIBINPUT_POINTER_AXIS_SOURCE_WHEEL;
-            else if (event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER)
-                pointer_axis_source = LIBINPUT_POINTER_AXIS_SOURCE_FINGER;
-
-            double value120 = 0;
-            if (event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL)
-                value120 = libinput_event_pointer_get_scroll_value_v120(
-                  pe, pointer_axis);
-
-            double value =
-              libinput_event_pointer_get_scroll_value(pe, pointer_axis);
-
-            red_pointer_send_scroll(rs,
-                                    time_msec,
-                                    value,
-                                    value120,
-                                    pointer_axis_source,
-                                    pointer_axis);
-        }
-
-        if (event)
-            libinput_event_destroy(event);
-
-        event_type = libinput_next_event_type(rs->li);
-
-        if (event_type == LIBINPUT_EVENT_POINTER_MOTION ||
-            event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL ||
-            event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER ||
-            event_type == LIBINPUT_EVENT_POINTER_BUTTON) {
-            event = libinput_get_event(rs->li);
-            pe    = libinput_event_get_pointer_event(event);
-        }
-
-        if (rs->focused_rt && rs->focused_rt->rc->wl_pointer)
-            wl_pointer_send_frame(rs->focused_rt->rc->wl_pointer);
-    } while (event_type == LIBINPUT_EVENT_POINTER_MOTION ||
-             event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL ||
-             event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER ||
-             event_type == LIBINPUT_EVENT_POINTER_BUTTON);
-
+int
+input_pointer_scroll(struct redstate*                  rs,
+                     uint32_t                          time_msec,
+                     enum libinput_pointer_axis        axis,
+                     enum libinput_pointer_axis_source source,
+                     double                            value,
+                     double                            value120)
+{
+    if (red_pointer_send_scroll(rs, time_msec, axis, source, value, value120))
+        return 1;
+    red_pointer_send_frame(rs);
     return 0;
 }
 
@@ -426,34 +390,105 @@ input_dispatch(struct redstate* rs)
     while ((event = libinput_get_event(rs->li)) != NULL) {
         enum libinput_event_type event_type = libinput_event_get_type(event);
 
-        if (event_type == LIBINPUT_EVENT_KEYBOARD_KEY) {
-            struct libinput_event_keyboard* kbe =
-              libinput_event_get_keyboard_event(event);
+        switch (event_type) {
+            case LIBINPUT_EVENT_DEVICE_ADDED: {
+                struct libinput_device* device =
+                  libinput_event_get_device(event);
 
-            uint32_t evdev_key   = libinput_event_keyboard_get_key(kbe);
-            int      evdev_press = libinput_event_keyboard_get_key_state(kbe);
-            uint32_t time_msec   = libinput_event_keyboard_get_time(kbe);
-            if (input_kb_key(rs, time_msec, evdev_key, evdev_press))
-                goto fail;
-        } else if (event_type == LIBINPUT_EVENT_POINTER_MOTION ||
-                   event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL ||
-                   event_type == LIBINPUT_EVENT_POINTER_SCROLL_FINGER ||
-                   event_type == LIBINPUT_EVENT_POINTER_BUTTON) {
-            struct libinput_event_pointer* pe =
-              libinput_event_get_pointer_event(event);
-
-            if (input_pointer(rs, event_type, pe))
-                goto fail;
-        }
-
-        else if (event_type == LIBINPUT_EVENT_DEVICE_ADDED) {
-            struct libinput_device* device = libinput_event_get_device(event);
-
-            // enable finger tap
-            if (libinput_device_config_tap_get_finger_count(device) > 0) {
-                libinput_device_config_tap_set_enabled(
-                  device, LIBINPUT_CONFIG_TAP_ENABLED);
+                // enable finger tap
+                if (libinput_device_config_tap_get_finger_count(device) > 0) {
+                    libinput_device_config_tap_set_enabled(
+                      device, LIBINPUT_CONFIG_TAP_ENABLED);
+                }
+                break;
             }
+
+            case LIBINPUT_EVENT_KEYBOARD_KEY: {
+                struct libinput_event_keyboard* kbe =
+                  libinput_event_get_keyboard_event(event);
+
+                uint32_t evdev_key = libinput_event_keyboard_get_key(kbe);
+                int evdev_press    = libinput_event_keyboard_get_key_state(kbe);
+                uint32_t time_msec = libinput_event_keyboard_get_time(kbe);
+                if (input_kb_key(rs, time_msec, evdev_key, evdev_press))
+                    goto fail;
+                break;
+            }
+
+            case LIBINPUT_EVENT_POINTER_MOTION: {
+                struct libinput_event_pointer* pe =
+                  libinput_event_get_pointer_event(event);
+
+                double   dx = libinput_event_pointer_get_dx_unaccelerated(pe);
+                double   dy = libinput_event_pointer_get_dy_unaccelerated(pe);
+                uint32_t time_msec = libinput_event_pointer_get_time(pe);
+                if (input_pointer_motion(rs, time_msec, dx, dy))
+                    goto fail;
+                break;
+            }
+
+            case LIBINPUT_EVENT_POINTER_BUTTON: {
+                struct libinput_event_pointer* pe =
+                  libinput_event_get_pointer_event(event);
+
+                uint32_t time_msec = libinput_event_pointer_get_time(pe);
+                uint32_t button    = libinput_event_pointer_get_button(pe);
+                int      press = libinput_event_pointer_get_button_state(pe) ==
+                            LIBINPUT_BUTTON_STATE_PRESSED;
+
+                if (input_pointer_button(rs, time_msec, button, press))
+                    goto fail;
+                break;
+            }
+
+            case LIBINPUT_EVENT_POINTER_SCROLL_WHEEL:
+            case LIBINPUT_EVENT_POINTER_SCROLL_FINGER:
+            case LIBINPUT_EVENT_POINTER_SCROLL_CONTINUOUS: {
+                struct libinput_event_pointer* pe =
+                  libinput_event_get_pointer_event(event);
+                uint32_t time_msec = libinput_event_pointer_get_time(pe);
+
+                enum libinput_pointer_axis_source source;
+                switch (event_type) {
+                    case LIBINPUT_EVENT_POINTER_SCROLL_WHEEL:
+                        source = LIBINPUT_POINTER_AXIS_SOURCE_WHEEL;
+                        break;
+                    case LIBINPUT_EVENT_POINTER_SCROLL_FINGER:
+                        source = LIBINPUT_POINTER_AXIS_SOURCE_FINGER;
+                        break;
+                    case LIBINPUT_EVENT_POINTER_SCROLL_CONTINUOUS:
+                        source = LIBINPUT_POINTER_AXIS_SOURCE_CONTINUOUS;
+                        break;
+                    default:
+                        break;
+                }
+
+                enum libinput_pointer_axis axes[] = {
+                    LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL,
+                    LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL,
+                };
+
+                for (int i = 0; i < 2; i++) {
+                    enum libinput_pointer_axis axis = axes[i];
+                    if (!libinput_event_pointer_has_axis(pe, axis))
+                        continue;
+
+                    double value =
+                      libinput_event_pointer_get_scroll_value(pe, axis);
+
+                    double value120 = 0;
+                    if (event_type == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL)
+                        value120 = libinput_event_pointer_get_scroll_value_v120(
+                          pe, axis);
+
+                    if (input_pointer_scroll(
+                          rs, time_msec, axis, source, value, value120))
+                        goto fail;
+                }
+                break;
+            }
+            default:
+                break;
         }
 
         libinput_event_destroy(event);

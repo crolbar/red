@@ -22,10 +22,7 @@ red_kb_send_keys(struct redstate* rs,
                  int              mods_have_changed);
 
 int
-red_pointer_send_motion(struct redstate* rs,
-                        uint32_t         time_msec,
-                        double           x,
-                        double           y);
+red_pointer_send_motion(struct redstate* rs, uint32_t time_msec);
 
 int
 red_pointer_send_button(struct redstate* rs,
@@ -36,10 +33,13 @@ red_pointer_send_button(struct redstate* rs,
 int
 red_pointer_send_scroll(struct redstate*                  rs,
                         uint32_t                          time_msec,
-                        double                            value,
-                        double                            value120,
+                        enum libinput_pointer_axis        axis,
                         enum libinput_pointer_axis_source source,
-                        enum libinput_pointer_axis        axis);
+                        double                            value,
+                        double                            value120);
+
+int
+red_pointer_send_frame(struct redstate* rs);
 
 double
 red_get_lc_x(struct redstate* rs);

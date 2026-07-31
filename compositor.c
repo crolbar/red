@@ -6,6 +6,7 @@
 #include "render.h"
 #include "wayland.h"
 #include <libinput.h>
+#include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <wayland-server.h>
 
@@ -201,19 +202,9 @@ red_kb_send_keys(struct redstate* rs,
 }
 
 int
-red_pointer_send_motion(struct redstate* rs,
-                        uint32_t         time_msec,
-                        double           x,
-                        double           y)
+red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
 {
     assert(!rs->is_wayland_client);
-
-    uint32_t width  = rs->backend->get_width(rs->backend->d);
-    uint32_t height = rs->backend->get_height(rs->backend->d);
-    x               = rs->cursor_x + x * 0.4;
-    y               = rs->cursor_y + y * 0.4;
-    rs->cursor_x    = max(min(x, (double)width), 0);
-    rs->cursor_y    = max(min(y, (double)height), 0);
 
     if (rs->using_hardware_cursor) {
         if (drm_update_cursor_plane(rs))
@@ -247,31 +238,35 @@ red_pointer_send_button(struct redstate* rs,
 
     return 0;
 }
+
 int
 red_pointer_send_scroll(struct redstate*                  rs,
                         uint32_t                          time_msec,
-                        double                            value,
-                        double                            value120,
+                        enum libinput_pointer_axis        axis,
                         enum libinput_pointer_axis_source source,
-                        enum libinput_pointer_axis        axis)
+                        double                            value,
+                        double                            value120)
 {
     if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
         return 0;
+    struct wl_resource* pointer = rs->focused_rt->rc->wl_pointer;
+    int                 version = wl_resource_get_version(pointer);
 
     uint32_t axis_source;
     switch (source) {
-        case LIBINPUT_POINTER_AXIS_SOURCE_WHEEL_TILT:
-            axis_source = WL_POINTER_AXIS_SOURCE_WHEEL_TILT;
-            break;
-        case LIBINPUT_POINTER_AXIS_SOURCE_CONTINUOUS:
-            axis_source = WL_POINTER_AXIS_SOURCE_CONTINUOUS;
+        case LIBINPUT_POINTER_AXIS_SOURCE_WHEEL:
+            axis_source = WL_POINTER_AXIS_SOURCE_WHEEL;
             break;
         case LIBINPUT_POINTER_AXIS_SOURCE_FINGER:
             axis_source = WL_POINTER_AXIS_SOURCE_FINGER;
             break;
+        case LIBINPUT_POINTER_AXIS_SOURCE_CONTINUOUS:
+            axis_source = WL_POINTER_AXIS_SOURCE_CONTINUOUS;
+            break;
+
         default:
-        case LIBINPUT_POINTER_AXIS_SOURCE_WHEEL:
-            axis_source = WL_POINTER_AXIS_SOURCE_WHEEL;
+        case LIBINPUT_POINTER_AXIS_SOURCE_WHEEL_TILT:
+            axis_source = WL_POINTER_AXIS_SOURCE_WHEEL_TILT;
             break;
     };
 
@@ -281,16 +276,41 @@ red_pointer_send_scroll(struct redstate*                  rs,
     else
         wl_axis = WL_POINTER_AXIS_HORIZONTAL_SCROLL;
 
-    wl_pointer_send_axis_source(rs->focused_rt->rc->wl_pointer, axis_source);
+    wl_pointer_send_axis(
+      pointer, time_msec, wl_axis, wl_fixed_from_double(value));
 
-    wl_pointer_send_axis(rs->focused_rt->rc->wl_pointer,
-                         time_msec,
-                         wl_axis,
-                         wl_fixed_from_double(value));
+    if (version >= 5)
+        wl_pointer_send_axis_source(pointer, axis_source);
 
-    if (value120 != 0)
-        wl_pointer_send_axis_value120(
-          rs->focused_rt->rc->wl_pointer, wl_axis, (int32_t)value120);
+    if (version >= 9)
+        wl_pointer_send_axis_relative_direction(
+          pointer, wl_axis, WL_POINTER_AXIS_RELATIVE_DIRECTION_IDENTICAL);
 
+    if (axis_source == WL_POINTER_AXIS_SOURCE_WHEEL) {
+        if (value120 != 0) {
+            if (version >= 8)
+                wl_pointer_send_axis_value120(
+                  pointer, wl_axis, (int32_t)value120);
+        }
+    } else if (value == 0)
+        if (version >= 5)
+            wl_pointer_send_axis_stop(pointer, time_msec, wl_axis);
+
+    return 0;
+}
+
+int
+red_pointer_send_frame(struct redstate* rs)
+{
+    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+        return 0;
+
+    struct wl_resource* pointer = rs->focused_rt->rc->wl_pointer;
+    int                 version = wl_resource_get_version(pointer);
+
+    if (version < 5)
+        return 0;
+
+    wl_pointer_send_frame(pointer);
     return 0;
 }

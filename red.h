@@ -143,11 +143,12 @@ struct redstate
     GLuint vbo;
     GLint  texture_loc;
 
-    GLuint cursor_gl_program;
-    GLuint cursor_gl_vao;
-    double cursor_x;
-    double cursor_y;
-    int    using_hardware_cursor;
+    GLuint   cursor_gl_program;
+    GLuint   cursor_gl_vao;
+    double   cursor_x;
+    double   cursor_y;
+    int      using_hardware_cursor;
+    uint32_t last_cursor_motion_time;
 
     // all clients
     dll(struct redclient*) rcs; // red clients

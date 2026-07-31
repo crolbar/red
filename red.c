@@ -91,11 +91,12 @@ main(int argc, char** argv)
     rs->rts                    = (typeof(rs->rts))dll_init();
     rs->focused_rt             = NULL;
 
-    rs->cursor_gl_program     = 0;
-    rs->cursor_gl_vao         = 0;
-    rs->cursor_x              = 0;
-    rs->cursor_y              = 0;
-    rs->using_hardware_cursor = 0;
+    rs->cursor_gl_program       = 0;
+    rs->cursor_gl_vao           = 0;
+    rs->cursor_x                = 0;
+    rs->cursor_y                = 0;
+    rs->using_hardware_cursor   = 0;
+    rs->last_cursor_motion_time = 0;
 
     rs->program     = 0;
     rs->vao         = 0;
