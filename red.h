@@ -136,6 +136,7 @@ struct redstate
     struct wl_global*     zwp_linux_dmabuf;
     struct wl_global*     wp_viewporter;
     struct wl_global*     zwp_relative_pointer_manager;
+    struct wl_global*     zwp_pointer_constraints;
     struct wl_global*     subcompositor_global;
     struct wl_global*     data_device_manager_global;
     struct wl_listener    client_created;
@@ -153,6 +154,7 @@ struct redstate
     uint32_t cursor_last_motion_time;
     uint32_t cursor_last_scroll_time;
     int      cursor_hide_timer;
+    int      cursor_locked;
 
     dll(struct wl_resource*) relative_pointers;
 

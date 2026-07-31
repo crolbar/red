@@ -102,6 +102,7 @@ main(int argc, char** argv)
     rs->cursor_last_scroll_time = 0;
     rs->cursor_hide_timer       = timerfd_create(CLOCK_REALTIME, 0);
     rs->relative_pointers       = (typeof(rs->relative_pointers))dll_init();
+    rs->cursor_locked           = 0;
 
     rs->program     = 0;
     rs->vao         = 0;
@@ -233,7 +234,8 @@ main(int argc, char** argv)
                 uint64_t expirations;
                 int      n = read(
                   rs->cursor_hide_timer, &expirations, sizeof(expirations));
-                assert(n == sizeof(expirations));
+                if (n != sizeof(expirations))
+                    continue;
                 if (drm_hide_cursor(rs))
                     goto end;
             }

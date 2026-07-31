@@ -351,6 +351,12 @@ input_pointer_motion(struct redstate* rs,
                      double           udx,
                      double           udy)
 {
+    if (red_pointer_send_relative_motion(rs, time_usec, dx, dy, udx, udy))
+        return 1;
+
+    if (rs->cursor_locked)
+        return 0;
+
     uint32_t width  = rs->backend->get_width(rs->backend->d);
     uint32_t height = rs->backend->get_height(rs->backend->d);
 
@@ -360,9 +366,6 @@ input_pointer_motion(struct redstate* rs,
 
     rs->cursor_x = max(min(x, (double)width), 0);
     rs->cursor_y = max(min(y, (double)height), 0);
-
-    if (red_pointer_send_relative_motion(rs, time_usec, dx, dy, udx, udy))
-        return 1;
 
     if (time_msec - rs->cursor_last_motion_time < 8)
         return 0;

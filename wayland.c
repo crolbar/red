@@ -1,8 +1,10 @@
 #include "compositor.h"
 #include "config.h"
 #include "dll.h"
+#include "drm.h"
 #include "linux-dmabuf-server-protocol.h"
 #include "log.h"
+#include "pointer-constraints-server-protocol.h"
 #include "red.h"
 #include "relative-pointer-server-protocol.h"
 #include "render.h"
@@ -855,6 +857,11 @@ wl_pointer_set_cursor(struct wl_client*   client,
                       int32_t             hotspot_x,
                       int32_t             hotspot_y)
 {
+    struct redstate* rs = wl_resource_get_user_data(resource);
+    if (surface == NULL)
+        drm_hide_cursor(rs);
+    else // currently not using surface to change cursor, just update.
+        drm_update_cursor_plane(rs);
 }
 
 static void
@@ -1757,6 +1764,128 @@ wl_global_bind_zwp_relative_pointer(struct wl_client* client,
                                    data,
                                    NULL);
 }
+static void
+zwp_confined_pointer_destroy(struct wl_client*   client,
+                             struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+static void
+zwp_confined_pointer_set_region(struct wl_client*   client,
+                                struct wl_resource* resource,
+                                struct wl_resource* region)
+{
+}
+static const struct zwp_confined_pointer_v1_interface
+  zwp_confined_pointer_implementation = {
+      .destroy    = zwp_confined_pointer_destroy,
+      .set_region = zwp_confined_pointer_set_region,
+  };
+
+static void
+zwp_locked_pointer_destroy(struct wl_client*   client,
+                           struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+static void
+zwp_locked_pointer_set_cursor_position_hint(struct wl_client*   client,
+                                            struct wl_resource* resource,
+                                            wl_fixed_t          surface_x,
+                                            wl_fixed_t          surface_y)
+{
+}
+static void
+zwp_locked_pointer_set_region(struct wl_client*   client,
+                              struct wl_resource* resource,
+                              struct wl_resource* region)
+{
+}
+static const struct zwp_locked_pointer_v1_interface
+  zwp_locked_pointer_implementation = {
+      .destroy                  = zwp_locked_pointer_destroy,
+      .set_cursor_position_hint = zwp_locked_pointer_set_cursor_position_hint,
+      .set_region               = zwp_locked_pointer_set_region,
+  };
+
+static void
+zwp_locked_pointer_resource_destroy(struct wl_resource* resource)
+{
+    struct redstate* rs = wl_resource_get_user_data(resource);
+    rs->cursor_locked   = 0;
+}
+
+static void
+zwp_pointer_constraints_destroy(struct wl_client*   client,
+                                struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+static void
+zwp_pointer_constraints_lock_pointer(struct wl_client*   client,
+                                     struct wl_resource* resource,
+                                     uint32_t            id,
+                                     struct wl_resource* surface,
+                                     struct wl_resource* pointer,
+                                     struct wl_resource* region,
+                                     uint32_t            lifetime)
+{
+    struct redstate* rs = wl_resource_get_user_data(resource);
+
+    struct wl_resource* zwp_locked_pointer =
+      wl_resource_create(client,
+                         &zwp_locked_pointer_v1_interface,
+                         wl_resource_get_version(resource),
+                         id);
+    wl_resource_set_implementation(zwp_locked_pointer,
+                                   &zwp_locked_pointer_implementation,
+                                   wl_resource_get_user_data(resource),
+                                   zwp_locked_pointer_resource_destroy);
+
+    rs->cursor_locked = 1;
+    zwp_locked_pointer_v1_send_locked(zwp_locked_pointer);
+}
+static void
+zwp_pointer_constraints_confine_pointer(struct wl_client*   client,
+                                        struct wl_resource* resource,
+                                        uint32_t            id,
+                                        struct wl_resource* surface,
+                                        struct wl_resource* pointer,
+                                        struct wl_resource* region,
+                                        uint32_t            lifetime)
+{
+    struct wl_resource* zwp_confined_pointer =
+      wl_resource_create(client,
+                         &zwp_confined_pointer_v1_interface,
+                         wl_resource_get_version(resource),
+                         id);
+    wl_resource_set_implementation(zwp_confined_pointer,
+                                   &zwp_confined_pointer_implementation,
+                                   wl_resource_get_user_data(resource),
+                                   NULL);
+    // TODO
+}
+
+static const struct zwp_pointer_constraints_v1_interface
+  zwp_pointer_constraints_implementation = {
+      .destroy         = zwp_pointer_constraints_destroy,
+      .lock_pointer    = zwp_pointer_constraints_lock_pointer,
+      .confine_pointer = zwp_pointer_constraints_confine_pointer,
+  };
+
+static void
+wl_global_bind_zwp_pointer_constraints(struct wl_client* client,
+                                       void*             data,
+                                       uint32_t          version,
+                                       uint32_t          id)
+{
+    struct wl_resource* zwp_pointer_constraints = wl_resource_create(
+      client, &zwp_pointer_constraints_v1_interface, version, id);
+    wl_resource_set_implementation(zwp_pointer_constraints,
+                                   &zwp_pointer_constraints_implementation,
+                                   data,
+                                   NULL);
+}
 
 void
 handle_wl_log(const char* _fmt, va_list args)
@@ -1877,6 +2006,14 @@ init_compositor(struct redstate* rs)
                        rs,
                        wl_global_bind_zwp_relative_pointer);
     assert(rs->zwp_relative_pointer_manager);
+
+    rs->zwp_pointer_constraints =
+      wl_global_create(rs->wl_display,
+                       &zwp_pointer_constraints_v1_interface,
+                       1,
+                       rs,
+                       wl_global_bind_zwp_pointer_constraints);
+    assert(rs->zwp_pointer_constraints);
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);

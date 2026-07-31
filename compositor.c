@@ -227,7 +227,7 @@ red_pointer_send_relative_motion(struct redstate* rs,
                                                      wl_fixed_from_double(udx),
                                                      wl_fixed_from_double(udy));
     }
-
+    red_pointer_send_frame(rs);
     return 0;
 }
 
