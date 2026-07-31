@@ -214,6 +214,10 @@ red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
     else
         request_redraw(rs);
 
+    // give some time between scroll and motion events to stop starvation
+    if (time_msec - rs->last_cursor_scroll_time < 30)
+        return 0;
+
     if (rs->focused_rt && rs->focused_rt->rc->wl_pointer) {
         wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
                                time_msec,

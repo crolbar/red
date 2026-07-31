@@ -97,6 +97,7 @@ main(int argc, char** argv)
     rs->cursor_y                = 0;
     rs->using_hardware_cursor   = 0;
     rs->last_cursor_motion_time = 0;
+    rs->last_cursor_scroll_time = 0;
 
     rs->program     = 0;
     rs->vao         = 0;

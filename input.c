@@ -354,7 +354,7 @@ input_pointer_motion(struct redstate* rs,
     rs->cursor_x    = max(min(x, (double)width), 0);
     rs->cursor_y    = max(min(y, (double)height), 0);
 
-    if (time_msec - rs->last_cursor_motion_time < 10)
+    if (time_msec - rs->last_cursor_motion_time < 8)
         return 0;
 
     rs->last_cursor_motion_time = time_msec;
@@ -372,6 +372,7 @@ input_pointer_scroll(struct redstate*                  rs,
                      double                            value,
                      double                            value120)
 {
+    rs->last_cursor_scroll_time = time_msec;
     if (red_pointer_send_scroll(rs, time_msec, axis, source, value, value120))
         return 1;
     red_pointer_send_frame(rs);
