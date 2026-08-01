@@ -12,6 +12,8 @@
 #define RED_ACTION_FOCUS_NEXT "focus_next"
 // focus prev toplevel
 #define RED_ACTION_FOCUS_PREV "focus_prev"
+// draw blank frame & stop rendering until action is send again
+#define RED_ACTION_STOP_RENDERER "stop_renderer"
 
 #define RED_ACTION_DEBUG "debug"
 

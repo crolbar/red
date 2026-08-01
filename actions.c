@@ -2,6 +2,8 @@
 #include "compositor.h"
 #include "log.h"
 #include "red.h"
+#include "render.h"
+#include "wayland.h"
 #include "xdg-shell-server-protocol.h"
 #include <errno.h> // IWYU pragma: keep
 #include <fcntl.h>
@@ -49,6 +51,22 @@ redaction_close(struct redstate* rs, char** args, size_t args_len)
         !rs->focused_rt->rsurf->xdg_toplevel)
         return;
     xdg_toplevel_send_close(rs->focused_rt->rsurf->xdg_toplevel);
+}
+
+void
+redaction_stop_renderer(struct redstate* rs, char** args, size_t args_len)
+{
+    if (rs->should_draw) {
+        rs->should_draw = 2;
+        request_redraw(rs);
+    } else {
+        rs->should_draw = 1;
+
+        if (rs->focused_rt)
+            if (rs->backend->is_ready_for_frame(rs->backend->d))
+                red_send_pending_callback(rs->focused_rt->rsurf);
+        request_redraw(rs);
+    }
 }
 
 int
@@ -110,6 +128,7 @@ ACTIONS(
     { .action_type = RED_ACTION_FOCUS_NEXT, redaction_focus_next },
     { .action_type = RED_ACTION_SPAWN, redaction_spawn },
     { .action_type = RED_ACTION_CLOSE, redaction_close },
+    { .action_type = RED_ACTION_STOP_RENDERER, redaction_stop_renderer },
 )
 // clang-format on
 

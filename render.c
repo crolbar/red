@@ -7,8 +7,12 @@
 #include <GLES3/gl3.h>
 
 int
-render_surface(struct redstate* rs, struct redsurface* rsurf)
+render_surface(struct redstate* rs)
 {
+    if (!rs->focused_rt->rsurf)
+        return 0;
+    struct redsurface* rsurf = rs->focused_rt->rsurf;
+
     struct wl_resource* buffer = rsurf->pending_buffer;
     if (!buffer)
         return 1;
@@ -246,19 +250,32 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     glBindFramebuffer(GL_FRAMEBUFFER, rb->fbo);
     glViewport(0, 0, width, height);
 
-    if (rs->focused_rt && rs->focused_rt->rsurf) {
-        if (render_surface(rs, rs->focused_rt->rsurf))
-            return 1;
-    } else {
-        glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
+    {
+        // draw blank before stopping rendering
+        if (rs->should_draw == 2) {
+            glClearColor(0x04 / 255.0f, 0x04 / 255.0f, 0x04 / 255.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            rs->should_draw = 0;
+        }
 
-    // software cursor
-    if (!rs->is_wayland_client && !rs->using_hardware_cursor) {
-        int size = 16;
-        render_cursor(
-          rs, width, height, rs->cursor_x, rs->cursor_y, size, size / 3);
+        // render toplevel
+        else if (rs->focused_rt) {
+            if (render_surface(rs))
+                return 1;
+        }
+
+        // render background color
+        else {
+            glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+
+        // software cursor
+        if (!rs->is_wayland_client && !rs->using_hardware_cursor) {
+            int size = 16;
+            render_cursor(
+              rs, width, height, rs->cursor_x, rs->cursor_y, size, size / 3);
+        }
     }
 
     glFinish();
@@ -266,10 +283,11 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     return 0;
 }
 
-// called when page flip is done
 void
 redraw(struct redstate* rs)
 {
+    if (!rs->should_draw)
+        return;
     if (!rs->needs_redraw)
         return;
 

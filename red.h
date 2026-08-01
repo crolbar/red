@@ -9,10 +9,10 @@
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 
-#define RED_MOD_SHIFT   1
-#define RED_MOD_CTRL    2
-#define RED_MOD_ALT     4
-#define RED_MOD_SUPER   8
+#define RED_MOD_SHIFT 1
+#define RED_MOD_CTRL 2
+#define RED_MOD_ALT 4
+#define RED_MOD_SUPER 8
 #define RED_MOD_NO_MODS 0
 
 #define min(x, y) ((x) < (y)) ? (x) : (y)
@@ -119,6 +119,7 @@ struct redstate
     int active;            // VT is active
     int should_quit;       // main loop condition
     int needs_redraw;      // changes were made to the focused client
+    int should_draw;       // stop rendering at all. (using 2 as draw blank)
 
     struct timespec* time_start;
     // frame info

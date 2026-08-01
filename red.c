@@ -89,9 +89,11 @@ main(int argc, char** argv)
     rs->wl_seat                = NULL;
     rs->zwp_linux_dmabuf       = NULL;
     rs->needs_redraw           = 1;
-    rs->rcs                    = (typeof(rs->rcs))dll_init();
-    rs->rts                    = (typeof(rs->rts))dll_init();
-    rs->focused_rt             = NULL;
+    rs->should_draw            = 1;
+
+    rs->rcs        = (typeof(rs->rcs))dll_init();
+    rs->rts        = (typeof(rs->rts))dll_init();
+    rs->focused_rt = NULL;
 
     rs->cursor_gl_program       = 0;
     rs->cursor_gl_vao           = 0;

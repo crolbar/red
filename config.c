@@ -69,12 +69,18 @@ redconfig cfg = (redconfig){
           .mods = RED_MOD_SUPER | RED_MOD_ALT | RED_MOD_CTRL | RED_MOD_SHIFT,
           A( RED_ACTION_QUIT )
         },
+        {
+          .key = "R",
+          .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
+          A( RED_ACTION_STOP_RENDERER )
+        },
 
         {
           .key = "Q",
           .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
           A( RED_ACTION_CLOSE )
         },
+
 
         {
           .key = "k",
@@ -108,6 +114,9 @@ redconfig cfg = (redconfig){
 
     ENV(
         {"DISPLAY", ":67"},
+        {"XDG_CURRENT_DESKTOP", "red"},
+        {"XDG_SESSION_DESKTOP", "red"},
+        {"XDG_SESSION_TYPE", "wayland"},
     )
     // clang-format on
 };
