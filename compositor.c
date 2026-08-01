@@ -236,21 +236,23 @@ red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
 {
     assert(!rs->is_wayland_client);
 
-    struct itimerspec its = {
-        .it_value    = { .tv_sec = cfg.cursor_autohide_time / 1000,
-                         .tv_nsec =
-                           (cfg.cursor_autohide_time % 1000) * 1000 * 1000 },
-        .it_interval = { 0, 0 },
-    };
-    timerfd_settime(rs->cursor_hide_timer, 0, &its, NULL);
+    if (!rs->cursor_hidden) {
+        struct itimerspec its = {
+            .it_value    = { .tv_sec = cfg.cursor_autohide_time / 1000,
+                             .tv_nsec =
+                               (cfg.cursor_autohide_time % 1000) * 1000 * 1000 },
+            .it_interval = { 0, 0 },
+        };
+        timerfd_settime(rs->cursor_hide_timer, 0, &its, NULL);
 
-    if (rs->using_hardware_cursor) {
-        if (drm_update_cursor_plane(rs))
-            return 1;
+        if (rs->using_hardware_cursor) {
+            if (drm_update_cursor_plane(rs))
+                return 1;
+        }
+        // need to redraw the whole frame on software cursor
+        else
+            request_redraw(rs);
     }
-    // need to redraw the whole frame on software cursor
-    else
-        request_redraw(rs);
 
     // give some time between scroll and motion events to stop starvation
     if (time_msec - rs->cursor_last_scroll_time < 30)

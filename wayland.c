@@ -863,10 +863,15 @@ wl_pointer_set_cursor(struct wl_client*   client,
     if (rs->is_wayland_client)
         return;
 
-    if (surface == NULL)
+    if (surface == NULL) {
         drm_hide_cursor(rs);
-    else // currently not using surface to change cursor, just update.
+        rs->cursor_hidden = 1;
+    }
+    // currently not using surface to change cursor, just update.
+    else {
         drm_update_cursor_plane(rs);
+        rs->cursor_hidden = 0;
+    }
 }
 
 static void

@@ -156,6 +156,7 @@ struct redstate
     uint32_t cursor_last_scroll_time;
     int      cursor_hide_timer;
     int      cursor_locked;
+    int      cursor_hidden;
 
     dll(struct wl_resource*) relative_pointers;
 
