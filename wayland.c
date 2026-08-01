@@ -4,6 +4,7 @@
 #include "drm.h"
 #include "linux-dmabuf-server-protocol.h"
 #include "log.h"
+#include "opengl.h"
 #include "pointer-constraints-server-protocol.h"
 #include "red.h"
 #include "relative-pointer-server-protocol.h"
@@ -211,42 +212,11 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     if (red_is_client_valid(rsurf->rs, rsurf->rc))
         dll_remove_val(rsurf->rc->rsurfs, rsurf);
 
+    gl_destroy_surface_texture(rsurf);
     if (rsurf)
         free(rsurf);
     rsurf = NULL;
 }
-
-static void
-wl_region_destroy(struct wl_client* c, struct wl_resource* r)
-{
-    wl_resource_destroy(r);
-}
-
-static void
-wl_region_add(struct wl_client*   c,
-              struct wl_resource* r,
-              int32_t             x,
-              int32_t             y,
-              int32_t             w,
-              int32_t             h)
-{
-}
-
-static void
-wl_region_subtract(struct wl_client*   c,
-                   struct wl_resource* r,
-                   int32_t             x,
-                   int32_t             y,
-                   int32_t             w,
-                   int32_t             h)
-{
-}
-
-static const struct wl_region_interface wl_region_implementation = {
-    .destroy  = wl_region_destroy,
-    .add      = wl_region_add,
-    .subtract = wl_region_subtract,
-};
 
 struct redsurface*
 init_redsurface()
@@ -268,9 +238,9 @@ init_redsurface()
     rsurf->geom_width       = 0;
     rsurf->geom_height      = 0;
     rsurf->geom_configured  = 0;
-    rsurf->tex              = 0;
-    rsurf->tex_h            = 0;
-    rsurf->tex_w            = 0;
+    rsurf->gl_tex           = 0;
+    rsurf->gl_tex_h         = 0;
+    rsurf->gl_tex_w         = 0;
 
     return rsurf;
 }
@@ -311,6 +281,38 @@ wl_compositor_create_surface(struct wl_client*   client,
 
     dll_push_tail(rc->rsurfs, rsurf);
 }
+
+static void
+wl_region_destroy(struct wl_client* c, struct wl_resource* r)
+{
+    wl_resource_destroy(r);
+}
+
+static void
+wl_region_add(struct wl_client*   c,
+              struct wl_resource* r,
+              int32_t             x,
+              int32_t             y,
+              int32_t             w,
+              int32_t             h)
+{
+}
+
+static void
+wl_region_subtract(struct wl_client*   c,
+                   struct wl_resource* r,
+                   int32_t             x,
+                   int32_t             y,
+                   int32_t             w,
+                   int32_t             h)
+{
+}
+
+static const struct wl_region_interface wl_region_implementation = {
+    .destroy  = wl_region_destroy,
+    .add      = wl_region_add,
+    .subtract = wl_region_subtract,
+};
 
 static void
 wl_compositor_create_region(struct wl_client*   client,
@@ -1317,6 +1319,15 @@ static void
 zwp_linux_buffer_resource_destroy(struct wl_resource* resource)
 {
     struct dmabuf* dmabuf = wl_resource_get_user_data(resource);
+
+    if (dmabuf->egl_img)
+        gl_destroy_egl_img(
+          dmabuf->rs->backend->get_egl_display(dmabuf->rs->backend->d),
+          dmabuf->egl_img);
+
+    for (int i = 0; i < dmabuf->planes_count; i++)
+        close(dmabuf->planes[i].fd);
+
     if (dmabuf)
         free(dmabuf);
 }
@@ -1380,11 +1391,12 @@ init_linux_buffer(struct wl_client*   client,
     struct dmabuf* dmabuf;
     dmabuf = calloc(1, sizeof(*dmabuf));
     assert(dmabuf);
-    dmabuf->flags  = flags;
-    dmabuf->height = height;
-    dmabuf->width  = width;
-    dmabuf->format = format;
-    dmabuf->rs     = params->rs;
+    dmabuf->egl_img = NULL;
+    dmabuf->flags   = flags;
+    dmabuf->height  = height;
+    dmabuf->width   = width;
+    dmabuf->format  = format;
+    dmabuf->rs      = params->rs;
     for (int i = 0; i < params->planes_count; i++) {
         dmabuf->planes[i] = params->planes[i];
         dmabuf->planes_count++;

@@ -11,6 +11,7 @@ struct gl_proc
 {
     PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
     PFNEGLCREATEIMAGEKHRPROC        eglCreateImageKHR;
+    PFNEGLDESTROYIMAGEKHRPROC       eglDestroyImageKHR;
     PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC
     glEGLImageTargetRenderbufferStorageOES;
     PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
@@ -19,6 +20,7 @@ struct gl_proc
 int
 init_gl_proc();
 
+// TODO: disable in release build?
 #define CALL(_CALL)                                                            \
     do {                                                                       \
         (_CALL);                                                               \
@@ -50,3 +52,12 @@ gl_setup_cursor_program(struct redstate* rs);
 
 int
 gl_setup_program(struct redstate* rs);
+
+int
+gl_bind_texture_from_surface(struct redsurface* rsurf);
+
+void
+gl_destroy_surface_texture(struct redsurface* rsurf);
+
+void
+gl_destroy_egl_img(EGLDisplay egl_display, EGLImageKHR egl_img);

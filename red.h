@@ -9,10 +9,10 @@
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 
-#define RED_MOD_SHIFT 1
-#define RED_MOD_CTRL 2
-#define RED_MOD_ALT 4
-#define RED_MOD_SUPER 8
+#define RED_MOD_SHIFT   1
+#define RED_MOD_CTRL    2
+#define RED_MOD_ALT     4
+#define RED_MOD_SUPER   8
 #define RED_MOD_NO_MODS 0
 
 #define min(x, y) ((x) < (y)) ? (x) : (y)
@@ -42,6 +42,7 @@ struct dmabuf
     uint32_t            format;
     uint32_t            flags;
     struct dmabuf_plane planes[4];
+    EGLImageKHR         egl_img;
 };
 
 typedef struct redbuffer
@@ -63,9 +64,12 @@ struct redsurface
     struct wl_resource* xdg_surface;
     struct wl_resource* xdg_toplevel;
 
-    int32_t tex_w;
-    int32_t tex_h;
-    GLuint  tex;
+    // shm buf texture image dimentions
+    int32_t gl_tex_w;
+    int32_t gl_tex_h;
+
+    // gl texture
+    GLuint gl_tex;
 
     int32_t geom_x;
     int32_t geom_y;

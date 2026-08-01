@@ -59,8 +59,8 @@ wl_surface_preferred_buffer_scale(void*              data,
                                   struct wl_surface* wl_surface,
                                   int32_t            factor)
 {
-    struct redstate*        rs = data;
-    struct backend_wayland* bw = rs->backend->d;
+    // struct redstate*        rs = data;
+    // struct backend_wayland* bw = rs->backend->d;
     // bw->scale_factor           = factor;
     // bw->rb0->needs_resize      = 1;
     // bw->rb1->needs_resize      = 1;
@@ -304,13 +304,29 @@ wl_pointer_motion(void*              data,
                   wl_fixed_t         surface_x,
                   wl_fixed_t         surface_y)
 {
-    struct redstate* rs = data;
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
-        return;
-    wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
-                           time,
-                           surface_x / cfg.screen_scale,
-                           surface_y / cfg.screen_scale);
+    struct redstate* rs     = data;
+    uint32_t         width  = rs->backend->get_width(rs->backend->d);
+    uint32_t         height = rs->backend->get_height(rs->backend->d);
+
+    double x = wl_fixed_to_double(surface_x);
+    double y = wl_fixed_to_double(surface_y);
+
+    x *= cfg.screen_scale;
+    y *= cfg.screen_scale;
+    width *= cfg.screen_scale;
+    height *= cfg.screen_scale;
+
+    rs->cursor_x = max(min(x, (double)width), 0);
+    rs->cursor_y = max(min(y, (double)height), 0);
+
+    if (rs->focused_rt && rs->focused_rt->rc->wl_pointer)
+        wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
+                               time,
+                               surface_x / cfg.screen_scale,
+                               surface_y / cfg.screen_scale);
+
+    if (!rs->using_hardware_cursor)
+        request_redraw(rs);
 }
 void
 wl_pointer_button(void*              data,

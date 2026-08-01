@@ -99,7 +99,7 @@ main(int argc, char** argv)
     rs->cursor_gl_vao           = 0;
     rs->cursor_x                = 0;
     rs->cursor_y                = 0;
-    rs->using_hardware_cursor   = 0;
+    rs->using_hardware_cursor   = 1;
     rs->cursor_last_motion_time = 0;
     rs->cursor_last_scroll_time = 0;
     rs->cursor_hide_timer       = timerfd_create(CLOCK_REALTIME, 0);
@@ -152,6 +152,7 @@ main(int argc, char** argv)
         }
     }
 
+    rs->should_draw = 1;
     // render buffers initially
     rs->backend->push_init_buffer(rs);
 
@@ -193,7 +194,6 @@ main(int argc, char** argv)
         fds[4].fd     = rs->cursor_hide_timer;
         fds[4].events = POLLIN;
 
-        rs->should_draw = 1;
         ROG_INFO("Starting loop...");
         while (!rs->should_quit) {
             wl_display_flush_clients(rs->wl_display);

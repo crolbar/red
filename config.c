@@ -62,6 +62,7 @@ redconfig cfg = (redconfig){
     // key - if it is a char (a - Z) - to uppercase
     // clang-format off
     BINDS(
+        /* SERVER CONTROL */
         {
           .key = "F4",
           .mods = RED_MOD_NO_MODS,
@@ -78,13 +79,12 @@ redconfig cfg = (redconfig){
           A( RED_ACTION_STOP_RENDERER )
         },
 
+        /* TOPLEVEL CONTROL */
         {
           .key = "Q",
           .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
           A( RED_ACTION_CLOSE )
         },
-
-
         {
           .key = "k",
           .mods = RED_MOD_SUPER,
@@ -96,11 +96,19 @@ redconfig cfg = (redconfig){
           A( RED_ACTION_FOCUS_NEXT )
         },
 
+        /* SPAWNERS */
         {
           .key = "x",
           .mods = RED_MOD_SUPER,
           A( RED_ACTION_SPAWN, "foot" )
         },
+        {
+          .key = "X",
+          .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
+          A( RED_ACTION_SPAWN, "ghostty" )
+        },
+
+
 
         {
           .key = "d",
@@ -111,8 +119,7 @@ redconfig cfg = (redconfig){
 
     AUTO_START(
         PROG("bash", "-c", "xwayland-satellite :67"),
-        // PROG("bash", "-c", "spotify"),
-        PROG("bash", "-c", "foot")
+        // PROG("bash", "-c", "foot"),
     )
 
     ENV(

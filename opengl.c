@@ -1,6 +1,7 @@
 #include "log.h"
 #include "opengl.h"
 #include "red.h"
+#include "wayland.h"
 #include <GLES3/gl3.h>
 #include <drm/drm_fourcc.h>
 
@@ -113,6 +114,214 @@ gl_setup_program(struct redstate* rs)
     return 0;
 fail:
     return 1;
+}
+
+int
+gl_surface_texture_map_shm_image(struct redsurface*    rsurf,
+                                 struct wl_shm_buffer* shmbuf,
+                                 int32_t               x,
+                                 int32_t               y,
+                                 int32_t               w,
+                                 int32_t               h)
+{
+
+    uint8_t* data        = wl_shm_buffer_get_data(shmbuf);
+    int32_t  data_stride = wl_shm_buffer_get_stride(shmbuf);
+    GLenum   gl_fmt      = GL_RGBA;
+
+    CALL(glPixelStorei(GL_UNPACK_SKIP_ROWS, y));
+    CALL(glPixelStorei(GL_UNPACK_SKIP_PIXELS, x));
+    CALL(glPixelStorei(GL_UNPACK_ROW_LENGTH, data_stride / 4));
+
+    wl_shm_buffer_begin_access(shmbuf);
+
+    if (rsurf->gl_tex_w != w || rsurf->gl_tex_h != h) {
+        CALL(glTexImage2D(
+          GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, gl_fmt, GL_UNSIGNED_BYTE, data));
+
+        rsurf->gl_tex_w = w;
+        rsurf->gl_tex_h = h;
+    }
+    // dimentions of texture image are the same, just replace data
+    else {
+        CALL(glTexSubImage2D(
+          GL_TEXTURE_2D, 0, 0, 0, w, h, gl_fmt, GL_UNSIGNED_BYTE, data));
+    }
+
+    wl_shm_buffer_end_access(shmbuf);
+
+    CALL(glPixelStorei(GL_UNPACK_ROW_LENGTH, 0));
+    CALL(glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0));
+    CALL(glPixelStorei(GL_UNPACK_SKIP_ROWS, 0));
+    return 0;
+fail:
+    return 1;
+}
+
+int
+gl_surface_texture_map_egl_image(struct redsurface* rsurf,
+                                 struct dmabuf*     dmabuf,
+                                 int32_t            x,
+                                 int32_t            y,
+                                 int32_t            w,
+                                 int32_t            h)
+{
+    if (!dmabuf->egl_img)
+    // initially create the egl link to the dmabuf
+    {
+        // TODO: use x, y, w, h
+        if (!(dmabuf->egl_img = init_egl_image(
+                rsurf->rs->backend->get_egl_display(rsurf->rs->backend->d),
+                dmabuf->width,
+                dmabuf->height,
+                dmabuf->format,
+                dmabuf->planes_count,
+                dmabuf->planes)))
+            goto fail;
+    }
+
+    CALL(gl_proc->glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, dmabuf->egl_img));
+
+    return 0;
+fail:
+    return 1;
+}
+
+int
+gl_surface_texture_map_image(struct redsurface*  rsurf,
+                             struct wl_resource* buffer)
+{
+    CALL(glBindTexture(GL_TEXTURE_2D, rsurf->gl_tex));
+
+    int32_t               src_w  = 0;
+    int32_t               src_h  = 0;
+    struct wl_shm_buffer* shmbuf = NULL;
+    struct dmabuf*        dmabuf = NULL;
+    if ((shmbuf = wl_shm_buffer_get(buffer))) {
+        src_w = wl_shm_buffer_get_width(shmbuf);
+        src_h = wl_shm_buffer_get_height(shmbuf);
+    } else if ((dmabuf = red_get_dmabuf(buffer))) {
+        src_w = dmabuf->width;
+        src_h = dmabuf->height;
+    } else {
+        ROG_ERR("not shm or dmabuf buffer");
+        return 1;
+    }
+
+    int32_t x = 0;
+    int32_t y = 0;
+    int32_t w = src_w;
+    int32_t h = src_h;
+
+    // removing csd that has been informed by
+    // xdg_surface_set_window_geometry
+    {
+        if (rsurf->geom_configured) {
+            x = rsurf->geom_x;
+            y = rsurf->geom_y;
+            w = rsurf->geom_width;
+            h = rsurf->geom_height;
+            if (x < 0)
+                x = 0;
+
+            if (y < 0)
+                y = 0;
+
+            if (x + w > src_w)
+                w = src_w - x;
+
+            if (y + h > src_h)
+                h = src_h - y;
+
+            if (w <= 0 || h <= 0) {
+                x = 0;
+                y = 0;
+                w = src_w;
+                h = src_h;
+            }
+        }
+    }
+
+    if (shmbuf)
+        gl_surface_texture_map_shm_image(rsurf, shmbuf, x, y, w, h);
+    if (dmabuf)
+        gl_surface_texture_map_egl_image(rsurf, dmabuf, x, y, w, h);
+
+    return 0;
+fail:
+    return 1;
+}
+
+int
+init_surface_texture_from_buffer(struct redsurface*  rsurf,
+                                 struct wl_resource* buffer)
+{
+    CALL(glGenTextures(1, &rsurf->gl_tex));
+    CALL(glBindTexture(GL_TEXTURE_2D, rsurf->gl_tex));
+
+    CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+    CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+    CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+    CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+
+    if (gl_surface_texture_map_image(rsurf, buffer))
+        goto fail;
+
+    CALL(glBindTexture(GL_TEXTURE_2D, 0));
+    return 0;
+fail:
+    return 1;
+}
+
+int
+gl_bind_texture_from_surface(struct redsurface* rsurf)
+{
+    struct wl_resource* pending_buffer = rsurf->pending_buffer;
+
+    // init texture && map buffer to texture
+    if (!rsurf->gl_tex) {
+        assert(pending_buffer);
+        if (init_surface_texture_from_buffer(rsurf, pending_buffer))
+            goto fail;
+    }
+    // map new buffer to texture
+    else if (rsurf->gl_tex && pending_buffer) {
+        if (gl_surface_texture_map_image(rsurf, pending_buffer))
+            goto fail;
+    }
+    // reuse texture. no action required for shmbuf.
+    else {
+        // TODO sync for egl image?
+    }
+
+    // binding to texture unit 0
+    CALL(glActiveTexture(GL_TEXTURE0));
+    CALL(glBindTexture(GL_TEXTURE_2D, rsurf->gl_tex));
+    CALL(glUniform1i(rsurf->rs->texture_loc, 0));
+    return 0;
+fail:
+    return 1;
+}
+
+void
+gl_destroy_egl_img(EGLDisplay egl_display, EGLImageKHR egl_img)
+{
+    CALL(gl_proc->eglDestroyImageKHR(egl_display, egl_img));
+
+fail:
+    return;
+}
+
+void
+gl_destroy_surface_texture(struct redsurface* rsurf)
+{
+    if (!rsurf->gl_tex)
+        return;
+
+    CALL(glDeleteTextures(1, &rsurf->gl_tex));
+
+fail:
+    return;
 }
 
 int
@@ -276,6 +485,7 @@ init_egl_image(EGLDisplay           egl_display,
                uint32_t             planes_count,
                struct dmabuf_plane* planes)
 {
+    assert(egl_display);
     EGLint attribs[50];
     int    a     = 0;
     attribs[a++] = EGL_WIDTH;
@@ -365,6 +575,10 @@ init_gl_proc()
 
     if (!(gl_proc->eglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC)
             egl_get_proc("eglGetPlatformDisplayEXT")))
+        goto fail;
+
+    if (!(gl_proc->eglDestroyImageKHR =
+            (PFNEGLDESTROYIMAGEKHRPROC)egl_get_proc("eglDestroyImageKHR")))
         goto fail;
 
     if (!(gl_proc->eglCreateImageKHR =

@@ -1,6 +1,9 @@
-- [ ]rendering
+- [x]rendering
+  - [ ]dmabuf sync
 - [ ]overlay (subsurface...)
 - [x]surface scaling
+
+- [ ]run through valgrind (proper memory management)
 
 - [x]dmabuf
 - [x]refac gbm.c
@@ -21,3 +24,7 @@
 
 - [x]modifiers on fbs
 - [ ]gl error catching
+
+- [ ]zoom like magnifier
+- [ ]screenshots
+- [ ]screencast
