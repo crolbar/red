@@ -43,6 +43,8 @@ typedef struct redconfig
     char* dri_dev;
     char* dri_render_dev;
 
+    uint32_t screen_scale;
+
     int32_t kb_repeat_delay;
     int32_t kb_repeat_rate;
 

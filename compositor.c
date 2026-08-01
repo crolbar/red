@@ -18,21 +18,25 @@
 double
 red_get_lc_x(struct redstate* rs)
 {
+    double x = rs->cursor_x;
+    x /= cfg.screen_scale;
     // add decorations in account
     if (rs->focused_rt && rs->focused_rt->rsurf) {
         if (rs->focused_rt->rsurf->geom_configured)
-            return rs->cursor_x + rs->focused_rt->rsurf->geom_x;
+            return x + rs->focused_rt->rsurf->geom_x;
     }
-    return rs->cursor_x;
+    return x;
 }
 double
 red_get_lc_y(struct redstate* rs)
 {
+    double y = rs->cursor_y;
+    y /= cfg.screen_scale;
     if (rs->focused_rt && rs->focused_rt->rsurf) {
         if (rs->focused_rt->rsurf->geom_configured)
-            return rs->cursor_y + rs->focused_rt->rsurf->geom_y;
+            return y + rs->focused_rt->rsurf->geom_y;
     }
-    return rs->cursor_y;
+    return y;
 }
 
 struct redclient*

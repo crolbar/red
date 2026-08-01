@@ -17,6 +17,7 @@ struct backend
     */
     int (*init)(void* rs);
 
+    // in resolution, not logical size
     uint32_t (*get_width)(void* d);
     uint32_t (*get_height)(void* d);
 

@@ -89,7 +89,7 @@ main(int argc, char** argv)
     rs->wl_seat                = NULL;
     rs->zwp_linux_dmabuf       = NULL;
     rs->needs_redraw           = 1;
-    rs->should_draw            = 1;
+    rs->should_draw            = 0;
 
     rs->rcs        = (typeof(rs->rcs))dll_init();
     rs->rts        = (typeof(rs->rts))dll_init();
@@ -193,6 +193,7 @@ main(int argc, char** argv)
         fds[4].fd     = rs->cursor_hide_timer;
         fds[4].events = POLLIN;
 
+        rs->should_draw = 1;
         ROG_INFO("Starting loop...");
         while (!rs->should_quit) {
             wl_display_flush_clients(rs->wl_display);

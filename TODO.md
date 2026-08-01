@@ -1,6 +1,6 @@
 - [ ]rendering
 - [ ]overlay (subsurface...)
-- [ ]surface scaling
+- [x]surface scaling
 
 - [x]dmabuf
 - [x]refac gbm.c

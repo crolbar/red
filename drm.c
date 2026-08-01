@@ -132,8 +132,8 @@ int
 drm_update_cursor_plane(struct redstate* rs)
 {
     struct backend_drm* bd = rs->backend->d;
-    int                 x  = (int)red_get_lc_x(rs);
-    int                 y  = (int)red_get_lc_y(rs);
+    int                 x  = rs->cursor_x;
+    int                 y  = rs->cursor_y;
     if (cfg.center_cursor_hotspot) {
         x -= gimp_image.width / 2;
         y -= gimp_image.height / 2;

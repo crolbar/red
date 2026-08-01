@@ -1,3 +1,4 @@
+#include "compositor.h"
 #include "log.h"
 #include "opengl.h"
 #include "red.h"
@@ -75,7 +76,7 @@ render_surface(struct redstate* rs)
         glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
         glPixelStorei(GL_UNPACK_SKIP_ROWS, y);
 
-        if (rsurf->tex_w != src_w || rsurf->tex_h != src_h) {
+        if (rsurf->tex_w != w || rsurf->tex_h != h) {
             glTexImage2D(GL_TEXTURE_2D,
                          0,
                          GL_RGBA,
@@ -85,8 +86,8 @@ render_surface(struct redstate* rs)
                          gl_fmt,
                          GL_UNSIGNED_BYTE,
                          src);
-            rsurf->tex_w = src_w;
-            rsurf->tex_h = src_h;
+            rsurf->tex_w = w;
+            rsurf->tex_h = h;
         } else {
             glTexSubImage2D(
               GL_TEXTURE_2D, 0, 0, 0, w, h, gl_fmt, GL_UNSIGNED_BYTE, src);
@@ -273,8 +274,13 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
         // software cursor
         if (!rs->is_wayland_client && !rs->using_hardware_cursor) {
             int size = 16;
-            render_cursor(
-              rs, width, height, rs->cursor_x, rs->cursor_y, size, size / 3);
+            render_cursor(rs,
+                          width,
+                          height,
+                          red_get_lc_x(rs),
+                          red_get_lc_y(rs),
+                          size,
+                          size / 3);
         }
     }
 

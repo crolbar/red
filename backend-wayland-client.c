@@ -1,6 +1,6 @@
 #include "backend-wayland-client.h"
 #include "backend-wayland.h"
-#include "compositor.h"
+#include "config.h"
 #include "input.h"
 #include "linux-dmabuf-client-protocol.h"
 #include "log.h"
@@ -41,6 +41,36 @@ free_wayland(struct wayland_client* cws)
 }
 
 /* ======== wl_surface======== */
+
+void
+wl_surface_enter(void*              data,
+                 struct wl_surface* wl_surface,
+                 struct wl_output*  output)
+{
+}
+void
+wl_surface_leave(void*              data,
+                 struct wl_surface* wl_surface,
+                 struct wl_output*  output)
+{
+}
+void
+wl_surface_preferred_buffer_scale(void*              data,
+                                  struct wl_surface* wl_surface,
+                                  int32_t            factor)
+{
+    struct redstate*        rs = data;
+    struct backend_wayland* bw = rs->backend->d;
+    // bw->scale_factor           = factor;
+    // bw->rb0->needs_resize      = 1;
+    // bw->rb1->needs_resize      = 1;
+}
+void
+wl_surface_preferred_buffer_transform(void*              data,
+                                      struct wl_surface* wl_surface,
+                                      uint32_t           transform)
+{
+}
 
 void
 wl_frame_done(void*               data,
@@ -151,23 +181,24 @@ xdg_toplevel_configure(void*                data,
     if (bw->width != (uint32_t)width || bw->height != (uint32_t)height) {
         bw->rb0->needs_resize = 1;
         bw->rb1->needs_resize = 1;
-        int       activated   = 0;
-        int       resizing    = 0;
-        uint32_t* pos;
-        wl_array_for_each(pos, states)
-        {
-            if (*pos == XDG_TOPLEVEL_STATE_ACTIVATED)
-                activated = 1;
-            if (*pos == XDG_TOPLEVEL_STATE_RESIZING)
-                resizing = 1;
-        }
-
-        if (rs->focused_rt && rs->focused_rt->rsurf)
-            red_send_configure(rs->focused_rt->rsurf, activated, resizing);
     }
 
     bw->width  = width;
     bw->height = height;
+
+    int       activated = 0;
+    int       resizing  = 0;
+    uint32_t* pos;
+    wl_array_for_each(pos, states)
+    {
+        if (*pos == XDG_TOPLEVEL_STATE_ACTIVATED)
+            activated = 1;
+        if (*pos == XDG_TOPLEVEL_STATE_RESIZING)
+            resizing = 1;
+    }
+
+    if (rs->focused_rt && rs->focused_rt->rsurf)
+        red_send_configure(rs->focused_rt->rsurf, activated, resizing);
 }
 
 void
@@ -276,8 +307,10 @@ wl_pointer_motion(void*              data,
     struct redstate* rs = data;
     if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
         return;
-    wl_pointer_send_motion(
-      rs->focused_rt->rc->wl_pointer, time, surface_x, surface_y);
+    wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
+                           time,
+                           surface_x / cfg.screen_scale,
+                           surface_y / cfg.screen_scale);
 }
 void
 wl_pointer_button(void*              data,
@@ -440,8 +473,6 @@ init_wayland()
       xdg_wm_base_get_xdg_surface(cws->xdg_wm_base, cws->wl_surface);
 
     cws->xdg_toplevel = xdg_surface_get_toplevel(cws->xdg_surface);
-
-    wl_surface_commit(cws->wl_surface);
 
     return cws;
 fail:

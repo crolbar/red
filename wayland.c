@@ -305,6 +305,10 @@ wl_compositor_create_surface(struct wl_client*   client,
                                    rsurf,
                                    wl_surface_resource_destroy);
 
+    if (wl_resource_get_version(resource) >= 6)
+        wl_surface_send_preferred_buffer_scale(rsurf->wl_surface,
+                                               cfg.screen_scale);
+
     dll_push_tail(rc->rsurfs, rsurf);
 }
 
@@ -491,6 +495,9 @@ red_send_configure(struct redsurface* rsurf, int activated, int resizing)
     uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
     uint32_t height = rsurf->rs->backend->get_height(rsurf->rs->backend->d);
 
+    width /= cfg.screen_scale;
+    height /= cfg.screen_scale;
+
     struct wl_array states;
     wl_array_init(&states);
     // setting maximized state as it basicly tells the client to not render csd
@@ -605,10 +612,10 @@ xdg_surface_set_window_geometry(struct wl_client*   client,
     struct redsurface* rsurf = resource->data;
     assert(rsurf);
     rsurf->geom_configured = 1;
-    rsurf->geom_width      = width;
-    rsurf->geom_height     = height;
-    rsurf->geom_x          = x;
-    rsurf->geom_y          = y;
+    rsurf->geom_width      = width * cfg.screen_scale;
+    rsurf->geom_height     = height * cfg.screen_scale;
+    rsurf->geom_x          = x * cfg.screen_scale;
+    rsurf->geom_y          = y * cfg.screen_scale;
 }
 
 static void
@@ -802,8 +809,8 @@ wl_global_bind_output(struct wl_client* client,
                             300,
                             200,
                             WL_OUTPUT_SUBPIXEL_UNKNOWN,
-                            "red",
-                            "red",
+                            "red-output-make",
+                            "red-output-model",
                             WL_OUTPUT_TRANSFORM_NORMAL);
 
     uint32_t width  = rs->backend->get_width(rs->backend->d);
@@ -815,7 +822,7 @@ wl_global_bind_output(struct wl_client* client,
                         height,
                         60 * 1000);
     if (version >= 2)
-        wl_output_send_scale(wl_output, 1);
+        wl_output_send_scale(wl_output, cfg.screen_scale);
     if (version >= 4)
         wl_output_send_name(wl_output, "red-1");
     wl_output_send_done(wl_output);

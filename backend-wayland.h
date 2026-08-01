@@ -14,6 +14,7 @@ struct backend_wayland
     struct redbuffer*      rb0;
     struct redbuffer*      rb1;
     uint32_t               used_rb; // indicates which buffer is displayed
+    uint32_t               scale_factor;
     uint32_t               width, height;
     int                    is_ready_for_frame;
 };

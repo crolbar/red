@@ -38,6 +38,9 @@ redconfig cfg = (redconfig){
     */
     .dri_render_dev = "auto",
 
+    // windows will be scaled by this factor
+    .screen_scale = 2,
+
     .kb_repeat_delay = 300,
     .kb_repeat_rate  = 50,
 

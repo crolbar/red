@@ -44,6 +44,30 @@ static const struct wl_registry_listener wl_registry_listener = {
 };
 
 void
+wl_surface_enter(void*              data,
+                 struct wl_surface* wl_surface,
+                 struct wl_output*  output);
+void
+wl_surface_leave(void*              data,
+                 struct wl_surface* wl_surface,
+                 struct wl_output*  output);
+void
+wl_surface_preferred_buffer_scale(void*              data,
+                                  struct wl_surface* wl_surface,
+                                  int32_t            factor);
+void
+wl_surface_preferred_buffer_transform(void*              data,
+                                      struct wl_surface* wl_surface,
+                                      uint32_t           transform);
+
+static const struct wl_surface_listener wl_surface_listener = {
+    .enter                      = wl_surface_enter,
+    .leave                      = wl_surface_leave,
+    .preferred_buffer_scale     = wl_surface_preferred_buffer_scale,
+    .preferred_buffer_transform = wl_surface_preferred_buffer_transform,
+};
+
+void
 xdg_wm_base_listener_ping(void*               data,
                           struct xdg_wm_base* xdg_wm_base,
                           uint32_t            serial);

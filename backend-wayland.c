@@ -20,16 +20,17 @@ backend_wayland_init_data()
     if (!bw)
         return NULL;
 
-    bw->wc          = NULL;
-    bw->egl_display = NULL;
-    bw->egl_context = NULL;
-    bw->gbm_dev     = NULL;
-    bw->rb0         = NULL;
-    bw->rb1         = NULL;
-    bw->width       = 1600;
-    bw->height      = 1000;
-    bw->used_rb     = 0;
-    bw->drm_fd      = -1;
+    bw->wc           = NULL;
+    bw->egl_display  = NULL;
+    bw->egl_context  = NULL;
+    bw->gbm_dev      = NULL;
+    bw->rb0          = NULL;
+    bw->rb1          = NULL;
+    bw->width        = 1500;
+    bw->height       = 800;
+    bw->used_rb      = 0;
+    bw->scale_factor = 1;
+    bw->drm_fd       = -1;
 
     return bw;
 }
@@ -85,6 +86,9 @@ backend_wayland_init(void* data)
     wl_buffer_add_listener(bw->rb1->wl_buffer, &wl_buffer_listener, bw->rb1);
     wl_keyboard_add_listener(bw->wc->wl_keyboard, &wl_keyboard_listener, rs);
     wl_pointer_add_listener(bw->wc->wl_pointer, &wl_pointer_listener, rs);
+
+    wl_surface_commit(bw->wc->wl_surface);
+    wl_surface_add_listener(bw->wc->wl_surface, &wl_surface_listener, rs);
 
     xdg_toplevel_add_listener(bw->wc->xdg_toplevel, &xdg_toplevel_listener, rs);
     xdg_surface_add_listener(bw->wc->xdg_surface, &xdg_surface_listener, rs);
