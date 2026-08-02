@@ -8,10 +8,10 @@ int
 init_compositor(struct redstate* rs);
 
 int
-red_on_frame_done(struct redstate* rs);
+red_on_frame_done(struct redstate* rs, uint32_t time_msec);
 
 int
-red_send_pending_callback(struct redsurface* rsurf);
+red_send_pending_callbacks(struct redsurface* rsurf, uint32_t time_msec);
 
 int
 red_send_configure(struct redsurface* rsurf, int activated, int resizing);

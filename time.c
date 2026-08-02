@@ -1,5 +1,6 @@
 #include "time.h"
 #include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -11,6 +12,14 @@ time_get_now()
     assert(tp);
     clock_gettime(CLOCK_MONOTONIC, tp);
     return tp;
+}
+
+uint32_t
+time_get_now_msec()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
 double

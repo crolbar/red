@@ -3,6 +3,7 @@
 #include "opengl.h"
 #include "render.h"
 #include "time.h"
+#include "wayland.h"
 #include <GLES3/gl3.h>
 
 int
@@ -111,8 +112,7 @@ render_surface(struct redstate* rs)
     if (!(rsurf = rs->focused_rt->rsurf))
         return 0;
 
-    // we want a buffer to init the gl texture
-    if (!rsurf->pending_buffer && !rsurf->gl_tex)
+    if (!rsurf->current_buffer)
         return 0;
 
     CALL(glUseProgram(rs->program));
@@ -126,9 +126,16 @@ render_surface(struct redstate* rs)
     CALL(glBindTexture(GL_TEXTURE_2D, 0));
     CALL(glUseProgram(0));
 
-    if (rsurf->pending_buffer) {
-        wl_buffer_send_release(rsurf->pending_buffer);
-        rsurf->pending_buffer = NULL;
+    if (red_get_dmabuf(rsurf->current_buffer)) {
+        EGLDisplay egl_display =
+          rsurf->rs->backend->get_egl_display(rsurf->rs->backend->d);
+
+        EGLSyncKHR fence =
+          gl_proc->eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL);
+        glFlush();
+        gl_proc->eglClientWaitSyncKHR(
+          egl_display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER_KHR);
+        gl_proc->eglDestroySyncKHR(egl_display, fence);
     }
 
     return 0;

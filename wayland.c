@@ -27,26 +27,25 @@
 #include <wayland-util.h>
 
 int
-red_send_pending_callback(struct redsurface* rsurf)
+red_send_pending_callbacks(struct redsurface* rsurf, uint32_t time_msec)
 {
-    if (!rsurf || !rsurf->pending_callback)
+    if (!rsurf || rsurf->pending_cbs.size == 0)
         return 0;
 
-    uint32_t now_ms = (uint32_t)(wl_display_get_serial(rsurf->rs->wl_display));
-    wl_callback_send_done(rsurf->pending_callback, now_ms);
-    wl_resource_destroy(rsurf->pending_callback);
-    rsurf->pending_callback = NULL;
+    for (size_t i = 0; i < rsurf->pending_cbs.size; i++) {
+        struct wl_resource* cb = dll_hpop(rsurf->pending_cbs);
+        wl_callback_send_done(cb, time_msec);
+        wl_resource_destroy(cb);
+    }
 
     return 0;
 }
 
 int
-red_on_frame_done(struct redstate* rs)
+red_on_frame_done(struct redstate* rs, uint32_t time_msec)
 {
-    // TODO: can we miss a pending callback when we change focus when
-    // page_flip_ready == 0 ?
     if (rs->focused_rt)
-        red_send_pending_callback(rs->focused_rt->rsurf);
+        red_send_pending_callbacks(rs->focused_rt->rsurf, time_msec);
 
     // if updates happened on page flip.
     // shouldn't happen much as we have one window
@@ -64,12 +63,14 @@ static void
 wl_surface_buffer_resource_destroyed(struct wl_listener* listener, void* data)
 {
     struct redsurface* rsurf =
-      wl_container_of(listener, rsurf, pending_buffer_destroyed);
+      wl_container_of(listener, rsurf, current_buffer_destroyed);
+    if (!rsurf)
+        return;
 
-    wl_list_remove(&rsurf->pending_buffer_destroyed.link);
-    wl_list_init(&rsurf->pending_buffer_destroyed.link);
+    wl_list_remove(&rsurf->current_buffer_destroyed.link);
+    wl_list_init(&rsurf->current_buffer_destroyed.link);
 
-    rsurf->pending_buffer = NULL;
+    rsurf->current_buffer = NULL;
 }
 
 static void
@@ -81,20 +82,7 @@ wl_surface_attach(struct wl_client*   client,
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     assert(rsurf);
-
-    wl_list_remove(&rsurf->pending_buffer_destroyed.link);
-    wl_list_init(&rsurf->pending_buffer_destroyed.link);
-
-    if (rsurf->pending_buffer) {
-        wl_buffer_send_release(rsurf->pending_buffer);
-        rsurf->pending_buffer = NULL;
-    }
-
     rsurf->pending_buffer = buffer;
-
-    if (buffer)
-        wl_resource_add_destroy_listener(buffer,
-                                         &rsurf->pending_buffer_destroyed);
 }
 
 static void
@@ -115,26 +103,40 @@ wl_surface_frame(struct wl_client*   client,
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     assert(rsurf);
 
-    // TODO: works for now, later we should do if rsurf is not on focus
-    // we should throttle it with some timer
-    red_send_pending_callback(rsurf);
-
     struct wl_resource* cb =
       wl_resource_create(client, &wl_callback_interface, 1, callback);
     assert(cb);
     wl_resource_set_implementation(cb, NULL, NULL, NULL);
 
-    rsurf->pending_callback = cb;
+    dll_push_tail(rsurf->pending_cbs, cb);
 }
 
 static void
 wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    struct redstate*   rs    = rsurf->rs;
     assert(rsurf);
-    assert(rsurf->rs);
+    assert(rs);
 
-    if (!rsurf->rs->focused_rt)
+    // make pending buffer current if some is attached
+    if (rsurf->pending_buffer) {
+        wl_list_remove(&rsurf->current_buffer_destroyed.link);
+        wl_list_init(&rsurf->current_buffer_destroyed.link);
+
+        struct wl_resource* old = rsurf->current_buffer;
+        rsurf->current_buffer   = rsurf->pending_buffer;
+        rsurf->pending_buffer   = NULL;
+
+        if (rsurf->current_buffer)
+            wl_resource_add_destroy_listener(rsurf->current_buffer,
+                                             &rsurf->current_buffer_destroyed);
+
+        if (old)
+            wl_buffer_send_release(old);
+    }
+
+    if (!rs->focused_rt)
         return;
 
     // on first commit, client is not sending a buffer
@@ -143,7 +145,7 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 
     // NOTE: redsurfaces that are on background
     // do not need redraw or frame callback
-    if (!red_is_rsurf_focused(rsurf->rs, rsurf))
+    if (!red_is_rsurf_focused(rs, rsurf))
         return;
 
     request_redraw(rsurf->rs);
@@ -243,6 +245,7 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     if (red_is_client_valid(rsurf->rs, rsurf->rc))
         dll_remove_val(rsurf->rc->rsurfs, rsurf);
 
+    wl_list_remove(&rsurf->current_buffer_destroyed.link);
     gl_destroy_surface_texture(rsurf);
     if (rsurf)
         free(rsurf);
@@ -261,7 +264,8 @@ init_redsurface()
     rsurf->rc               = NULL;
     rsurf->configured       = 0;
     rsurf->pending_buffer   = NULL;
-    rsurf->pending_callback = NULL;
+    rsurf->current_buffer   = NULL;
+    rsurf->pending_cbs      = (typeof(rsurf->pending_cbs))dll_init();
     rsurf->wl_surface       = NULL;
     rsurf->xdg_toplevel     = NULL;
     rsurf->geom_x           = 0;
@@ -274,9 +278,9 @@ init_redsurface()
     rsurf->gl_tex_w         = 0;
     rsurf->buffer_scale     = 1;
     rsurf->buffer_scale_set = 0;
-    rsurf->pending_buffer_destroyed.notify =
+    rsurf->current_buffer_destroyed.notify =
       wl_surface_buffer_resource_destroyed;
-    wl_list_init(&rsurf->pending_buffer_destroyed.link);
+    wl_list_init(&rsurf->current_buffer_destroyed.link);
 
     return rsurf;
 }

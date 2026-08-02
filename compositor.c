@@ -6,6 +6,7 @@
 #include "red.h"
 #include "relative-pointer-server-protocol.h"
 #include "render.h"
+#include "time.h"
 #include "wayland.h"
 #include <libinput.h>
 #include <sys/timerfd.h>
@@ -119,7 +120,7 @@ red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
         red_send_configure(rt->rsurf, 1, 0);
 
     if (rs->backend->is_ready_for_frame(rs->backend->d))
-        red_send_pending_callback(rt->rsurf);
+        red_send_pending_callbacks(rt->rsurf, time_get_now_msec());
 
     return 0;
 }

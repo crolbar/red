@@ -236,7 +236,7 @@ page_flip_handler(int          fd,
     struct backend_drm* bd = rs->backend->d;
 
     bd->page_flip_ready = 1;
-    red_on_frame_done(rs);
+    red_on_frame_done(rs, (uint32_t)(tv_sec * 1000 + tv_usec / 1000));
 }
 
 static drmEventContext drmevctx = {

@@ -291,22 +291,18 @@ fail:
 int
 gl_bind_texture_from_surface(struct redsurface* rsurf)
 {
-    struct wl_resource* pending_buffer = rsurf->pending_buffer;
+    struct wl_resource* buffer = rsurf->current_buffer;
 
+    if (!rsurf->gl_tex)
     // init texture && map buffer to texture
-    if (!rsurf->gl_tex) {
-        assert(pending_buffer);
-        if (init_surface_texture_from_buffer(rsurf, pending_buffer))
+    {
+        if (init_surface_texture_from_buffer(rsurf, buffer))
             goto fail;
-    }
+    } else
     // map new buffer to texture
-    else if (rsurf->gl_tex && pending_buffer) {
-        if (gl_surface_texture_map_image(rsurf, pending_buffer))
+    {
+        if (gl_surface_texture_map_image(rsurf, buffer))
             goto fail;
-    }
-    // reuse texture. no action required for shmbuf.
-    else {
-        // TODO sync for egl image?
     }
 
     // binding to texture unit 0
@@ -598,6 +594,18 @@ init_gl_proc()
 
     if (!(gl_proc->eglCreateImageKHR =
             (PFNEGLCREATEIMAGEKHRPROC)egl_get_proc("eglCreateImageKHR")))
+        goto fail;
+
+    if (!(gl_proc->eglCreateSyncKHR =
+            (PFNEGLCREATESYNCKHRPROC)egl_get_proc("eglCreateSyncKHR")))
+        goto fail;
+
+    if (!(gl_proc->eglDestroySyncKHR =
+            (PFNEGLDESTROYSYNCKHRPROC)egl_get_proc("eglDestroySyncKHR")))
+        goto fail;
+
+    if (!(gl_proc->eglClientWaitSyncKHR =
+            (PFNEGLCLIENTWAITSYNCKHRPROC)egl_get_proc("eglClientWaitSyncKHR")))
         goto fail;
 
     if (!(gl_proc->glEGLImageTargetRenderbufferStorageOES =

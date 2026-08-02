@@ -3,7 +3,6 @@
 #include "log.h"
 #include "red.h"
 #include "render.h"
-#include "wayland.h"
 #include "xdg-shell-server-protocol.h"
 #include <errno.h> // IWYU pragma: keep
 #include <fcntl.h>
@@ -64,7 +63,7 @@ redaction_stop_renderer(struct redstate* rs, char** args, size_t args_len)
 
         if (rs->focused_rt)
             if (rs->backend->is_ready_for_frame(rs->backend->d))
-                red_send_pending_callback(rs->focused_rt->rsurf);
+                red_rt_send_enter(rs, rs->focused_rt);
         request_redraw(rs);
     }
 }

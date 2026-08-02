@@ -5,6 +5,7 @@
 #include "linux-dmabuf-client-protocol.h"
 #include "log.h"
 #include "render.h"
+#include "time.h"
 #include "wayland.h"
 #include "xdg-shell-client-protocol.h"
 #include "xdg-shell-server-protocol.h"
@@ -81,10 +82,10 @@ wl_frame_done(void*               data,
     (void)callback_data;
     struct redstate*        rs = data;
     struct backend_wayland* bw = rs->backend->d;
-    wl_callback_destroy(wl_callback);
 
     bw->is_ready_for_frame = 1;
-    red_on_frame_done(rs);
+    red_on_frame_done(rs, time_get_now_msec());
+    wl_callback_destroy(wl_callback);
 }
 
 /* ======== wl_buffer ======== */
