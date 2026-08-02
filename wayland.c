@@ -61,6 +61,18 @@ wl_surface_destroy(struct wl_client* client, struct wl_resource* resource)
 }
 
 static void
+wl_surface_buffer_resource_destroyed(struct wl_listener* listener, void* data)
+{
+    struct redsurface* rsurf =
+      wl_container_of(listener, rsurf, pending_buffer_destroyed);
+
+    wl_list_remove(&rsurf->pending_buffer_destroyed.link);
+    wl_list_init(&rsurf->pending_buffer_destroyed.link);
+
+    rsurf->pending_buffer = NULL;
+}
+
+static void
 wl_surface_attach(struct wl_client*   client,
                   struct wl_resource* resource,
                   struct wl_resource* buffer,
@@ -70,12 +82,19 @@ wl_surface_attach(struct wl_client*   client,
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     assert(rsurf);
 
+    wl_list_remove(&rsurf->pending_buffer_destroyed.link);
+    wl_list_init(&rsurf->pending_buffer_destroyed.link);
+
     if (rsurf->pending_buffer) {
         wl_buffer_send_release(rsurf->pending_buffer);
         rsurf->pending_buffer = NULL;
     }
 
     rsurf->pending_buffer = buffer;
+
+    if (buffer)
+        wl_resource_add_destroy_listener(buffer,
+                                         &rsurf->pending_buffer_destroyed);
 }
 
 static void
@@ -234,7 +253,7 @@ struct redsurface*
 init_redsurface()
 {
     struct redsurface* rsurf = NULL;
-    rsurf                    = malloc(sizeof(*rsurf));
+    rsurf                    = calloc(1, sizeof(*rsurf));
     if (!rsurf) {
         return NULL;
     }
@@ -255,6 +274,9 @@ init_redsurface()
     rsurf->gl_tex_w         = 0;
     rsurf->buffer_scale     = 1;
     rsurf->buffer_scale_set = 0;
+    rsurf->pending_buffer_destroyed.notify =
+      wl_surface_buffer_resource_destroyed;
+    wl_list_init(&rsurf->pending_buffer_destroyed.link);
 
     return rsurf;
 }
@@ -1322,7 +1344,7 @@ wl_client_created(struct wl_listener* listener, void* data)
 #endif
 
     struct redclient* rc;
-    rc = malloc(sizeof(*rc));
+    rc = calloc(1, sizeof(*rc));
     assert(rc);
     rc->rs                      = rs;
     rc->rsurfs                  = (typeof(rc->rsurfs))dll_init();
@@ -1366,6 +1388,9 @@ zwp_linux_buffer_resource_destroy(struct wl_resource* resource)
 struct dmabuf*
 red_get_dmabuf(struct wl_resource* resource)
 {
+    if (!resource)
+        return NULL;
+
     if (!wl_resource_instance_of(
           resource, &wl_buffer_interface, &wl_buffer_implementation))
         return NULL;
