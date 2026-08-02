@@ -4,6 +4,7 @@
 #include "wayland.h"
 #include <GLES3/gl3.h>
 #include <drm/drm_fourcc.h>
+#include <string.h>
 
 static const char* vertex_shader_src = "\
 #version 300 es\n\
@@ -426,20 +427,41 @@ init_egl(struct gbm_device* gbm_dev,
         return 1;
     };
 
+    const char* exts      = eglQueryString(*egl_display, EGL_EXTENSIONS);
+    int req_high_priority = strstr(exts, "EGL_IMG_context_priority") != NULL;
+
     {
-        EGLint attrs[] = {
-            EGL_CONTEXT_MAJOR_VERSION,
-            3,
-            EGL_CONTEXT_MINOR_VERSION,
-            2,
-            EGL_NONE,
-        };
+        size_t atti = 0;
+        EGLint attrs[32];
+
+        if (req_high_priority) {
+            attrs[atti++] = EGL_CONTEXT_PRIORITY_LEVEL_IMG;
+            attrs[atti++] = EGL_CONTEXT_PRIORITY_HIGH_IMG;
+        }
+
+        attrs[atti++] = EGL_CONTEXT_MAJOR_VERSION;
+        attrs[atti++] = 3;
+        attrs[atti++] = EGL_CONTEXT_MINOR_VERSION;
+        attrs[atti++] = 2;
+
+        attrs[atti++] = EGL_NONE;
 
         *egl_context = eglCreateContext(
           *egl_display, EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, attrs);
         if (*egl_context == EGL_NO_CONTEXT) {
             ROG_ERR("failed to create egl context: %x", eglGetError());
             return 1;
+        }
+
+        if (req_high_priority) {
+            EGLint priority = EGL_CONTEXT_PRIORITY_MEDIUM_IMG;
+            eglQueryContext(*egl_display,
+                            *egl_context,
+                            EGL_CONTEXT_PRIORITY_LEVEL_IMG,
+                            &priority);
+            if (priority != EGL_CONTEXT_PRIORITY_HIGH_IMG) {
+                ROG_WARN("failed to get high priority egl context");
+            }
         }
 
         if (!eglMakeCurrent(
