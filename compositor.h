@@ -59,3 +59,9 @@ red_get_client_by_rsurf(struct redstate* rs, struct redsurface* rsurf);
 
 int
 red_is_client_valid(struct redstate* rs, struct redclient* rc);
+
+int
+red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt);
+
+int
+red_is_rsurf_focused(struct redstate* rs, struct redsurface* rsurf);

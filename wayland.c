@@ -124,7 +124,7 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 
     // NOTE: redsurfaces that are on background
     // do not need redraw or frame callback
-    if (rsurf != rsurf->rs->focused_rt->rsurf)
+    if (!red_is_rsurf_focused(rsurf->rs, rsurf))
         return;
 
     request_redraw(rsurf->rs);
@@ -156,6 +156,18 @@ wl_surface_set_buffer_scale(struct wl_client*   client,
                             struct wl_resource* resource,
                             int32_t             scale)
 {
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    assert(rsurf);
+    assert(scale > 0);
+
+    int32_t prev_scale      = rsurf->buffer_scale;
+    rsurf->buffer_scale     = scale;
+    rsurf->buffer_scale_set = 1;
+
+    // if scale in changed, and surface is focused toplevel, send configure
+    if (red_is_rsurf_focused(rsurf->rs, rsurf))
+        if (rsurf->buffer_scale != prev_scale)
+            red_rt_send_enter(rsurf->rs, rsurf->rs->focused_rt);
 }
 
 static void
@@ -241,6 +253,8 @@ init_redsurface()
     rsurf->gl_tex           = 0;
     rsurf->gl_tex_h         = 0;
     rsurf->gl_tex_w         = 0;
+    rsurf->buffer_scale     = 1;
+    rsurf->buffer_scale_set = 0;
 
     return rsurf;
 }
@@ -489,6 +503,18 @@ xdg_toplevel_resource_destroy(struct wl_resource* resource)
     red_destroy_rt(rt->rs, rt);
 }
 
+// by default using screen scale set by us
+//
+// if client sets scale with set_buffer_scale
+// we use it.
+uint32_t
+red_get_scale(struct redsurface* rsurf)
+{
+    if (rsurf->buffer_scale_set)
+        return rsurf->buffer_scale;
+    return cfg.screen_scale;
+}
+
 int
 red_send_configure(struct redsurface* rsurf, int activated, int resizing)
 {
@@ -497,8 +523,10 @@ red_send_configure(struct redsurface* rsurf, int activated, int resizing)
     uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
     uint32_t height = rsurf->rs->backend->get_height(rsurf->rs->backend->d);
 
-    width /= cfg.screen_scale;
-    height /= cfg.screen_scale;
+    // making the surface cover the whole screen
+    uint32_t scale = red_get_scale(rsurf);
+    width /= scale;
+    height /= scale;
 
     struct wl_array states;
     wl_array_init(&states);
@@ -613,11 +641,12 @@ xdg_surface_set_window_geometry(struct wl_client*   client,
 {
     struct redsurface* rsurf = resource->data;
     assert(rsurf);
+    uint32_t scale         = red_get_scale(rsurf);
     rsurf->geom_configured = 1;
-    rsurf->geom_width      = width * cfg.screen_scale;
-    rsurf->geom_height     = height * cfg.screen_scale;
-    rsurf->geom_x          = x * cfg.screen_scale;
-    rsurf->geom_y          = y * cfg.screen_scale;
+    rsurf->geom_width      = width * scale;
+    rsurf->geom_height     = height * scale;
+    rsurf->geom_x          = x * scale;
+    rsurf->geom_y          = y * scale;
 }
 
 static void
@@ -628,6 +657,8 @@ xdg_surface_ack_configure(struct wl_client*   client,
     struct redsurface* rsurf = resource->data;
     assert(rsurf);
     rsurf->configured = 1;
+    if (red_is_rsurf_focused(rsurf->rs, rsurf))
+        request_redraw(rsurf->rs);
 }
 
 static const struct xdg_surface_interface xdg_surface_implementation = {

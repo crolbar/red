@@ -166,6 +166,7 @@ gl_surface_texture_map_egl_image(struct redsurface* rsurf,
                                  int32_t            w,
                                  int32_t            h)
 {
+
     if (!dmabuf->egl_img)
     // initially create the egl link to the dmabuf
     {
@@ -239,6 +240,20 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
                 w = src_w;
                 h = src_h;
             }
+        }
+    }
+
+    // NOTE: clunky fallback, find better solution
+    if (!rsurf->buffer_scale_set)
+    // set buffer scale back to 1 if recived buffer's
+    // width and height are not fitting the full screen
+    {
+        uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
+        uint32_t height = rsurf->rs->backend->get_height(rsurf->rs->backend->d);
+        if (w != (int32_t)width && h != (int32_t)height) {
+            rsurf->buffer_scale     = 1;
+            rsurf->buffer_scale_set = 1;
+            red_send_configure(rsurf, 1, 0);
         }
     }
 

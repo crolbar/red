@@ -311,10 +311,14 @@ wl_pointer_motion(void*              data,
     double x = wl_fixed_to_double(surface_x);
     double y = wl_fixed_to_double(surface_y);
 
-    x *= cfg.screen_scale;
-    y *= cfg.screen_scale;
-    width *= cfg.screen_scale;
-    height *= cfg.screen_scale;
+    int32_t scale = cfg.screen_scale;
+    if (rs->focused_rt && rs->focused_rt->rsurf)
+        scale = red_get_scale(rs->focused_rt->rsurf);
+
+    x *= scale;
+    y *= scale;
+    width *= scale;
+    height *= scale;
 
     rs->cursor_x = max(min(x, (double)width), 0);
     rs->cursor_y = max(min(y, (double)height), 0);
@@ -322,8 +326,8 @@ wl_pointer_motion(void*              data,
     if (rs->focused_rt && rs->focused_rt->rc->wl_pointer)
         wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
                                time,
-                               surface_x / cfg.screen_scale,
-                               surface_y / cfg.screen_scale);
+                               surface_x / scale,
+                               surface_y / scale);
 
     if (!rs->using_hardware_cursor)
         request_redraw(rs);

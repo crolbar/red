@@ -31,3 +31,6 @@ red_get_dmabuf(struct wl_resource* resource);
 
 void
 handle_wl_log(const char* _fmt, va_list args);
+
+uint32_t
+red_get_scale(struct redsurface* rsurf);

@@ -77,6 +77,9 @@ struct redsurface
     int32_t geom_height;
     int     geom_configured;
 
+    int32_t buffer_scale;
+    int     buffer_scale_set;
+
     struct wl_resource* pending_buffer;   // set by wl_surface.attach
     struct wl_resource* pending_callback; // set by wl_surface.frame
     int                 configured;       // xdg_surface configure

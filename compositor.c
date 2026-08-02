@@ -14,27 +14,36 @@
 #include <wayland-server.h>
 
 // local cursor to the focused surface
-// one surface means absolute cursor loc is the local one too!
 double
 red_get_lc_x(struct redstate* rs)
 {
     double x = rs->cursor_x;
-    x /= cfg.screen_scale;
+
     // add decorations in account
     if (rs->focused_rt && rs->focused_rt->rsurf) {
+        // add geom of surface, because we remove it
         if (rs->focused_rt->rsurf->geom_configured)
-            return x + rs->focused_rt->rsurf->geom_x;
+            x += rs->focused_rt->rsurf->geom_x;
+
+        x /= red_get_scale(rs->focused_rt->rsurf);
+    } else {
+        x /= cfg.screen_scale;
     }
+
     return x;
 }
 double
 red_get_lc_y(struct redstate* rs)
 {
     double y = rs->cursor_y;
-    y /= cfg.screen_scale;
+
     if (rs->focused_rt && rs->focused_rt->rsurf) {
         if (rs->focused_rt->rsurf->geom_configured)
-            return y + rs->focused_rt->rsurf->geom_y;
+            y += rs->focused_rt->rsurf->geom_y;
+
+        y /= red_get_scale(rs->focused_rt->rsurf);
+    } else {
+        y /= cfg.screen_scale;
     }
     return y;
 }
@@ -63,6 +72,20 @@ red_get_client_by_rsurf(struct redstate* rs, struct redsurface* rsurf)
     return NULL;
 }
 
+int
+red_is_rsurf_focused(struct redstate* rs, struct redsurface* rsurf)
+{
+    if (!rs->focused_rt)
+        return 0;
+    if (!rs->focused_rt->rsurf)
+        return 0;
+
+    if (!rsurf)
+        return 0;
+
+    return rs->focused_rt->rsurf == rsurf;
+}
+
 // check if rc is not freed.
 // we have some states where we could do a use after free on redclient.
 int
@@ -75,6 +98,29 @@ red_is_client_valid(struct redstate* rs, struct redclient* rc)
 
         return 1;
     }
+    return 0;
+}
+
+int
+red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
+{
+    if (!rt)
+        return 0;
+    assert(rt->rc);
+    assert(rt->rsurf);
+
+    if (rt->rc->wl_pointer)
+        red_pointer_send_enter(rt->rc, rt->rsurf->wl_surface);
+
+    if (rt->rc->wl_keyboard)
+        red_keyboard_send_enter(rt->rc, rt->rsurf->wl_surface);
+
+    if (rt->rsurf)
+        red_send_configure(rt->rsurf, 1, 0);
+
+    if (rs->backend->is_ready_for_frame(rs->backend->d))
+        red_send_pending_callback(rt->rsurf);
+
     return 0;
 }
 
@@ -96,19 +142,7 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
     frt = NULL;
 
     // send enter + frame callback on new focus
-    if (rt) {
-        if (rt->rc->wl_pointer)
-            red_pointer_send_enter(rt->rc, rt->rsurf->wl_surface);
-
-        if (rt->rc->wl_keyboard)
-            red_keyboard_send_enter(rt->rc, rt->rsurf->wl_surface);
-
-        if (rt->rsurf)
-            red_send_configure(rt->rsurf, 1, 0);
-
-        if (rs->backend->is_ready_for_frame(rs->backend->d))
-            red_send_pending_callback(rt->rsurf);
-    }
+    red_rt_send_enter(rs, rt);
 
     rs->focused_rt = rt;
 
