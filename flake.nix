@@ -6,11 +6,14 @@
     pkgs = import inputs.nixpkgs {inherit system;};
 
     nativeBuildInputs = with pkgs; [
-      gdb
+      pkg-config
       clang-tools
       wayland-scanner
-      pkg-config
       wayland-protocols
+      gdb
+      gperftools # libprofiler
+      pprof # visualization of profiling data
+      graphviz # directed graph visualization
     ];
     buildInputs = with pkgs; [
       libglvnd

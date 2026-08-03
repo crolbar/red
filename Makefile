@@ -103,10 +103,14 @@ $(BINS): $(SRC) $(PRO_SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_DEBUG) -o $@ $(SRC) $(PRO_SRC) $(LDLIBS)
 
 release: $(SRC) $(PRO_SRC)
-	$(CC) $(CFLAGS) $(CFLAGS_RELEASE) -o red $(SRC) $(PRO_SRC) $(LDLIBS)
+	$(CC) $(CFLAGS) $(CFLAGS_RELEASE) -o $(BINS) $(SRC) $(PRO_SRC) $(LDLIBS)
 
 run: all
 	./run.sh
+
+prof: $(SRC) $(PRO_SRC)
+	$(CC) $(CFLAGS) $(CFLAGS_DEBUG) -fno-omit-frame-pointer -o $(BINS) $(SRC) $(PRO_SRC) $(LDLIBS) -lprofiler
+	./run_prof.sh
 
 install: all
 	install -D -t $(DESTDIR)$(PREFIX)/bin $(BINS)
@@ -114,4 +118,4 @@ install: all
 clean:
 	rm -f red *protocol.c *protocol.h *.o
 
-.PHONY: all clean red release
+.PHONY: all clean red release prof
