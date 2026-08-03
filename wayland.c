@@ -9,6 +9,7 @@
 #include "red.h"
 #include "relative-pointer-server-protocol.h"
 #include "render.h"
+#include "time.h"
 #include "viewporter-server-protocol.h"
 #include "wayland.h"
 #include "xdg-decoration-server-protocol.h"
@@ -20,6 +21,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <threads.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
@@ -47,8 +49,7 @@ red_on_frame_done(struct redstate* rs, uint32_t time_msec)
     if (rs->focused_rt)
         red_send_pending_callbacks(rs->focused_rt->rsurf, time_msec);
 
-    // if updates happened on page flip.
-    // shouldn't happen much as we have one window
+    // if updates happened on page flip
     redraw(rs);
     return 0;
 }
@@ -111,6 +112,36 @@ wl_surface_frame(struct wl_client*   client,
     dll_push_tail(rsurf->pending_cbs, cb);
 }
 
+// return 1 if released, 0 if not (ref count != 0)
+int
+red_current_buffer_deref(struct redsurface* rsurf)
+{
+    rsurf->current_buffer_ref = max(rsurf->current_buffer_ref - 1, 0);
+
+    // ref count reaches 0 we realese buf
+    // and if we have pending we make it current
+    if (rsurf->current_buffer_ref == 0) {
+        if (rsurf->current_buffer) {
+            wl_list_remove(&rsurf->current_buffer_destroyed.link);
+            wl_list_init(&rsurf->current_buffer_destroyed.link);
+            wl_buffer_send_release(rsurf->current_buffer);
+            rsurf->current_buffer = NULL;
+        }
+
+        if (rsurf->pending_buffer) {
+            rsurf->current_buffer = rsurf->pending_buffer;
+            rsurf->current_buffer_ref++;
+            rsurf->pending_buffer = NULL;
+
+            if (rsurf->current_buffer)
+                wl_resource_add_destroy_listener(
+                  rsurf->current_buffer, &rsurf->current_buffer_destroyed);
+        }
+        return 1;
+    }
+    return 0;
+}
+
 static void
 wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 {
@@ -120,21 +151,8 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     assert(rs);
 
     // make pending buffer current if some is attached
-    if (rsurf->pending_buffer) {
-        wl_list_remove(&rsurf->current_buffer_destroyed.link);
-        wl_list_init(&rsurf->current_buffer_destroyed.link);
-
-        struct wl_resource* old = rsurf->current_buffer;
-        rsurf->current_buffer   = rsurf->pending_buffer;
-        rsurf->pending_buffer   = NULL;
-
-        if (rsurf->current_buffer)
-            wl_resource_add_destroy_listener(rsurf->current_buffer,
-                                             &rsurf->current_buffer_destroyed);
-
-        if (old)
-            wl_buffer_send_release(old);
-    }
+    if (rsurf->pending_buffer)
+        red_current_buffer_deref(rsurf);
 
     if (!rs->focused_rt)
         return;
@@ -260,24 +278,25 @@ init_redsurface()
     if (!rsurf) {
         return NULL;
     }
-    rsurf->rs               = NULL;
-    rsurf->rc               = NULL;
-    rsurf->configured       = 0;
-    rsurf->pending_buffer   = NULL;
-    rsurf->current_buffer   = NULL;
-    rsurf->pending_cbs      = (typeof(rsurf->pending_cbs))dll_init();
-    rsurf->wl_surface       = NULL;
-    rsurf->xdg_toplevel     = NULL;
-    rsurf->geom_x           = 0;
-    rsurf->geom_y           = 0;
-    rsurf->geom_width       = 0;
-    rsurf->geom_height      = 0;
-    rsurf->geom_configured  = 0;
-    rsurf->gl_tex           = 0;
-    rsurf->gl_tex_h         = 0;
-    rsurf->gl_tex_w         = 0;
-    rsurf->buffer_scale     = 1;
-    rsurf->buffer_scale_set = 0;
+    rsurf->rs                 = NULL;
+    rsurf->rc                 = NULL;
+    rsurf->configured         = 0;
+    rsurf->pending_buffer     = NULL;
+    rsurf->current_buffer     = NULL;
+    rsurf->current_buffer_ref = 0;
+    rsurf->pending_cbs        = (typeof(rsurf->pending_cbs))dll_init();
+    rsurf->wl_surface         = NULL;
+    rsurf->xdg_toplevel       = NULL;
+    rsurf->geom_x             = 0;
+    rsurf->geom_y             = 0;
+    rsurf->geom_width         = 0;
+    rsurf->geom_height        = 0;
+    rsurf->geom_configured    = 0;
+    rsurf->gl_tex             = 0;
+    rsurf->gl_tex_h           = 0;
+    rsurf->gl_tex_w           = 0;
+    rsurf->buffer_scale       = 1;
+    rsurf->buffer_scale_set   = 0;
     rsurf->current_buffer_destroyed.notify =
       wl_surface_buffer_resource_destroyed;
     wl_list_init(&rsurf->current_buffer_destroyed.link);
@@ -879,7 +898,7 @@ wl_global_bind_output(struct wl_client* client,
                         WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED,
                         width,
                         height,
-                        60 * 1000);
+                        120 * 1000);
     if (version >= 2)
         wl_output_send_scale(wl_output, cfg.screen_scale);
     if (version >= 4)

@@ -22,6 +22,14 @@ time_get_now_msec()
     return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
+uint64_t
+time_get_now_usec()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+
 double
 time_get_elapsed_sec(struct timespec* _tp)
 {

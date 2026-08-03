@@ -34,3 +34,6 @@ handle_wl_log(const char* _fmt, va_list args);
 
 uint32_t
 red_get_scale(struct redsurface* rsurf);
+
+int
+red_current_buffer_deref(struct redsurface* rsurf);

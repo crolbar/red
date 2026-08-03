@@ -38,6 +38,7 @@ drm_flip(struct backend_drm* bd, uint32_t buf_id, struct redstate* rs)
 
     add_prop(req, bd->primary_plane_id, bd->props->pp_fb_id, buf_id);
 
+    // TODO: utilize `DRM_MODE_PAGE_FLIP_ASYNC` to enable tearing?
     if (drmModeAtomicCommit(bd->drm_fd,
                             req,
                             DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_ATOMIC_NONBLOCK,

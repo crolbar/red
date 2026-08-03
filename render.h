@@ -7,4 +7,7 @@ void
 redraw(struct redstate* rs);
 
 void
+redraw_done(struct redstate* rs);
+
+void
 request_redraw(struct redstate* rs);

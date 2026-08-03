@@ -282,7 +282,7 @@ red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
                                (cfg.cursor_autohide_time % 1000) * 1000 * 1000 },
             .it_interval = { 0, 0 },
         };
-        timerfd_settime(rs->cursor_hide_timer, 0, &its, NULL);
+        timerfd_settime(rs->cursor_hide_timer_fd, 0, &its, NULL);
 
         if (rs->using_hardware_cursor) {
             if (drm_update_cursor_plane(rs))

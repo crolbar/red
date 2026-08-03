@@ -1,6 +1,4 @@
 #include <errno.h> // IWYU pragma: keep
-#include <libinput.h>
-#include <poll.h>
 #include <string.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
@@ -15,6 +13,7 @@
 #include "log.h"
 #include "opengl.h"
 #include "red.h"
+#include "render.h"
 #include "signals.h"
 #include "time.h"
 #include "vt.h"
@@ -51,8 +50,19 @@ main(int argc, char** argv)
     rs = malloc(sizeof(*rs));
     assert(rs);
 
-    rs->sig_fd            = -1;
-    rs->tty_fd            = -1;
+    rs->sig_fd           = -1;
+    rs->tty_fd           = -1;
+    rs->li_fd            = -1;
+    rs->backend_fd       = -1;
+    rs->wl_event_loop_fd = -1;
+    rs->pfds             = (struct pollfd[__REDPFDS_SIZE]){
+        [RFD_LIBINPUT]   = { .fd = -1, .events = POLLIN },
+        [RFD_SIGNALS]    = { .fd = -1, .events = POLLIN },
+        [RFD_BACKEND]    = { .fd = -1, .events = POLLIN },
+        [RFD_WAYLAND]    = { .fd = -1, .events = POLLIN },
+        [RFD_CURSOR]     = { .fd = -1, .events = POLLIN },
+        [RFD_REDRAWSYNC] = { .fd = -1, .events = POLLIN },
+    };
     rs->li                = NULL;
     rs->active            = 1;
     rs->should_quit       = 0;
@@ -102,7 +112,7 @@ main(int argc, char** argv)
     rs->using_hardware_cursor   = 1;
     rs->cursor_last_motion_time = 0;
     rs->cursor_last_scroll_time = 0;
-    rs->cursor_hide_timer       = timerfd_create(CLOCK_REALTIME, 0);
+    rs->cursor_hide_timer_fd    = timerfd_create(CLOCK_REALTIME, 0);
     rs->relative_pointers       = (typeof(rs->relative_pointers))dll_init();
     rs->cursor_locked           = 0;
     rs->cursor_hidden           = 0;
@@ -111,6 +121,9 @@ main(int argc, char** argv)
     rs->vao         = 0;
     rs->vbo         = 0;
     rs->texture_loc = 0;
+
+    rs->queued_rb    = NULL;
+    rs->queued_rsurf = NULL;
 
     if (init_gl_proc()) {
         goto end;
@@ -161,89 +174,98 @@ main(int argc, char** argv)
     init_env_vars();
     init_auto_start_progs();
 
-    // loop
-    {
-        size_t        fds_size = 5;
-        struct pollfd fds[fds_size];
+    if ((rs->li_fd = libinput_get_fd(rs->li)) < 0) {
+        ROG_ERR("failed get libinput fd: %s", strerror(errno));
+        goto end;
+    }
 
-        int li_fd = libinput_get_fd(rs->li);
-        if (li_fd < 0) {
-            ROG_ERR("failed get libinput fd: %s", strerror(errno));
+    if ((rs->backend_fd = rs->backend->get_fd(rs->backend->d)) < 0) {
+        goto end;
+    }
+
+    if ((rs->wl_event_loop_fd = wl_event_loop_get_fd(rs->wl_event_loop)) < 0) {
+        ROG_ERR("failed to get event loop fd");
+        goto end;
+    }
+
+    rs->pfds[RFD_LIBINPUT].fd = rs->li_fd;
+    rs->pfds[RFD_SIGNALS].fd  = rs->sig_fd;
+    rs->pfds[RFD_BACKEND].fd  = rs->backend_fd;
+    rs->pfds[RFD_WAYLAND].fd  = rs->wl_event_loop_fd;
+    rs->pfds[RFD_CURSOR].fd   = rs->cursor_hide_timer_fd;
+
+    ROG_INFO("Starting loop...");
+    while (!rs->should_quit) {
+        wl_display_flush_clients(rs->wl_display);
+        rs->backend->flush_events(rs->backend->d);
+
+        if (poll(rs->pfds, __REDPFDS_SIZE, -1) == -1) {
+            ROG_ERR("poll fds error");
             goto end;
         }
 
-        int backend_fd = rs->backend->get_fd(rs->backend->d);
-        if (backend_fd < 0) {
-            goto end;
-        }
+        if (rs->pfds[RFD_BACKEND].revents & POLLIN || rs->is_wayland_client)
+            rs->backend->handle_events(rs->backend->d);
 
-        int wl_event_loop_fd = wl_event_loop_get_fd(rs->wl_event_loop);
-        if (wl_event_loop_fd < 0) {
-            ROG_ERR("failed to get event loop fd");
-            goto end;
-        }
-
-        fds[0].fd     = li_fd;
-        fds[0].events = POLLIN;
-        fds[1].fd     = rs->sig_fd;
-        fds[1].events = POLLIN;
-        fds[2].fd     = backend_fd;
-        fds[2].events = POLLIN;
-        fds[3].fd     = wl_event_loop_fd;
-        fds[3].events = POLLIN;
-        fds[4].fd     = rs->cursor_hide_timer;
-        fds[4].events = POLLIN;
-
-        ROG_INFO("Starting loop...");
-        while (!rs->should_quit) {
-            wl_display_flush_clients(rs->wl_display);
-            rs->backend->flush_events(rs->backend->d);
-
-            if (poll(fds, fds_size, -1) == -1) {
-                ROG_ERR("poll fds error");
-                goto end;
-            }
-
-            // backend events
-            if (fds[2].revents & POLLIN || rs->is_wayland_client) {
-                rs->backend->handle_events(rs->backend->d);
-            }
-
-            // wayland events
-            if (fds[3].revents & POLLIN) {
-                wl_event_loop_dispatch(rs->wl_event_loop, 0);
-            }
-
-            // signal
-            if (fds[1].revents & POLLIN) {
-                int prev_active = rs->active;
-
-                if (handle_signal(rs) == -1) {
-                    goto end;
-                }
-
-                // redraw on aquire
-                if (rs->active && prev_active != rs->active) {
-                    rs->backend->push_init_buffer(rs);
+        enum redpfds revent_pfd;
+        do {
+            revent_pfd = __REDPFDS_NONE;
+            for (int i = 0; i < __REDPFDS_SIZE; i++) {
+                if (rs->pfds[i].revents & (POLLIN | POLLERR | POLLHUP)) {
+                    revent_pfd          = i;
+                    rs->pfds[i].revents = 0;
+                    break;
                 }
             }
 
-            // input event
-            if (fds[0].revents & POLLIN) {
-                if (input_dispatch(rs))
-                    goto end;
-            }
+            switch (revent_pfd) {
+                case RFD_LIBINPUT:
+                    if (input_dispatch(rs))
+                        goto end;
+                    break;
 
-            if (fds[4].revents & POLLIN) {
-                uint64_t expirations;
-                int      n = read(
-                  rs->cursor_hide_timer, &expirations, sizeof(expirations));
-                if (n != sizeof(expirations))
-                    continue;
-                if (drm_hide_cursor(rs))
-                    goto end;
+                case RFD_SIGNALS: {
+                    int prev_active = rs->active;
+
+                    if (handle_signal(rs) == -1) {
+                        goto end;
+                    }
+
+                    // redraw on aquire
+                    if (rs->active && prev_active != rs->active) {
+                        rs->backend->push_init_buffer(rs);
+                    }
+                    break;
+                }
+
+                // handled above
+                case RFD_BACKEND:
+                    break;
+                case RFD_WAYLAND:
+                    wl_event_loop_dispatch(rs->wl_event_loop, 0);
+                    break;
+
+                case RFD_CURSOR: {
+                    uint64_t expirations;
+                    int      n = read(rs->cursor_hide_timer_fd,
+                                 &expirations,
+                                 sizeof(expirations));
+                    if (n != sizeof(expirations))
+                        continue;
+                    if (drm_hide_cursor(rs))
+                        goto end;
+                    break;
+                }
+
+                case RFD_REDRAWSYNC:
+                    redraw_done(rs);
+                    break;
+
+                case __REDPFDS_SIZE:
+                case __REDPFDS_NONE:
+                    break;
             }
-        }
+        } while (revent_pfd != __REDPFDS_NONE);
     }
 
     ret = 0;

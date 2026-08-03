@@ -6,6 +6,7 @@
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #include <libinput.h>
+#include <sys/poll.h>
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -83,6 +84,7 @@ struct redsurface
     struct wl_resource* pending_buffer;           // set by wl_surface.attach
     struct wl_resource* current_buffer;           // set by wl_surface.commit
     struct wl_listener  current_buffer_destroyed; // destroy of pending_buffer
+    int                 current_buffer_ref;       // if ref == 0 buf is released
     dll(struct wl_resource*) pending_cbs;         // set by wl_surface.frame
     int configured;                               // xdg_surface configure
 };
@@ -115,14 +117,30 @@ typedef struct redbind
     size_t  action_len;
 } redbind;
 
+enum redpfds
+{
+    RFD_LIBINPUT,
+    RFD_SIGNALS,
+    RFD_BACKEND,
+    RFD_WAYLAND,
+    RFD_CURSOR,
+    RFD_REDRAWSYNC,
+    __REDPFDS_SIZE,
+    __REDPFDS_NONE,
+};
+
 struct redstate
 {
     struct backend*     backend;
     struct libinput*    li;
     struct xkb_context* xkb;
+    struct pollfd*      pfds;
 
     int tty_fd;
     int sig_fd;
+    int li_fd;
+    int backend_fd;
+    int wl_event_loop_fd;
 
     int is_wayland_client; // in wayland compositor spawn as a client
     int active;            // VT is active
@@ -131,6 +149,7 @@ struct redstate
     int should_draw;       // stop rendering at all. (using 2 as draw blank)
 
     struct timespec* time_start;
+
     // frame info
     double last_frame_time;
     double frame_latency;
@@ -163,7 +182,7 @@ struct redstate
     int      using_hardware_cursor;
     uint32_t cursor_last_motion_time;
     uint32_t cursor_last_scroll_time;
-    int      cursor_hide_timer;
+    int      cursor_hide_timer_fd;
     int      cursor_locked;
     int      cursor_hidden;
 
@@ -185,6 +204,9 @@ struct redstate
     xkb_mod_mask_t     xkb_mods_latched;
     xkb_mod_mask_t     xkb_mods_locked;
     xkb_layout_index_t xkb_group;
+
+    struct redbuffer*  queued_rb;    // buffer we got queued rendering to
+    struct redsurface* queued_rsurf; // surface we got queued rendering from
 };
 
 extern struct gl_proc* gl_proc;

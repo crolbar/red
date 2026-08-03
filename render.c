@@ -1,10 +1,12 @@
 #include "compositor.h"
 #include "log.h"
 #include "opengl.h"
+#include "red.h"
 #include "render.h"
 #include "time.h"
 #include "wayland.h"
 #include <GLES3/gl3.h>
+#include <unistd.h>
 
 int
 _render_cursor_part(struct redstate* rs,
@@ -126,18 +128,8 @@ render_surface(struct redstate* rs)
     CALL(glBindTexture(GL_TEXTURE_2D, 0));
     CALL(glUseProgram(0));
 
-    if (red_get_dmabuf(rsurf->current_buffer)) {
-        EGLDisplay egl_display =
-          rsurf->rs->backend->get_egl_display(rsurf->rs->backend->d);
-
-        EGLSyncKHR fence =
-          gl_proc->eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL);
-        glFlush();
-        gl_proc->eglClientWaitSyncKHR(
-          egl_display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER_KHR);
-        gl_proc->eglDestroySyncKHR(egl_display, fence);
-    }
-
+    rsurf->current_buffer_ref++;
+    rs->queued_rsurf = rsurf;
     return 0;
 fail:
     glBindVertexArray(0);
@@ -151,12 +143,11 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
 {
     assert(rs);
     assert(rb);
+    assert(rb->fbo);
 
     uint32_t width  = rs->backend->get_width(rs->backend->d);
     uint32_t height = rs->backend->get_height(rs->backend->d);
-
     assert(width > 0 && height > 0);
-    assert(rb->fbo);
 
     CALL(glBindFramebuffer(GL_FRAMEBUFFER, rb->fbo));
     CALL(glViewport(0, 0, width, height));
@@ -194,7 +185,6 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
             goto fail;
     }
 
-    CALL(glFinish());
     CALL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
     return 0;
 fail:
@@ -231,7 +221,12 @@ redraw(struct redstate* rs)
     if (render_frame(rs, rb))
         goto err;
 
-    rs->backend->push_buffer(rs, rb);
+    // create fence here to know when drawing is done
+    // also so we know when to release dmabuf
+    rs->queued_rb = rb;
+    if ((rs->pfds[RFD_REDRAWSYNC].fd = egl_create_sync_fd(
+           rs->backend->get_egl_display(rs->backend->d))) == -1)
+        goto err;
 
     rs->needs_redraw = 0;
     return;
@@ -242,12 +237,38 @@ err:
 }
 
 void
+redraw_done(struct redstate* rs)
+{
+    assert(rs->queued_rb);
+
+    // rendering on `rs->queued_rb` is done, push it
+    rs->backend->push_buffer(rs, rs->queued_rb);
+    rs->queued_rb = NULL;
+
+    // rendering from `rs->queued_rsurf` done, deref current
+    if (rs->queued_rsurf)
+        red_current_buffer_deref(rs->queued_rsurf);
+    rs->queued_rsurf = NULL;
+
+    close(rs->pfds[RFD_REDRAWSYNC].fd);
+    rs->pfds[RFD_REDRAWSYNC].fd = -1;
+}
+
+void
 request_redraw(struct redstate* rs)
 {
     rs->needs_redraw = 1;
+
     // if our vt is not focused we don't handle rendering
     if (!rs->active)
         return;
+
+    // we already have queued up a redraw and its not done.
+    // once its done after the page flip, we will get redraw
+    // and this request will be processed
+    if (rs->queued_rb != NULL)
+        return;
+
     // if we are not ready - page flip in progress - once we are ready
     // we call redraw, so this redraw request will happen on the next
     // available redraw time

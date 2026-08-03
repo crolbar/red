@@ -1,5 +1,4 @@
 #pragma once
-
 #include "red.h"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -16,9 +15,9 @@ struct gl_proc
     glEGLImageTargetRenderbufferStorageOES;
     PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
 
-    PFNEGLCREATESYNCKHRPROC     eglCreateSyncKHR;
-    PFNEGLDESTROYSYNCKHRPROC    eglDestroySyncKHR;
-    PFNEGLCLIENTWAITSYNCKHRPROC eglClientWaitSyncKHR;
+    PFNEGLCREATESYNCKHRPROC           eglCreateSyncKHR;
+    PFNEGLDESTROYSYNCKHRPROC          eglDestroySyncKHR;
+    PFNEGLDUPNATIVEFENCEFDANDROIDPROC eglDupNativeFenceFDANDROID;
 };
 
 int
@@ -65,3 +64,6 @@ gl_destroy_surface_texture(struct redsurface* rsurf);
 
 void
 gl_destroy_egl_img(EGLDisplay egl_display, EGLImageKHR egl_img);
+
+int
+egl_create_sync_fd(EGLDisplay egl_display);

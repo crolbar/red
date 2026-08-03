@@ -585,6 +585,31 @@ init_egl_image(EGLDisplay           egl_display,
     return img;
 }
 
+int
+egl_create_sync_fd(EGLDisplay egl_display)
+{
+    EGLSyncKHR sync = gl_proc->eglCreateSyncKHR(
+      egl_display, EGL_SYNC_NATIVE_FENCE_ANDROID, NULL);
+    if (sync == EGL_NO_SYNC_KHR) {
+        ROG_ERR("falied egl create sync");
+        goto fail;
+    }
+
+    glFlush();
+
+    int fd = gl_proc->eglDupNativeFenceFDANDROID(egl_display, sync);
+    if (fd == EGL_NO_NATIVE_FENCE_FD_ANDROID) {
+        ROG_ERR("falied eglDupNativeFenceFDANDROID");
+        goto fail;
+    }
+
+    gl_proc->eglDestroySyncKHR(egl_display, sync);
+
+    return fd;
+fail:
+    return -1;
+}
+
 __eglMustCastToProperFunctionPointerType
 egl_get_proc(char* addr)
 {
@@ -626,8 +651,9 @@ init_gl_proc()
             (PFNEGLDESTROYSYNCKHRPROC)egl_get_proc("eglDestroySyncKHR")))
         goto fail;
 
-    if (!(gl_proc->eglClientWaitSyncKHR =
-            (PFNEGLCLIENTWAITSYNCKHRPROC)egl_get_proc("eglClientWaitSyncKHR")))
+    if (!(gl_proc->eglDupNativeFenceFDANDROID =
+            (PFNEGLDUPNATIVEFENCEFDANDROIDPROC)egl_get_proc(
+              "eglDupNativeFenceFDANDROID")))
         goto fail;
 
     if (!(gl_proc->glEGLImageTargetRenderbufferStorageOES =
