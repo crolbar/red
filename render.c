@@ -4,7 +4,6 @@
 #include "red.h"
 #include "render.h"
 #include "time.h"
-#include "wayland.h"
 #include <GLES3/gl3.h>
 #include <unistd.h>
 
@@ -108,12 +107,8 @@ fail:
 }
 
 int
-render_surface(struct redstate* rs)
+render_surface(struct redstate* rs, struct redsurface* rsurf)
 {
-    struct redsurface* rsurf;
-    if (!(rsurf = rs->focused_rt->rsurf))
-        return 0;
-
     if (!rsurf->current_buffer)
         return 0;
 
@@ -128,8 +123,6 @@ render_surface(struct redstate* rs)
     CALL(glBindTexture(GL_TEXTURE_2D, 0));
     CALL(glUseProgram(0));
 
-    rsurf->current_buffer_ref++;
-    rs->queued_rsurf = rsurf;
     return 0;
 fail:
     glBindVertexArray(0);
@@ -161,8 +154,19 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
 
     // render toplevel
     else if (rs->focused_rt) {
-        if (render_surface(rs))
+        struct redsurface* rsurf;
+        if (!(rsurf = rs->focused_rt->rsurf))
+            return 0;
+
+        if (render_surface(rs, rsurf))
             goto fail;
+
+        dll_for_each(rsurf->subsurfs, v)
+        {
+            if (render_surface(rs, v->val))
+                goto fail;
+        }
+        rs->queued_rsurf = rsurf;
     }
 
     // render background color
@@ -228,8 +232,19 @@ redraw(struct redstate* rs)
            rs->backend->get_egl_display(rs->backend->d))) == -1)
         goto err;
 
-    if (rs->queued_rsurf)
-        wl_buffer_send_release(rs->queued_rsurf->current_buffer);
+    if (rs->queued_rsurf) {
+        if (rs->queued_rsurf->current_buffer) {
+            wl_buffer_send_release(rs->queued_rsurf->current_buffer);
+            // rs->queued_rsurf->current_buffer = NULL;
+        }
+        dll_for_each(rs->queued_rsurf->subsurfs, v)
+        {
+            if (v->val->current_buffer) {
+                wl_buffer_send_release(v->val->current_buffer);
+                v->val->current_buffer = NULL;
+            }
+        }
+    }
 
     rs->needs_redraw = 0;
     return;

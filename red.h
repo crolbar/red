@@ -57,6 +57,11 @@ typedef struct redbuffer
     GLuint            rbo, fbo;
 } redbuffer;
 
+struct redsubsurface
+{
+    struct redsurface* rsurf;
+};
+
 struct redsurface
 {
     struct redstate*    rs;
@@ -64,6 +69,9 @@ struct redsurface
     struct wl_resource* wl_surface;
     struct wl_resource* xdg_surface;
     struct wl_resource* xdg_toplevel;
+
+    struct redsurface* parent;
+    dll(struct redsurface*) subsurfs;
 
     // shm buf texture image dimentions
     int32_t gl_tex_w;

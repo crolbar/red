@@ -203,7 +203,7 @@ red_create_rt(struct redstate*   rs,
               struct wl_client*  wl_client)
 {
 #ifdef RED_DEBUG_TRACK_CLIENT_CREATION
-    ROG("creating rt client: %d, rsurf: %d", wl_client, rsurf);
+    ROG("creating toplevel rsurf: %d, client: %d", rsurf, wl_client);
 #endif
 
     struct redtoplevel* rt;

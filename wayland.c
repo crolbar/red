@@ -55,6 +55,9 @@ red_send_pending_callbacks(struct redsurface* rsurf, uint32_t time_msec)
 
     while (rsurf->pending_frame_cbs.size > 0) {
         struct wl_resource* cb = dll_hpop(rsurf->pending_frame_cbs);
+#ifdef RED_DEBUG_TRACK_SURFACE_BUFS
+        ROG("sending back frame cb: %d", cb)
+#endif
         wl_callback_send_done(cb, time_msec);
         wl_resource_destroy(cb);
     }
@@ -65,8 +68,16 @@ red_send_pending_callbacks(struct redsurface* rsurf, uint32_t time_msec)
 int
 red_on_frame_done(struct redstate* rs, uint32_t time_msec)
 {
-    if (rs->focused_rt)
+#ifdef RED_DEBUG_TRACK_SURFACE_BUFS
+    ROG("frame done");
+#endif
+    if (rs->focused_rt) {
         red_send_pending_callbacks(rs->focused_rt->rsurf, time_msec);
+        dll_for_each(rs->focused_rt->rsurf->subsurfs, v)
+        {
+            red_send_pending_callbacks(v->val, time_msec);
+        }
+    }
 
     // if updates happened on page flip
     redraw(rs);
@@ -112,9 +123,11 @@ wl_surface_attach(struct wl_client*   client,
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     assert(rsurf);
+#ifdef RED_DEBUG_TRACK_SURFACE_BUFS
+    ROG("attach: %d rsurf: %d", buffer, rsurf);
+#endif
 
     wl_list_remove(&rsurf->pending_buffer_destroyed.link);
-
     rsurf->pending_buffer = buffer;
 
     if (buffer != NULL) {
@@ -146,6 +159,9 @@ wl_surface_frame(struct wl_client*   client,
     struct wl_resource* cb =
       wl_resource_create(client, &wl_callback_interface, 1, callback);
     assert(cb);
+#ifdef RED_DEBUG_TRACK_SURFACE_BUFS
+    ROG("frame cb req: %d rsurf: %d", cb, rsurf);
+#endif
     wl_resource_set_implementation(cb, NULL, NULL, NULL);
 
     dll_push_tail(rsurf->pending_frame_cbs, cb);
@@ -158,12 +174,45 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     struct redstate*   rs    = rsurf->rs;
     assert(rsurf);
     assert(rs);
+    int surf_is_focused = red_is_rsurf_focused(rs, rsurf);
+    int surf_parent_is_focused =
+      rsurf->parent && red_is_rsurf_focused(rs, rsurf->parent);
+
+#ifdef RED_DEBUG_TRACK_SURFACE_BUFS
+    ROG("commit rsurf: %d, conf: %d, client: %d",
+        rsurf,
+        rsurf->configured,
+        rsurf->rc->wl_client);
+
+    ROG("comm pending: %d, current: %d",
+        rsurf->pending_buffer,
+        rsurf->current_buffer)
+    if (surf_is_focused)
+        ROG("req redraw")
+#endif
+
+    // on first commit, client is not sending a buffer
+    if (rsurf->xdg_surface && !rsurf->configured) {
+
+        if (rsurf->xdg_toplevel) {
+            struct wl_array a;
+            wl_array_init(&a);
+            xdg_toplevel_send_wm_capabilities(rsurf->xdg_toplevel, &a);
+            wl_array_release(&a);
+
+            red_send_configure(rsurf, 0, 0);
+        } else {
+            uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
+            xdg_surface_send_configure(rsurf->xdg_surface, serial);
+        }
+        return;
+    }
 
     // make pending buffer current if some is attached
-    // if (rsurf->pending_buffer)
-    //     red_current_buffer_deref(rsurf);
     if (rsurf->pending_buffer) {
         wl_list_remove(&rsurf->current_buffer_destroyed.link);
+
+        // struct wl_resource* old_buffer = rsurf->current_buffer;
 
         rsurf->current_buffer = rsurf->pending_buffer;
         rsurf->pending_buffer = NULL;
@@ -174,18 +223,17 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
         } else {
             wl_list_init(&rsurf->current_buffer_destroyed.link);
         }
+
+        // if (old_buffer)
+        //     wl_buffer_send_release(old_buffer);
     }
 
     if (!rs->focused_rt)
         return;
 
-    // on first commit, client is not sending a buffer
-    if (rsurf->xdg_surface && !rsurf->configured)
-        return;
-
     // NOTE: redsurfaces that are on background
     // do not need redraw or frame callback
-    if (!red_is_rsurf_focused(rs, rsurf))
+    if (!surf_is_focused && !surf_parent_is_focused)
         return;
 
     request_redraw(rsurf->rs);
@@ -278,7 +326,7 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     assert(rsurf);
 
 #ifdef RED_DEBUG_TRACK_CLIENT_CREATION
-    ROG("destroing wl_surf: %d", rsurf);
+    ROG("destroing rsurf: %d", rsurf);
 #endif
 
     // remove wl_surf from rsurfs of redclient
@@ -309,6 +357,8 @@ init_redsurface()
     rsurf->current_buffer_ref = 0;
     rsurf->pending_frame_cbs  = (typeof(rsurf->pending_frame_cbs))dll_init();
     rsurf->pending_pres_cbs   = (typeof(rsurf->pending_pres_cbs))dll_init();
+    rsurf->parent             = NULL;
+    rsurf->subsurfs           = (typeof(rsurf->subsurfs))dll_init();
     rsurf->wl_surface         = NULL;
     rsurf->xdg_toplevel       = NULL;
     rsurf->geom_x             = 0;
@@ -355,6 +405,9 @@ wl_compositor_create_surface(struct wl_client*   client,
         ROG_ERR("oom?");
         return;
     }
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("creating surface. client: %d, rsurf: %d", rc->wl_client, rsurf);
+#endif
 
     wl_resource_set_implementation(rsurf->wl_surface,
                                    &wl_surface_implementation,
@@ -590,7 +643,7 @@ red_get_scale(struct redsurface* rsurf)
 int
 red_send_configure(struct redsurface* rsurf, int activated, int resizing)
 {
-    rsurf->configured = 0;
+    // rsurf->configured = 0;
 
     uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
     uint32_t height = rsurf->rs->backend->get_height(rsurf->rs->backend->d);
@@ -618,6 +671,7 @@ red_send_configure(struct redsurface* rsurf, int activated, int resizing)
         *s          = XDG_TOPLEVEL_STATE_MAXIMIZED;
     }
     assert(rsurf->xdg_toplevel);
+    xdg_toplevel_send_configure_bounds(rsurf->xdg_toplevel, width, height);
     xdg_toplevel_send_configure(rsurf->xdg_toplevel, width, height, &states);
     wl_array_release(&states);
 
@@ -684,8 +738,6 @@ xdg_surface_get_toplevel(struct wl_client*   client,
                                    &xdg_toplevel_implementation,
                                    rt,
                                    xdg_toplevel_resource_destroy);
-
-    red_send_configure(rsurf, 1, 0);
 }
 
 static void
@@ -729,8 +781,8 @@ xdg_surface_ack_configure(struct wl_client*   client,
     struct redsurface* rsurf = resource->data;
     assert(rsurf);
     rsurf->configured = 1;
-    if (red_is_rsurf_focused(rsurf->rs, rsurf))
-        request_redraw(rsurf->rs);
+    // if (red_is_rsurf_focused(rsurf->rs, rsurf))
+    request_redraw(rsurf->rs);
 }
 
 static const struct xdg_surface_interface xdg_surface_implementation = {
@@ -848,6 +900,12 @@ xdg_wm_base_get_xdg_surface(struct wl_client*   client,
     struct redsurface* rsurf = surface->data;
     assert(rsurf);
 
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("creating XDG_surface. client: %d, rsurf: %d",
+        rsurf->rc->wl_client,
+        rsurf);
+#endif
+
     rsurf->xdg_surface = wl_resource_create(
       client, &xdg_surface_interface, wl_resource_get_version(resource), id);
     assert(rsurf->xdg_surface);
@@ -911,11 +969,11 @@ wl_global_bind_output(struct wl_client* client,
     wl_output_send_geometry(wl_output,
                             0,
                             0,
-                            300,
-                            200,
+                            600,
+                            340,
                             WL_OUTPUT_SUBPIXEL_UNKNOWN,
-                            "red-output-make",
-                            "red-output-model",
+                            "Dell Inc.",
+                            "DELL S2725QS",
                             WL_OUTPUT_TRANSFORM_NORMAL);
 
     uint32_t width  = rs->backend->get_width(rs->backend->d);
@@ -928,8 +986,12 @@ wl_global_bind_output(struct wl_client* client,
                         120 * 1000);
     if (version >= 2)
         wl_output_send_scale(wl_output, cfg.screen_scale);
-    if (version >= 4)
-        wl_output_send_name(wl_output, "red-1");
+
+    if (version >= 4) {
+        wl_output_send_name(wl_output, "DP-1");
+        wl_output_send_description(wl_output,
+                                   "Dell Inc. - DELL S2725QS - DP-1");
+    }
     wl_output_send_done(wl_output);
 }
 
@@ -946,6 +1008,9 @@ static const struct wl_keyboard_interface wl_keyboard_implementation = {
 int
 red_keyboard_send_enter(struct redclient* rc, struct wl_resource* wl_surface)
 {
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("keybord focus on client: %d", rc->wl_client)
+#endif
     uint32_t        serial = wl_display_next_serial(rc->rs->wl_display);
     struct wl_array keys;
     wl_array_init(&keys);
@@ -1049,6 +1114,10 @@ wl_seat_get_keyboard(struct wl_client*   client,
                      struct wl_resource* resource,
                      uint32_t            id)
 {
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("get keybord: %d", client)
+#endif
+
     struct redstate*    rs          = wl_resource_get_user_data(resource);
     struct wl_resource* wl_keyboard = wl_resource_create(
       client, &wl_keyboard_interface, wl_resource_get_version(resource), id);
@@ -1073,7 +1142,9 @@ wl_seat_get_keyboard(struct wl_client*   client,
         if (v->val->wl_client != client)
             continue;
 
-        v->val->wl_keyboard = wl_keyboard;
+        // TODO: multiple wl_keyboards?
+        if (!v->val->wl_keyboard)
+            v->val->wl_keyboard = wl_keyboard;
         break;
     }
 }
@@ -1132,6 +1203,7 @@ subsurface_set_position(struct wl_client*   client,
                         int32_t             x,
                         int32_t             y)
 {
+    // ROG("pos: %d,%d", x, y)
 }
 
 static void
@@ -1165,6 +1237,20 @@ static const struct wl_subsurface_interface subsurface_impl = {
 };
 
 static void
+wl_subsurface_resource_destroy(struct wl_resource* resource)
+{
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    assert(rsurf);
+    dll_for_each(rsurf->parent->subsurfs, v)
+    {
+        if (rsurf == v->val) {
+            dll_remove_val(rsurf->parent->subsurfs, rsurf);
+            break;
+        }
+    }
+}
+
+static void
 subcompositor_destroy(struct wl_client* c, struct wl_resource* r)
 {
     wl_resource_destroy(r);
@@ -1179,7 +1265,15 @@ subcompositor_get_subsurface(struct wl_client*   client,
 {
     struct wl_resource* r = wl_resource_create(
       client, &wl_subsurface_interface, wl_resource_get_version(resource), id);
-    wl_resource_set_implementation(r, &subsurface_impl, NULL, NULL);
+
+    struct redsurface* rsurf  = wl_resource_get_user_data(surface_resource);
+    struct redsurface* prsurf = wl_resource_get_user_data(parent_resource);
+
+    wl_resource_set_implementation(
+      r, &subsurface_impl, rsurf, wl_subsurface_resource_destroy);
+
+    rsurf->parent = prsurf;
+    dll_push_tail(prsurf->subsurfs, rsurf);
 }
 
 static const struct wl_subcompositor_interface subcompositor_impl = {
@@ -2127,7 +2221,7 @@ init_compositor(struct redstate* rs)
     }
 
     rs->wl_output = wl_global_create(
-      rs->wl_display, &wl_output_interface, 3, rs, wl_global_bind_output);
+      rs->wl_display, &wl_output_interface, 4, rs, wl_global_bind_output);
     if (!rs->wl_output) {
         ROG_ERR("could not create wl_output");
         goto fail;

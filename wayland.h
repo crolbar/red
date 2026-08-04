@@ -3,6 +3,7 @@
 #include "red.h"
 
 // #define RED_DEBUG_TRACK_CLIENT_CREATION
+// #define RED_DEBUG_TRACK_SURFACE_BUFS
 
 int
 init_compositor(struct redstate* rs);

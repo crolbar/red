@@ -245,7 +245,7 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
     }
 
     // NOTE: clunky fallback, find better solution
-    if (!rsurf->buffer_scale_set)
+    if (rsurf->xdg_toplevel && !rsurf->buffer_scale_set)
     // set buffer scale back to 1 if recived buffer's
     // width and height are not fitting the full screen
     {
