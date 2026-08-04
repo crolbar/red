@@ -34,7 +34,7 @@ red_send_pending_callbacks(struct redsurface* rsurf, uint32_t time_msec)
     if (!rsurf || rsurf->pending_cbs.size == 0)
         return 0;
 
-    for (size_t i = 0; i < rsurf->pending_cbs.size; i++) {
+    while (rsurf->pending_cbs.size > 0) {
         struct wl_resource* cb = dll_hpop(rsurf->pending_cbs);
         wl_callback_send_done(cb, time_msec);
         wl_resource_destroy(cb);
@@ -61,7 +61,23 @@ wl_surface_destroy(struct wl_client* client, struct wl_resource* resource)
 }
 
 static void
-wl_surface_buffer_resource_destroyed(struct wl_listener* listener, void* data)
+wl_surface_pending_buffer_resource_destroyed(struct wl_listener* listener,
+                                             void*               data)
+{
+    struct redsurface* rsurf =
+      wl_container_of(listener, rsurf, pending_buffer_destroyed);
+    if (!rsurf)
+        return;
+
+    wl_list_remove(&rsurf->pending_buffer_destroyed.link);
+    wl_list_init(&rsurf->pending_buffer_destroyed.link);
+
+    rsurf->pending_buffer = NULL;
+}
+
+static void
+wl_surface_current_buffer_resource_destroyed(struct wl_listener* listener,
+                                             void*               data)
 {
     struct redsurface* rsurf =
       wl_container_of(listener, rsurf, current_buffer_destroyed);
@@ -83,7 +99,17 @@ wl_surface_attach(struct wl_client*   client,
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     assert(rsurf);
+
+    wl_list_remove(&rsurf->pending_buffer_destroyed.link);
+
     rsurf->pending_buffer = buffer;
+
+    if (buffer != NULL) {
+        wl_resource_add_destroy_listener(buffer,
+                                         &rsurf->pending_buffer_destroyed);
+    } else {
+        wl_list_init(&rsurf->pending_buffer_destroyed.link);
+    }
 }
 
 static void
@@ -151,8 +177,21 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     assert(rs);
 
     // make pending buffer current if some is attached
-    if (rsurf->pending_buffer)
-        red_current_buffer_deref(rsurf);
+    // if (rsurf->pending_buffer)
+    //     red_current_buffer_deref(rsurf);
+    if (rsurf->pending_buffer) {
+        wl_list_remove(&rsurf->current_buffer_destroyed.link);
+
+        rsurf->current_buffer = rsurf->pending_buffer;
+        rsurf->pending_buffer = NULL;
+
+        if (rsurf->current_buffer != NULL) {
+            wl_resource_add_destroy_listener(rsurf->current_buffer,
+                                             &rsurf->current_buffer_destroyed);
+        } else {
+            wl_list_init(&rsurf->current_buffer_destroyed.link);
+        }
+    }
 
     if (!rs->focused_rt)
         return;
@@ -298,8 +337,11 @@ init_redsurface()
     rsurf->buffer_scale       = 1;
     rsurf->buffer_scale_set   = 0;
     rsurf->current_buffer_destroyed.notify =
-      wl_surface_buffer_resource_destroyed;
+      wl_surface_current_buffer_resource_destroyed;
     wl_list_init(&rsurf->current_buffer_destroyed.link);
+    rsurf->pending_buffer_destroyed.notify =
+      wl_surface_pending_buffer_resource_destroyed;
+    wl_list_init(&rsurf->pending_buffer_destroyed.link);
 
     return rsurf;
 }

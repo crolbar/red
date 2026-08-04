@@ -4,7 +4,7 @@
 struct timespec*
 time_get_now();
 
-uint32_t
+uint64_t
 time_get_now_msec();
 
 uint64_t

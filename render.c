@@ -228,6 +228,9 @@ redraw(struct redstate* rs)
            rs->backend->get_egl_display(rs->backend->d))) == -1)
         goto err;
 
+    if (rs->queued_rsurf)
+        wl_buffer_send_release(rs->queued_rsurf->current_buffer);
+
     rs->needs_redraw = 0;
     return;
     // TODO: better handling of errors here?
@@ -246,8 +249,8 @@ redraw_done(struct redstate* rs)
     rs->queued_rb = NULL;
 
     // rendering from `rs->queued_rsurf` done, deref current
-    if (rs->queued_rsurf)
-        red_current_buffer_deref(rs->queued_rsurf);
+    // if (rs->queued_rsurf)
+    //     red_current_buffer_deref(rs->queued_rsurf);
     rs->queued_rsurf = NULL;
 
     close(rs->pfds[RFD_REDRAWSYNC].fd);

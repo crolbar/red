@@ -82,9 +82,10 @@ struct redsurface
     int     buffer_scale_set;
 
     struct wl_resource* pending_buffer;           // set by wl_surface.attach
+    struct wl_listener  pending_buffer_destroyed; //
     struct wl_resource* current_buffer;           // set by wl_surface.commit
-    struct wl_listener  current_buffer_destroyed; // destroy of pending_buffer
     int                 current_buffer_ref;       // if ref == 0 buf is released
+    struct wl_listener  current_buffer_destroyed; //
     dll(struct wl_resource*) pending_cbs;         // set by wl_surface.frame
     int configured;                               // xdg_surface configure
 };

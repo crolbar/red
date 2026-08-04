@@ -14,12 +14,12 @@ time_get_now()
     return tp;
 }
 
-uint32_t
+uint64_t
 time_get_now_msec()
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
 uint64_t
