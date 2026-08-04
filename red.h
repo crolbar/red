@@ -86,7 +86,8 @@ struct redsurface
     struct wl_resource* current_buffer;           // set by wl_surface.commit
     int                 current_buffer_ref;       // if ref == 0 buf is released
     struct wl_listener  current_buffer_destroyed; //
-    dll(struct wl_resource*) pending_cbs;         // set by wl_surface.frame
+    dll(struct wl_resource*) pending_frame_cbs;   // wl_surface.frame
+    dll(struct wl_resource*) pending_pres_cbs;    // wp_presentation_feedback
     int configured;                               // xdg_surface configure
 };
 
@@ -167,6 +168,7 @@ struct redstate
     struct wl_global*     wp_viewporter;
     struct wl_global*     zwp_relative_pointer_manager;
     struct wl_global*     zwp_pointer_constraints;
+    struct wl_global*     wp_presentation;
     struct wl_global*     subcompositor_global;
     struct wl_global*     data_device_manager_global;
     struct wl_listener    client_created;

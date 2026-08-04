@@ -6,6 +6,7 @@
 #include "log.h"
 #include "opengl.h"
 #include "pointer-constraints-server-protocol.h"
+#include "presentation-time-server-protocol.h"
 #include "red.h"
 #include "relative-pointer-server-protocol.h"
 #include "render.h"
@@ -28,14 +29,32 @@
 #include <wayland-server.h>
 #include <wayland-util.h>
 
+static int seq = 0;
+
 int
 red_send_pending_callbacks(struct redsurface* rsurf, uint32_t time_msec)
 {
-    if (!rsurf || rsurf->pending_cbs.size == 0)
+    if (!rsurf)
         return 0;
 
-    while (rsurf->pending_cbs.size > 0) {
-        struct wl_resource* cb = dll_hpop(rsurf->pending_cbs);
+    while (rsurf->pending_pres_cbs.size > 0) {
+        struct wl_resource* cb = dll_hpop(rsurf->pending_pres_cbs);
+        wp_presentation_feedback_send_presented(
+          cb,
+          0,
+          0,
+          0,
+          8333333,
+          0,
+          seq++,
+          WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
+            WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK |
+            WP_PRESENTATION_FEEDBACK_KIND_HW_COMPLETION);
+        wl_resource_destroy(cb);
+    }
+
+    while (rsurf->pending_frame_cbs.size > 0) {
+        struct wl_resource* cb = dll_hpop(rsurf->pending_frame_cbs);
         wl_callback_send_done(cb, time_msec);
         wl_resource_destroy(cb);
     }
@@ -69,9 +88,6 @@ wl_surface_pending_buffer_resource_destroyed(struct wl_listener* listener,
     if (!rsurf)
         return;
 
-    wl_list_remove(&rsurf->pending_buffer_destroyed.link);
-    wl_list_init(&rsurf->pending_buffer_destroyed.link);
-
     rsurf->pending_buffer = NULL;
 }
 
@@ -83,9 +99,6 @@ wl_surface_current_buffer_resource_destroyed(struct wl_listener* listener,
       wl_container_of(listener, rsurf, current_buffer_destroyed);
     if (!rsurf)
         return;
-
-    wl_list_remove(&rsurf->current_buffer_destroyed.link);
-    wl_list_init(&rsurf->current_buffer_destroyed.link);
 
     rsurf->current_buffer = NULL;
 }
@@ -135,37 +148,7 @@ wl_surface_frame(struct wl_client*   client,
     assert(cb);
     wl_resource_set_implementation(cb, NULL, NULL, NULL);
 
-    dll_push_tail(rsurf->pending_cbs, cb);
-}
-
-// return 1 if released, 0 if not (ref count != 0)
-int
-red_current_buffer_deref(struct redsurface* rsurf)
-{
-    rsurf->current_buffer_ref = max(rsurf->current_buffer_ref - 1, 0);
-
-    // ref count reaches 0 we realese buf
-    // and if we have pending we make it current
-    if (rsurf->current_buffer_ref == 0) {
-        if (rsurf->current_buffer) {
-            wl_list_remove(&rsurf->current_buffer_destroyed.link);
-            wl_list_init(&rsurf->current_buffer_destroyed.link);
-            wl_buffer_send_release(rsurf->current_buffer);
-            rsurf->current_buffer = NULL;
-        }
-
-        if (rsurf->pending_buffer) {
-            rsurf->current_buffer = rsurf->pending_buffer;
-            rsurf->current_buffer_ref++;
-            rsurf->pending_buffer = NULL;
-
-            if (rsurf->current_buffer)
-                wl_resource_add_destroy_listener(
-                  rsurf->current_buffer, &rsurf->current_buffer_destroyed);
-        }
-        return 1;
-    }
-    return 0;
+    dll_push_tail(rsurf->pending_frame_cbs, cb);
 }
 
 static void
@@ -302,6 +285,7 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     if (red_is_client_valid(rsurf->rs, rsurf->rc))
         dll_remove_val(rsurf->rc->rsurfs, rsurf);
 
+    wl_list_remove(&rsurf->pending_buffer_destroyed.link);
     wl_list_remove(&rsurf->current_buffer_destroyed.link);
     gl_destroy_surface_texture(rsurf);
     if (rsurf)
@@ -323,7 +307,8 @@ init_redsurface()
     rsurf->pending_buffer     = NULL;
     rsurf->current_buffer     = NULL;
     rsurf->current_buffer_ref = 0;
-    rsurf->pending_cbs        = (typeof(rsurf->pending_cbs))dll_init();
+    rsurf->pending_frame_cbs  = (typeof(rsurf->pending_frame_cbs))dll_init();
+    rsurf->pending_pres_cbs   = (typeof(rsurf->pending_pres_cbs))dll_init();
     rsurf->wl_surface         = NULL;
     rsurf->xdg_toplevel       = NULL;
     rsurf->geom_x             = 0;
@@ -2037,6 +2022,46 @@ wl_global_bind_zwp_pointer_constraints(struct wl_client* client,
                                    NULL);
 }
 
+static void
+wp_presentation_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static void
+wp_presentation_feedback(struct wl_client*   client,
+                         struct wl_resource* resource,
+                         struct wl_resource* surface,
+                         uint32_t            callback)
+{
+    struct redstate* rs = wl_resource_get_user_data(resource);
+    assert(rs);
+
+    struct wl_resource* pres_cb = wl_resource_create(
+      client, &wp_presentation_feedback_interface, 2, callback);
+    assert(pres_cb);
+    wl_resource_set_implementation(pres_cb, NULL, NULL, NULL);
+
+    struct redsurface* rsurf = red_get_rsurf_by_wl_surf(rs, surface);
+    dll_push_tail(rsurf->pending_pres_cbs, pres_cb);
+}
+
+static const struct wp_presentation_interface wp_presentation_implementation = {
+    .destroy  = wp_presentation_destroy,
+    .feedback = wp_presentation_feedback,
+};
+
+static void
+wl_global_bind_wp_presentation(struct wl_client* client,
+                               void*             data,
+                               uint32_t          version,
+                               uint32_t          id)
+{
+    struct wl_resource* wp_presentation =
+      wl_resource_create(client, &wp_presentation_interface, version, id);
+    wl_resource_set_implementation(
+      wp_presentation, &wp_presentation_implementation, data, NULL);
+}
 void
 handle_wl_log(const char* _fmt, va_list args)
 {
@@ -2164,6 +2189,13 @@ init_compositor(struct redstate* rs)
                        rs,
                        wl_global_bind_zwp_pointer_constraints);
     assert(rs->zwp_pointer_constraints);
+
+    rs->wp_presentation = wl_global_create(rs->wl_display,
+                                           &wp_presentation_interface,
+                                           2,
+                                           rs,
+                                           wl_global_bind_wp_presentation);
+    assert(rs->wp_presentation);
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);

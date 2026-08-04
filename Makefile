@@ -45,8 +45,14 @@ LINUX_DMABUF_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/linux-dmabuf/linux-dmabuf-v1.
 VIEWPORTER_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/viewporter/viewporter.xml
 RELATIVE_POINTER_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/relative-pointer/relative-pointer-unstable-v1.xml
 POINTER_CONSTRAINTS_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml
+PRESENTATION_TIME_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/presentation-time/presentation-time.xml
 
 all: $(BINS)
+
+presentation-time-server-protocol.h: $(PRESENTATION_TIME_XML)
+	wayland-scanner server-header $< $@
+presentation-time-protocol.c: $(PRESENTATION_TIME_XML)
+	wayland-scanner private-code $< $@
 
 pointer-constraints-server-protocol.h: $(POINTER_CONSTRAINTS_XML)
 	wayland-scanner server-header $< $@
@@ -85,6 +91,8 @@ linux-dmabuf-protocol.c: $(LINUX_DMABUF_XML)
 PRO_SRC=linux-dmabuf-protocol.c \
 		 linux-dmabuf-client-protocol.h \
 		 linux-dmabuf-server-protocol.h \
+		 presentation-time-protocol.c \
+		 presentation-time-server-protocol.h \
 		 pointer-constraints-server-protocol.h \
 		 pointer-constraints-protocol.c \
 		 relative-pointer-server-protocol.h \

@@ -72,6 +72,19 @@ red_get_client_by_rsurf(struct redstate* rs, struct redsurface* rsurf)
     }
     return NULL;
 }
+struct redsurface*
+red_get_rsurf_by_wl_surf(struct redstate* rs, struct wl_resource* wl_surface)
+{
+    dll_for_each(rs->rcs, v_rc)
+    {
+        dll_for_each(v_rc->val->rsurfs, v)
+        {
+            if (v->val->wl_surface == wl_surface)
+                return v->val;
+        }
+    }
+    return NULL;
+}
 
 int
 red_is_rsurf_focused(struct redstate* rs, struct redsurface* rsurf)

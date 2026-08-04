@@ -56,6 +56,8 @@ struct redclient*
 red_get_client(struct redstate* rs, struct wl_client* wl_client);
 struct redclient*
 red_get_client_by_rsurf(struct redstate* rs, struct redsurface* rsurf);
+struct redsurface*
+red_get_rsurf_by_wl_surf(struct redstate* rs, struct wl_resource* wl_surface);
 
 int
 red_is_client_valid(struct redstate* rs, struct redclient* rc);
