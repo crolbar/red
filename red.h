@@ -62,6 +62,11 @@ struct redsubsurface
     struct redsurface* rsurf;
 };
 
+enum red_surf_commited
+{
+    RED_SURF_COMMITED_BUFFER = 1 << 0,
+};
+
 struct redsurface
 {
     struct redstate*    rs;
@@ -89,14 +94,20 @@ struct redsurface
     int32_t buffer_scale;
     int     buffer_scale_set;
 
+    uint32_t commited; // red_surf_commited bitmask
+
     struct wl_resource* pending_buffer;           // set by wl_surface.attach
     struct wl_listener  pending_buffer_destroyed; //
+
     struct wl_resource* current_buffer;           // set by wl_surface.commit
-    int                 current_buffer_ref;       // if ref == 0 buf is released
     struct wl_listener  current_buffer_destroyed; //
-    dll(struct wl_resource*) pending_frame_cbs;   // wl_surface.frame
-    dll(struct wl_resource*) pending_pres_cbs;    // wp_presentation_feedback
-    int configured;                               // xdg_surface configure
+    // 0 not init, 1 -> shm, 2 -> dma
+    int old_rendered_buf_type;
+
+    dll(struct wl_resource*) pending_frame_cbs; // wl_surface.frame
+    dll(struct wl_resource*) pending_pres_cbs;  // wp_presentation_feedback
+
+    int configured; // xdg_surface configure
 };
 
 struct redclient
@@ -216,8 +227,7 @@ struct redstate
     xkb_mod_mask_t     xkb_mods_locked;
     xkb_layout_index_t xkb_group;
 
-    struct redbuffer*  queued_rb;    // buffer we got queued rendering to
-    struct redsurface* queued_rsurf; // surface we got queued rendering from
+    struct redbuffer* queued_rb; // buffer we got queued rendering to
 };
 
 extern struct gl_proc* gl_proc;

@@ -38,3 +38,6 @@ red_get_scale(struct redsurface* rsurf);
 
 int
 red_current_buffer_deref(struct redsurface* rsurf);
+
+int
+red_current_buffer_release(struct redsurface* rsurf);

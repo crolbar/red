@@ -109,8 +109,14 @@ fail:
 int
 render_surface(struct redstate* rs, struct redsurface* rsurf)
 {
-    if (!rsurf->current_buffer)
-        return 0;
+    if (!rsurf->current_buffer) {
+        // if buff is null but we have tex while shm buf,
+        // we can just bind the old texture
+        if (rsurf->gl_tex && rsurf->old_rendered_buf_type == 1)
+            ;
+        else
+            return 0;
+    }
 
     CALL(glUseProgram(rs->program));
     if (gl_bind_texture_from_surface(rsurf))
@@ -166,7 +172,6 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
             if (render_surface(rs, v->val))
                 goto fail;
         }
-        rs->queued_rsurf = rsurf;
     }
 
     // render background color
@@ -232,20 +237,6 @@ redraw(struct redstate* rs)
            rs->backend->get_egl_display(rs->backend->d))) == -1)
         goto err;
 
-    if (rs->queued_rsurf) {
-        if (rs->queued_rsurf->current_buffer) {
-            wl_buffer_send_release(rs->queued_rsurf->current_buffer);
-            // rs->queued_rsurf->current_buffer = NULL;
-        }
-        dll_for_each(rs->queued_rsurf->subsurfs, v)
-        {
-            if (v->val->current_buffer) {
-                wl_buffer_send_release(v->val->current_buffer);
-                v->val->current_buffer = NULL;
-            }
-        }
-    }
-
     rs->needs_redraw = 0;
     return;
     // TODO: better handling of errors here?
@@ -254,6 +245,7 @@ err:
     rs->should_quit = 1;
 }
 
+// TODO: can we use `IN_FENCE_FD` instead?
 void
 redraw_done(struct redstate* rs)
 {
@@ -262,11 +254,6 @@ redraw_done(struct redstate* rs)
     // rendering on `rs->queued_rb` is done, push it
     rs->backend->push_buffer(rs, rs->queued_rb);
     rs->queued_rb = NULL;
-
-    // rendering from `rs->queued_rsurf` done, deref current
-    // if (rs->queued_rsurf)
-    //     red_current_buffer_deref(rs->queued_rsurf);
-    rs->queued_rsurf = NULL;
 
     close(rs->pfds[RFD_REDRAWSYNC].fd);
     rs->pfds[RFD_REDRAWSYNC].fd = -1;

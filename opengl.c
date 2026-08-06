@@ -150,6 +150,7 @@ gl_surface_texture_map_shm_image(struct redsurface*    rsurf,
     }
 
     wl_shm_buffer_end_access(shmbuf);
+    red_current_buffer_release(rsurf);
 
     CALL(glPixelStorei(GL_UNPACK_ROW_LENGTH, 0));
     CALL(glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0));
@@ -202,9 +203,11 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
     if ((shmbuf = wl_shm_buffer_get(buffer))) {
         src_w = wl_shm_buffer_get_width(shmbuf);
         src_h = wl_shm_buffer_get_height(shmbuf);
+        rsurf->old_rendered_buf_type = 1;
     } else if ((dmabuf = red_get_dmabuf(buffer))) {
         src_w = dmabuf->width;
         src_h = dmabuf->height;
+        rsurf->old_rendered_buf_type = 2;
     } else {
         ROG_ERR("not shm or dmabuf buffer");
         return 1;
@@ -294,17 +297,21 @@ gl_bind_texture_from_surface(struct redsurface* rsurf)
 {
     struct wl_resource* buffer = rsurf->current_buffer;
 
-    if (!rsurf->gl_tex)
-    // init texture && map buffer to texture
-    {
-        if (init_surface_texture_from_buffer(rsurf, buffer))
-            goto fail;
-    } else
-    // map new buffer to texture
-    {
-        if (gl_surface_texture_map_image(rsurf, buffer))
-            goto fail;
-    }
+    // when buffer is null, just bind old tex
+    if (buffer != NULL) {
+        if (!rsurf->gl_tex)
+        // init texture && map buffer to texture
+        {
+            if (init_surface_texture_from_buffer(rsurf, buffer))
+                goto fail;
+        } else
+        // map new buffer to texture
+        {
+            if (gl_surface_texture_map_image(rsurf, buffer))
+                goto fail;
+        }
+    } else if (buffer == NULL && !rsurf->gl_tex)
+        ROG("gl_bind_texture, called with buffer of NULL, and no old texture")
 
     // binding to texture unit 0
     CALL(glActiveTexture(GL_TEXTURE0));

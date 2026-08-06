@@ -122,8 +122,7 @@ main(int argc, char** argv)
     rs->vbo         = 0;
     rs->texture_loc = 0;
 
-    rs->queued_rb    = NULL;
-    rs->queued_rsurf = NULL;
+    rs->queued_rb = NULL;
 
     if (init_gl_proc()) {
         goto end;

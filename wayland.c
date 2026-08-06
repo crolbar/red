@@ -129,6 +129,7 @@ wl_surface_attach(struct wl_client*   client,
 
     wl_list_remove(&rsurf->pending_buffer_destroyed.link);
     rsurf->pending_buffer = buffer;
+    rsurf->commited |= RED_SURF_COMMITED_BUFFER;
 
     if (buffer != NULL) {
         wl_resource_add_destroy_listener(buffer,
@@ -167,6 +168,67 @@ wl_surface_frame(struct wl_client*   client,
     dll_push_tail(rsurf->pending_frame_cbs, cb);
 }
 
+// for shm should happen after `glTexImage2D` call
+// dma should be released after a new one is commited
+int
+red_current_buffer_release(struct redsurface* rsurf)
+{
+    assert(rsurf->current_buffer);
+
+    // if the attached pending buffer is the same as the one
+    // we are currently holding, we do not send release
+    if (rsurf->pending_buffer)
+        if (rsurf->pending_buffer == rsurf->current_buffer)
+            return 0;
+
+    wl_buffer_send_release(rsurf->current_buffer);
+    rsurf->current_buffer = NULL;
+    return 0;
+}
+
+int
+red_commit_handle_configure(struct redsurface* rsurf)
+{
+    if (rsurf->xdg_toplevel) {
+        struct wl_array a;
+        wl_array_init(&a);
+        xdg_toplevel_send_wm_capabilities(rsurf->xdg_toplevel, &a);
+        wl_array_release(&a);
+
+        red_send_configure(rsurf, 0, 0);
+    } else {
+        uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
+        xdg_surface_send_configure(rsurf->xdg_surface, serial);
+    }
+    return 0;
+}
+
+int
+red_commit_handle_attach(struct redsurface* rsurf)
+{
+    wl_list_remove(&rsurf->current_buffer_destroyed.link);
+
+    // TODO
+    if (rsurf->pending_buffer == NULL)
+        ROG("pending buffer NULL. handle!")
+
+    // when we are still holding the buffer and its not shm one
+    // it should be a dmabuf, that should be released now
+    if (rsurf->current_buffer && !wl_shm_buffer_get(rsurf->current_buffer))
+        red_current_buffer_release(rsurf);
+
+    rsurf->current_buffer = rsurf->pending_buffer;
+    rsurf->pending_buffer = NULL;
+
+    if (rsurf->current_buffer != NULL) {
+        wl_resource_add_destroy_listener(rsurf->current_buffer,
+                                         &rsurf->current_buffer_destroyed);
+    } else {
+        wl_list_init(&rsurf->current_buffer_destroyed.link);
+    }
+    return 0;
+}
+
 static void
 wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 {
@@ -191,42 +253,17 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
         ROG("req redraw")
 #endif
 
-    // on first commit, client is not sending a buffer
+    // on first commit, configure surface
     if (rsurf->xdg_surface && !rsurf->configured) {
-
-        if (rsurf->xdg_toplevel) {
-            struct wl_array a;
-            wl_array_init(&a);
-            xdg_toplevel_send_wm_capabilities(rsurf->xdg_toplevel, &a);
-            wl_array_release(&a);
-
-            red_send_configure(rsurf, 0, 0);
-        } else {
-            uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
-            xdg_surface_send_configure(rsurf->xdg_surface, serial);
-        }
+        red_commit_handle_configure(rsurf);
         return;
     }
 
-    // make pending buffer current if some is attached
-    if (rsurf->pending_buffer) {
-        wl_list_remove(&rsurf->current_buffer_destroyed.link);
+    // handle attached buffer
+    if (rsurf->commited & RED_SURF_COMMITED_BUFFER)
+        red_commit_handle_attach(rsurf);
 
-        // struct wl_resource* old_buffer = rsurf->current_buffer;
-
-        rsurf->current_buffer = rsurf->pending_buffer;
-        rsurf->pending_buffer = NULL;
-
-        if (rsurf->current_buffer != NULL) {
-            wl_resource_add_destroy_listener(rsurf->current_buffer,
-                                             &rsurf->current_buffer_destroyed);
-        } else {
-            wl_list_init(&rsurf->current_buffer_destroyed.link);
-        }
-
-        // if (old_buffer)
-        //     wl_buffer_send_release(old_buffer);
-    }
+    rsurf->commited = 0;
 
     if (!rs->focused_rt)
         return;
@@ -349,28 +386,29 @@ init_redsurface()
     if (!rsurf) {
         return NULL;
     }
-    rsurf->rs                 = NULL;
-    rsurf->rc                 = NULL;
-    rsurf->configured         = 0;
-    rsurf->pending_buffer     = NULL;
-    rsurf->current_buffer     = NULL;
-    rsurf->current_buffer_ref = 0;
-    rsurf->pending_frame_cbs  = (typeof(rsurf->pending_frame_cbs))dll_init();
-    rsurf->pending_pres_cbs   = (typeof(rsurf->pending_pres_cbs))dll_init();
-    rsurf->parent             = NULL;
-    rsurf->subsurfs           = (typeof(rsurf->subsurfs))dll_init();
-    rsurf->wl_surface         = NULL;
-    rsurf->xdg_toplevel       = NULL;
-    rsurf->geom_x             = 0;
-    rsurf->geom_y             = 0;
-    rsurf->geom_width         = 0;
-    rsurf->geom_height        = 0;
-    rsurf->geom_configured    = 0;
-    rsurf->gl_tex             = 0;
-    rsurf->gl_tex_h           = 0;
-    rsurf->gl_tex_w           = 0;
-    rsurf->buffer_scale       = 1;
-    rsurf->buffer_scale_set   = 0;
+    rsurf->rs                    = NULL;
+    rsurf->rc                    = NULL;
+    rsurf->configured            = 0;
+    rsurf->pending_buffer        = NULL;
+    rsurf->current_buffer        = NULL;
+    rsurf->old_rendered_buf_type = 0;
+    rsurf->commited              = 0;
+    rsurf->pending_frame_cbs     = (typeof(rsurf->pending_frame_cbs))dll_init();
+    rsurf->pending_pres_cbs      = (typeof(rsurf->pending_pres_cbs))dll_init();
+    rsurf->parent                = NULL;
+    rsurf->subsurfs              = (typeof(rsurf->subsurfs))dll_init();
+    rsurf->wl_surface            = NULL;
+    rsurf->xdg_toplevel          = NULL;
+    rsurf->geom_x                = 0;
+    rsurf->geom_y                = 0;
+    rsurf->geom_width            = 0;
+    rsurf->geom_height           = 0;
+    rsurf->geom_configured       = 0;
+    rsurf->gl_tex                = 0;
+    rsurf->gl_tex_h              = 0;
+    rsurf->gl_tex_w              = 0;
+    rsurf->buffer_scale          = 1;
+    rsurf->buffer_scale_set      = 0;
     rsurf->current_buffer_destroyed.notify =
       wl_surface_current_buffer_resource_destroyed;
     wl_list_init(&rsurf->current_buffer_destroyed.link);
