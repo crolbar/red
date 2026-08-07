@@ -128,7 +128,7 @@ gl_surface_texture_map_shm_image(struct redsurface*    rsurf,
 
     uint8_t* data        = wl_shm_buffer_get_data(shmbuf);
     int32_t  data_stride = wl_shm_buffer_get_stride(shmbuf);
-    GLenum   gl_fmt      = GL_RGBA;
+    GLenum   gl_fmt      = GL_BGRA_EXT;
 
     CALL(glPixelStorei(GL_UNPACK_SKIP_ROWS, y));
     CALL(glPixelStorei(GL_UNPACK_SKIP_PIXELS, x));
