@@ -26,8 +26,9 @@ backend_wayland_init_data()
     bw->gbm_dev      = NULL;
     bw->rb0          = NULL;
     bw->rb1          = NULL;
-    bw->width        = 1500;
-    bw->height       = 800;
+    bw->scale_factor = 2;
+    bw->width        = 1500*bw->scale_factor;
+    bw->height       = 800*bw->scale_factor;
     bw->used_rb      = 0;
     bw->scale_factor = 1;
     bw->drm_fd       = -1;
@@ -126,6 +127,7 @@ backend_wayland_push_buffer(void* data, redbuffer* rb)
     rb->free = 0;
     wl_surface_attach(bw->wc->wl_surface, rb->wl_buffer, 0, 0);
     wl_surface_damage_buffer(bw->wc->wl_surface, 0, 0, bw->width, bw->height);
+    wl_surface_set_buffer_scale(bw->wc->wl_surface, 2);
 
     bw->is_ready_for_frame = 0;
     struct wl_callback* cb = wl_surface_frame(bw->wc->wl_surface);

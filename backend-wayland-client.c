@@ -1,6 +1,5 @@
 #include "backend-wayland-client.h"
 #include "backend-wayland.h"
-#include "config.h"
 #include "input.h"
 #include "linux-dmabuf-client-protocol.h"
 #include "log.h"
@@ -60,11 +59,9 @@ wl_surface_preferred_buffer_scale(void*              data,
                                   struct wl_surface* wl_surface,
                                   int32_t            factor)
 {
-    // struct redstate*        rs = data;
-    // struct backend_wayland* bw = rs->backend->d;
-    // bw->scale_factor           = factor;
-    // bw->rb0->needs_resize      = 1;
-    // bw->rb1->needs_resize      = 1;
+    struct redstate*        rs = data;
+    struct backend_wayland* bw = rs->backend->d;
+    bw->scale_factor           = factor;
 }
 void
 wl_surface_preferred_buffer_transform(void*              data,
@@ -184,8 +181,8 @@ xdg_toplevel_configure(void*                data,
         bw->rb1->needs_resize = 1;
     }
 
-    bw->width  = width;
-    bw->height = height;
+    bw->width  = width * bw->scale_factor;
+    bw->height = height * bw->scale_factor;
 
     int       activated = 0;
     int       resizing  = 0;
@@ -305,16 +302,21 @@ wl_pointer_motion(void*              data,
                   wl_fixed_t         surface_x,
                   wl_fixed_t         surface_y)
 {
-    struct redstate* rs     = data;
-    uint32_t         width  = rs->backend->get_width(rs->backend->d);
-    uint32_t         height = rs->backend->get_height(rs->backend->d);
+    struct redstate*        rs     = data;
+    struct backend_wayland* bw     = rs->backend->d;
+    uint32_t                width  = rs->backend->get_width(rs->backend->d);
+    uint32_t                height = rs->backend->get_height(rs->backend->d);
 
     double x = wl_fixed_to_double(surface_x);
     double y = wl_fixed_to_double(surface_y);
 
-    int32_t scale = cfg.screen_scale;
+    int32_t scale = 1;
     if (rs->focused_rt && rs->focused_rt->rsurf)
         scale = red_get_scale(rs->focused_rt->rsurf);
+    if (scale == 1)
+        scale = bw->scale_factor;
+    else
+        scale = 1;
 
     x *= scale;
     y *= scale;
@@ -327,8 +329,8 @@ wl_pointer_motion(void*              data,
     if (rs->focused_rt && rs->focused_rt->rc->wl_pointer)
         wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
                                time,
-                               surface_x / scale,
-                               surface_y / scale);
+                               wl_fixed_from_double(x),
+                               wl_fixed_from_double(y));
 
     if (!rs->using_hardware_cursor)
         request_redraw(rs);

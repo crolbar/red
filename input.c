@@ -3,7 +3,7 @@
 #include "config.h"
 #include "log.h"
 #include "red.h"
-#include <errno.h>
+#include <errno.h> // IWYU pragma: keep
 #include <fcntl.h>
 #include <libinput.h>
 #include <linux/input.h>
@@ -351,29 +351,31 @@ input_pointer_motion(struct redstate* rs,
                      double           udx,
                      double           udy)
 {
-    if (red_pointer_send_relative_motion(rs, time_usec, dx, dy, udx, udy))
-        return 1;
 
-    if (rs->cursor_locked)
-        return 0;
+    if (!rs->cursor_locked) {
+        uint32_t width  = rs->backend->get_width(rs->backend->d);
+        uint32_t height = rs->backend->get_height(rs->backend->d);
 
-    uint32_t width  = rs->backend->get_width(rs->backend->d);
-    uint32_t height = rs->backend->get_height(rs->backend->d);
+        // TODO: add setting for this in cfg
+        double x = rs->cursor_x + udx * 0.4;
+        double y = rs->cursor_y + udy * 0.4;
 
-    // TODO: add setting for this in cfg
-    double x = rs->cursor_x + udx * 0.4;
-    double y = rs->cursor_y + udy * 0.4;
-
-    rs->cursor_x = max(min(x, (double)width), 0);
-    rs->cursor_y = max(min(y, (double)height), 0);
+        rs->cursor_x = max(min(x, (double)width), 0);
+        rs->cursor_y = max(min(y, (double)height), 0);
+    }
 
     if (time_msec - rs->cursor_last_motion_time < 8)
         return 0;
     rs->cursor_last_motion_time = time_msec;
 
-    if (red_pointer_send_motion(rs, time_msec))
+    if (red_pointer_send_relative_motion(rs, time_usec, dx, dy, udx, udy))
         return 1;
-    red_pointer_send_frame(rs);
+
+    if (!rs->cursor_locked) {
+        if (red_pointer_send_motion(rs, time_msec))
+            return 1;
+        red_pointer_send_frame(rs);
+    }
     return 0;
 }
 
