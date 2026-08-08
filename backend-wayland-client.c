@@ -1,5 +1,6 @@
 #include "backend-wayland-client.h"
 #include "backend-wayland.h"
+#include "compositor.h"
 #include "input.h"
 #include "linux-dmabuf-client-protocol.h"
 #include "log.h"
@@ -310,27 +311,15 @@ wl_pointer_motion(void*              data,
     double x = wl_fixed_to_double(surface_x);
     double y = wl_fixed_to_double(surface_y);
 
-    int32_t scale = 1;
-    if (rs->focused_rt && rs->focused_rt->rsurf)
-        scale = red_get_scale(rs->focused_rt->rsurf);
-    if (scale == 1)
-        scale = bw->scale_factor;
-    else
-        scale = 1;
+    int32_t scale = bw->scale_factor;
 
     x *= scale;
     y *= scale;
-    width *= scale;
-    height *= scale;
 
     rs->cursor_x = max(min(x, (double)width), 0);
     rs->cursor_y = max(min(y, (double)height), 0);
 
-    if (rs->focused_rt && rs->focused_rt->rc->wl_pointer)
-        wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
-                               time,
-                               wl_fixed_from_double(x),
-                               wl_fixed_from_double(y));
+    red_pointer_send_motion(rs, time);
 
     if (!rs->using_hardware_cursor)
         request_redraw(rs);

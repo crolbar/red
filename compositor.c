@@ -285,9 +285,7 @@ red_pointer_send_relative_motion(struct redstate* rs,
 int
 red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
 {
-    assert(!rs->is_wayland_client);
-
-    if (!rs->cursor_hidden) {
+    if (!rs->is_wayland_client && !rs->cursor_hidden) {
         struct itimerspec its = {
             .it_value    = { .tv_sec = cfg.cursor_autohide_time / 1000,
                              .tv_nsec =

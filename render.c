@@ -213,8 +213,8 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
         if (render_cursor(rs,
                           width,
                           height,
-                          red_get_lc_x(rs),
-                          red_get_lc_y(rs),
+                          rs->cursor_x,
+                          rs->cursor_y,
                           size,
                           size / 3))
             goto fail;
