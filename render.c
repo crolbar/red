@@ -121,26 +121,23 @@ render_surface(struct redstate*   rs,
             return 0;
     }
 
-    uint32_t w = 0;
-    uint32_t h = 0;
-
     CALL(glUseProgram(rs->program));
     if (rsurf->parent) {
         CALL(glEnable(GL_BLEND));
         CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
     }
 
-    if (gl_bind_texture_from_surface(rsurf, &w, &h))
+    if (gl_bind_texture_from_surface(rsurf))
         goto fail;
-    assert(w != 0 && h != 0);
+    assert(rsurf->w != 0 && rsurf->h != 0);
 
     CALL(glUniform2fv(rs->dimentions_loc,
                       3,
                       (GLfloat[]){
                         rsurf->x,
                         rsurf->y,
-                        w,
-                        h,
+                        rsurf->w,
+                        rsurf->h,
                         screen_width,
                         screen_height,
                       }));

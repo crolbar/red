@@ -78,14 +78,14 @@ struct redsurface
     struct redsurface* parent;
     dll(struct redsurface*) subsurfs;
 
-    // used in:
+    // set in:
     //   subsurf x and y
     int32_t x;
     int32_t y;
 
-    // shm buf texture image dimentions
-    int32_t gl_tex_w;
-    int32_t gl_tex_h;
+    // currently set when binding gl texture
+    int32_t w;
+    int32_t h;
 
     // gl texture
     GLuint gl_tex;
@@ -222,6 +222,7 @@ struct redstate
     // clients that have xdg_toplevel as wl_surface
     dll(struct redtoplevel*) rts; // red toplevels
     struct redtoplevel* focused_rt;
+    struct redsurface*  pointer_focused_rsurf;
 
     int                xkb_keymap_fd;
     char*              xkb_keymap_string;

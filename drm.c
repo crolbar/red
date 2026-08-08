@@ -90,8 +90,8 @@ drm_set_crct(struct backend_drm* bd, uint32_t buf_id)
                  bd->props->cp_src_h,
                  bd->cursor_plane_h << 16);
 
-        int x = (int)red_get_lc_x(bd->rs);
-        int y = (int)red_get_lc_y(bd->rs);
+        int x = (int)bd->rs->cursor_x;
+        int y = (int)bd->rs->cursor_y;
         add_prop(req, bd->cursor_plane_id, bd->props->cp_crtc_x, x);
         add_prop(req, bd->cursor_plane_id, bd->props->cp_crtc_y, y);
         add_prop(

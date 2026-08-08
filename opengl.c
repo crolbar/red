@@ -146,12 +146,9 @@ gl_surface_texture_map_shm_image(struct redsurface*    rsurf,
 
     wl_shm_buffer_begin_access(shmbuf);
 
-    if (rsurf->gl_tex_w != w || rsurf->gl_tex_h != h) {
+    if (rsurf->w != w || rsurf->h != h) {
         CALL(glTexImage2D(
           GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, gl_fmt, GL_UNSIGNED_BYTE, data));
-
-        rsurf->gl_tex_w = w;
-        rsurf->gl_tex_h = h;
     }
     // dimentions of texture image are the same, just replace data
     else {
@@ -202,9 +199,7 @@ fail:
 
 int
 gl_surface_texture_map_image(struct redsurface*  rsurf,
-                             struct wl_resource* buffer,
-                             uint32_t*           width,
-                             uint32_t*           height)
+                             struct wl_resource* buffer)
 {
     CALL(glBindTexture(GL_TEXTURE_2D, rsurf->gl_tex));
 
@@ -273,13 +268,14 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
         }
     }
 
-    *width  = w;
-    *height = h;
-
     if (shmbuf)
         gl_surface_texture_map_shm_image(rsurf, shmbuf, x, y, w, h);
     if (dmabuf)
         gl_surface_texture_map_egl_image(rsurf, dmabuf, x, y, w, h);
+
+    // using the old rsurf->w/h values in the shm tex image, so set these after
+    rsurf->w = w;
+    rsurf->h = h;
 
     return 0;
 fail:
@@ -288,9 +284,7 @@ fail:
 
 int
 init_surface_texture_from_buffer(struct redsurface*  rsurf,
-                                 struct wl_resource* buffer,
-                                 uint32_t*           width,
-                                 uint32_t*           height)
+                                 struct wl_resource* buffer)
 {
     CALL(glGenTextures(1, &rsurf->gl_tex));
     CALL(glBindTexture(GL_TEXTURE_2D, rsurf->gl_tex));
@@ -300,7 +294,7 @@ init_surface_texture_from_buffer(struct redsurface*  rsurf,
     CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 
-    if (gl_surface_texture_map_image(rsurf, buffer, width, height))
+    if (gl_surface_texture_map_image(rsurf, buffer))
         goto fail;
 
     CALL(glBindTexture(GL_TEXTURE_2D, 0));
@@ -310,9 +304,7 @@ fail:
 }
 
 int
-gl_bind_texture_from_surface(struct redsurface* rsurf,
-                             uint32_t*          width,
-                             uint32_t*          height)
+gl_bind_texture_from_surface(struct redsurface* rsurf)
 {
     struct wl_resource* buffer = rsurf->current_buffer;
 
@@ -321,22 +313,16 @@ gl_bind_texture_from_surface(struct redsurface* rsurf,
         if (!rsurf->gl_tex)
         // init texture && map buffer to texture
         {
-            if (init_surface_texture_from_buffer(rsurf, buffer, width, height))
+            if (init_surface_texture_from_buffer(rsurf, buffer))
                 goto fail;
         } else
         // map new buffer to texture
         {
-            if (gl_surface_texture_map_image(rsurf, buffer, width, height))
+            if (gl_surface_texture_map_image(rsurf, buffer))
                 goto fail;
         }
-    } else if (buffer == NULL && !rsurf->gl_tex) {
+    } else if (buffer == NULL && !rsurf->gl_tex)
         ROG("gl_bind_texture, called with buffer of NULL, and no old texture")
-    }
-    // shm buffer without a buffer
-    else {
-        *width  = rsurf->gl_tex_w;
-        *height = rsurf->gl_tex_h;
-    }
 
     // binding to texture unit 0
     CALL(glActiveTexture(GL_TEXTURE0));

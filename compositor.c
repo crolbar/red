@@ -25,6 +25,9 @@ red_get_lc_x(struct redstate* rs)
         if (rs->focused_rt->rsurf->geom_configured)
             x += rs->focused_rt->rsurf->geom_x;
 
+        if (rs->pointer_focused_rsurf)
+            x -= rs->pointer_focused_rsurf->x;
+
         x /= red_get_scale(rs->focused_rt->rsurf);
     } else {
         x /= cfg.screen_scale;
@@ -40,6 +43,9 @@ red_get_lc_y(struct redstate* rs)
     if (rs->focused_rt && rs->focused_rt->rsurf) {
         if (rs->focused_rt->rsurf->geom_configured)
             y += rs->focused_rt->rsurf->geom_y;
+
+        if (rs->pointer_focused_rsurf)
+            y -= rs->pointer_focused_rsurf->y;
 
         y /= red_get_scale(rs->focused_rt->rsurf);
     } else {
@@ -83,6 +89,56 @@ red_get_rsurf_by_wl_surf(struct redstate* rs, struct wl_resource* wl_surface)
         }
     }
     return NULL;
+}
+
+// using rs->cursor_x/y get the surface under that
+// currently only used for subsurface hit testing
+struct redsurface*
+red_hit_test(struct redstate* rs)
+{
+    assert(rs->focused_rt && rs->focused_rt->rsurf);
+    double x = rs->cursor_x;
+    double y = rs->cursor_y;
+    dll_for_each(rs->focused_rt->rsurf->subsurfs, v)
+    {
+        double sx = v->val->x;
+        double sy = v->val->y;
+        double sw = v->val->w;
+        double sh = v->val->h;
+
+        if (x < sx)
+            continue;
+        if (y < sy)
+            continue;
+
+        if (x > sx + sw)
+            continue;
+        if (y > sy + sh)
+            continue;
+
+        return v->val;
+    }
+    return rs->focused_rt->rsurf;
+}
+
+int
+red_update_pointer_focused_rsurf(struct redstate* rs)
+{
+    struct redsurface* ht_rsurf = red_hit_test(rs);
+    assert(ht_rsurf != NULL);
+
+    // focus has not changed, do nothing
+    if (ht_rsurf == rs->pointer_focused_rsurf)
+        return 0;
+
+    if (rs->pointer_focused_rsurf)
+        red_pointer_send_leave(rs->pointer_focused_rsurf->rc,
+                               rs->pointer_focused_rsurf->wl_surface);
+    red_pointer_send_enter(ht_rsurf->rc, ht_rsurf->wl_surface);
+
+    rs->pointer_focused_rsurf = ht_rsurf;
+
+    return 0;
 }
 
 int
@@ -308,6 +364,9 @@ red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
         return 0;
 
     if (rs->focused_rt && rs->focused_rt->rc->wl_pointer) {
+        if (red_update_pointer_focused_rsurf(rs))
+            return 1;
+
         wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
                                time_msec,
                                wl_fixed_from_double(red_get_lc_x(rs)),

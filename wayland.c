@@ -366,6 +366,9 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     ROG("destroing rsurf: %d", rsurf);
 #endif
 
+    if (rsurf->rs->pointer_focused_rsurf == rsurf)
+        rsurf->rs->pointer_focused_rsurf = NULL;
+
     // remove wl_surf from rsurfs of redclient
     if (red_is_client_valid(rsurf->rs, rsurf->rc))
         dll_remove_val(rsurf->rc->rsurfs, rsurf);
@@ -390,6 +393,8 @@ init_redsurface()
     rsurf->rc                    = NULL;
     rsurf->x                     = 0;
     rsurf->y                     = 0;
+    rsurf->w                     = 0;
+    rsurf->h                     = 0;
     rsurf->configured            = 0;
     rsurf->pending_buffer        = NULL;
     rsurf->current_buffer        = NULL;
@@ -407,8 +412,6 @@ init_redsurface()
     rsurf->geom_height           = 0;
     rsurf->geom_configured       = 0;
     rsurf->gl_tex                = 0;
-    rsurf->gl_tex_h              = 0;
-    rsurf->gl_tex_w              = 0;
     rsurf->buffer_scale          = 1;
     rsurf->buffer_scale_set      = 0;
     rsurf->current_buffer_destroyed.notify =
