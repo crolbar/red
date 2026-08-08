@@ -67,3 +67,8 @@ red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt);
 
 int
 red_is_rsurf_focused(struct redstate* rs, struct redsurface* rsurf);
+
+double
+red_get_rsurf_x(struct redsurface* rsurf);
+double
+red_get_rsurf_y(struct redsurface* rsurf);

@@ -1,6 +1,6 @@
 - [x]rendering
 - [x]surface scaling
-- [ ]subsurf, popup
+- [x]subsurf, popup
   - [x]subsurf hit testing + pointer events
     - [ ]subsurf ot top of subsurf hit testing breaks
 - [ ]wlr layers (overlay plane?)

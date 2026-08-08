@@ -2,6 +2,7 @@
 #include "config.h"
 #include "dll.h"
 #include "drm.h"
+#include "log.h"
 #include "red.h"
 #include "relative-pointer-server-protocol.h"
 #include "render.h"
@@ -21,14 +22,17 @@ red_get_lc_x(struct redstate* rs)
 
     // add decorations in account
     if (rs->focused_rt && rs->focused_rt->rsurf) {
+        uint32_t scale = red_get_scale(rs->focused_rt->rsurf);
+
         // add geom of surface, because we remove it
         if (rs->focused_rt->rsurf->geom_configured)
             x += rs->focused_rt->rsurf->geom_x;
 
         if (rs->pointer_focused_rsurf)
-            x -= rs->pointer_focused_rsurf->x;
+            x -= red_get_rsurf_x(rs->pointer_focused_rsurf);
 
-        x /= red_get_scale(rs->focused_rt->rsurf);
+        x /= scale;
+
     } else {
         x /= cfg.screen_scale;
     }
@@ -41,15 +45,40 @@ red_get_lc_y(struct redstate* rs)
     double y = rs->cursor_y;
 
     if (rs->focused_rt && rs->focused_rt->rsurf) {
+        uint32_t scale = red_get_scale(rs->focused_rt->rsurf);
+
         if (rs->focused_rt->rsurf->geom_configured)
             y += rs->focused_rt->rsurf->geom_y;
 
         if (rs->pointer_focused_rsurf)
-            y -= rs->pointer_focused_rsurf->y;
+            y -= red_get_rsurf_y(rs->pointer_focused_rsurf);
 
-        y /= red_get_scale(rs->focused_rt->rsurf);
+        y /= scale;
     } else {
         y /= cfg.screen_scale;
+    }
+    return y;
+}
+
+double
+red_get_rsurf_x(struct redsurface* rsurf)
+{
+    double   x     = rsurf->x;
+    uint32_t scale = red_get_scale(rsurf);
+    x *= scale;
+    if (rsurf->geom_configured) {
+        x -= rsurf->geom_x;
+    }
+    return x;
+}
+double
+red_get_rsurf_y(struct redsurface* rsurf)
+{
+    double   y     = rsurf->y;
+    uint32_t scale = red_get_scale(rsurf);
+    y *= scale;
+    if (rsurf->geom_configured) {
+        y -= rsurf->geom_y;
     }
     return y;
 }
@@ -94,17 +123,19 @@ red_get_rsurf_by_wl_surf(struct redstate* rs, struct wl_resource* wl_surface)
 // using rs->cursor_x/y get the surface under that
 // currently only used for subsurface hit testing
 struct redsurface*
-red_hit_test(struct redstate* rs)
+red_hit_test_r(struct redsurface* rsurf, double x, double y)
 {
-    assert(rs->focused_rt && rs->focused_rt->rsurf);
-    double x = rs->cursor_x;
-    double y = rs->cursor_y;
-    dll_for_each(rs->focused_rt->rsurf->subsurfs, v)
+    uint32_t scale = red_get_scale(rsurf);
+    dll_for_each(rsurf->subsurfs, v)
     {
-        double sx = v->val->x;
-        double sy = v->val->y;
-        double sw = v->val->w;
-        double sh = v->val->h;
+        double sx = v->val->x * scale;
+        double sy = v->val->y * scale;
+        double sw = (float)v->val->w;
+        double sh = (float)v->val->h;
+
+        struct redsurface* r;
+        if ((r = red_hit_test_r(v->val, x, y)))
+            return r;
 
         if (x < sx)
             continue;
@@ -118,6 +149,19 @@ red_hit_test(struct redstate* rs)
 
         return v->val;
     }
+    return NULL;
+}
+struct redsurface*
+red_hit_test(struct redstate* rs)
+{
+    assert(rs->focused_rt && rs->focused_rt->rsurf);
+    double x = rs->cursor_x;
+    double y = rs->cursor_y;
+
+    struct redsurface* ret;
+    if ((ret = red_hit_test_r(rs->focused_rt->rsurf, x, y)))
+        return ret;
+
     return rs->focused_rt->rsurf;
 }
 
@@ -148,9 +192,11 @@ red_is_rsurf_focused(struct redstate* rs, struct redsurface* rsurf)
         return 0;
     if (!rs->focused_rt->rsurf)
         return 0;
-
     if (!rsurf)
         return 0;
+
+    if (rsurf->parent)
+        return red_is_rsurf_focused(rs, rsurf->parent);
 
     return rs->focused_rt->rsurf == rsurf;
 }

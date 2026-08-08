@@ -134,8 +134,8 @@ render_surface(struct redstate*   rs,
     CALL(glUniform2fv(rs->dimentions_loc,
                       3,
                       (GLfloat[]){
-                        rsurf->x,
-                        rsurf->y,
+                        red_get_rsurf_x(rsurf),
+                        red_get_rsurf_y(rsurf),
                         rsurf->w,
                         rsurf->h,
                         screen_width,
@@ -158,6 +158,26 @@ fail:
     glDisable(GL_BLEND);
     glUseProgram(0);
     return 1;
+}
+
+int
+render_subsurfs(struct redsurface* rsurf,
+                uint32_t           screen_width,
+                uint32_t           screen_height)
+{
+    if (rsurf->subsurfs.size == 0)
+        return 0;
+
+    dll_for_each(rsurf->subsurfs, v)
+    {
+        if (render_surface(rsurf->rs, v->val, screen_width, screen_height))
+            return 1;
+
+        if (render_subsurfs(v->val, screen_width, screen_height))
+            return 1;
+    }
+
+    return 0;
 }
 
 int
@@ -189,12 +209,8 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
 
         if (render_surface(rs, rsurf, width, height))
             goto fail;
-
-        dll_for_each(rsurf->subsurfs, v)
-        {
-            if (render_surface(rs, v->val, width, height))
-                goto fail;
-        }
+        if (render_subsurfs(rsurf, width, height))
+            goto fail;
     }
 
     // render background color
@@ -207,13 +223,8 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     // render software cursor
     {
         int size = 16;
-        if (render_cursor(rs,
-                          width,
-                          height,
-                          rs->cursor_x,
-                          rs->cursor_y,
-                          size,
-                          size / 3))
+        if (render_cursor(
+              rs, width, height, rs->cursor_x, rs->cursor_y, size, size / 3))
             goto fail;
     }
 

@@ -19,6 +19,21 @@
 #define min(x, y) ((x) < (y)) ? (x) : (y)
 #define max(x, y) ((x) > (y)) ? (x) : (y)
 
+struct positioner_data
+{
+
+    int32_t  off_x;
+    int32_t  off_y;
+    int32_t  width;
+    int32_t  height;
+    uint32_t gravity;
+    uint32_t anchor;
+    int32_t  anchor_x;
+    int32_t  anchor_y;
+    int32_t  anchor_width;
+    int32_t  anchor_height;
+};
+
 struct dmabuf_plane
 {
     int32_t  fd;
@@ -74,12 +89,15 @@ struct redsurface
     struct wl_resource* wl_surface;
     struct wl_resource* xdg_surface;
     struct wl_resource* xdg_toplevel;
+    struct wl_resource* xdg_popup;
 
     struct redsurface* parent;
+    // containing subsurfaceses and xdg_popups
     dll(struct redsurface*) subsurfs;
 
     // set in:
     //   subsurf x and y
+    //   popup unscaled x and y
     int32_t x;
     int32_t y;
 

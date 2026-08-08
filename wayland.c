@@ -66,18 +66,24 @@ red_send_pending_callbacks(struct redsurface* rsurf, uint32_t time_msec)
 }
 
 int
+red_handle_send_callbacks(struct redsurface* rsurf, uint32_t time_msec)
+{
+    red_send_pending_callbacks(rsurf, time_msec);
+
+    dll_for_each(rsurf->subsurfs, v)
+      red_handle_send_callbacks(v->val, time_msec);
+    return 0;
+}
+
+int
 red_on_frame_done(struct redstate* rs, uint32_t time_msec)
 {
 #ifdef RED_DEBUG_TRACK_SURFACE_BUFS
     ROG("frame done");
 #endif
-    if (rs->focused_rt) {
-        red_send_pending_callbacks(rs->focused_rt->rsurf, time_msec);
-        dll_for_each(rs->focused_rt->rsurf->subsurfs, v)
-        {
-            red_send_pending_callbacks(v->val, time_msec);
-        }
-    }
+
+    if (rs->focused_rt)
+        red_handle_send_callbacks(rs->focused_rt->rsurf, time_msec);
 
     // if updates happened on page flip
     redraw(rs);
@@ -196,6 +202,16 @@ red_commit_handle_configure(struct redsurface* rsurf)
         wl_array_release(&a);
 
         red_send_configure(rsurf, 0, 0);
+    } else if (rsurf->xdg_popup) {
+        // NOTE: if we send this after we render, we will send scaled width and
+        // height as render stores buffer dimentions in w, h
+        xdg_popup_send_configure(rsurf->xdg_popup,
+                                 red_get_rsurf_x(rsurf),
+                                 red_get_rsurf_y(rsurf),
+                                 rsurf->w,
+                                 rsurf->h);
+        uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
+        xdg_surface_send_configure(rsurf->xdg_surface, serial);
     } else {
         uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
         xdg_surface_send_configure(rsurf->xdg_surface, serial);
@@ -312,8 +328,13 @@ wl_surface_set_buffer_scale(struct wl_client*   client,
 
     // if scale in changed, and surface is focused toplevel, send configure
     if (red_is_rsurf_focused(rsurf->rs, rsurf))
-        if (rsurf->buffer_scale != prev_scale)
-            red_rt_send_enter(rsurf->rs, rsurf->rs->focused_rt);
+        if (rsurf->buffer_scale != prev_scale) {
+            if (rsurf)
+                red_commit_handle_configure(rsurf);
+
+            if (rsurf->rs->backend->is_ready_for_frame(rsurf->rs->backend->d))
+                red_send_pending_callbacks(rsurf, time_get_now_msec());
+        }
 }
 
 static void
@@ -406,6 +427,7 @@ init_redsurface()
     rsurf->subsurfs              = (typeof(rsurf->subsurfs))dll_init();
     rsurf->wl_surface            = NULL;
     rsurf->xdg_toplevel          = NULL;
+    rsurf->xdg_popup             = NULL;
     rsurf->geom_x                = 0;
     rsurf->geom_y                = 0;
     rsurf->geom_width            = 0;
@@ -754,6 +776,20 @@ static const struct xdg_popup_interface xdg_popup_implementation = {
 };
 
 static void
+xdg_popup_resource_destroy(struct wl_resource* resource)
+{
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    assert(rsurf);
+    dll_for_each(rsurf->parent->subsurfs, v)
+    {
+        if (rsurf == v->val) {
+            dll_remove_val(rsurf->parent->subsurfs, rsurf);
+            break;
+        }
+    }
+}
+
+static void
 xdg_surface_destroy(struct wl_client* client, struct wl_resource* resource)
 {
     wl_resource_destroy(resource);
@@ -790,12 +826,79 @@ xdg_surface_get_popup(struct wl_client*   client,
                       struct wl_resource* parent,
                       struct wl_resource* positioner)
 {
+    struct redsurface*      rsurf    = wl_resource_get_user_data(resource);
+    struct redsurface*      prsurf   = wl_resource_get_user_data(parent);
+    struct positioner_data* pos_data = wl_resource_get_user_data(positioner);
+
     struct wl_resource* xdg_popup = wl_resource_create(
       client, &xdg_popup_interface, wl_resource_get_version(resource), id);
-    wl_resource_set_implementation(xdg_popup,
-                                   &xdg_popup_implementation,
-                                   wl_resource_get_user_data(resource),
-                                   NULL);
+    assert(xdg_popup);
+    wl_resource_set_implementation(
+      xdg_popup, &xdg_popup_implementation, rsurf, xdg_popup_resource_destroy);
+    rsurf->xdg_popup = xdg_popup;
+
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("popup: %d with pos: off_x: %d, off_y: %d, width: %d, height: %d, "
+        "gravity: %d, anchor: %d, anchor_x: %d, anchor_y: %d, anchor_width: "
+        "%d, anchor_height: %d",
+        rsurf,
+        pos_data->off_x,
+        pos_data->off_y,
+        pos_data->width,
+        pos_data->height,
+        pos_data->gravity,
+        pos_data->anchor,
+        pos_data->anchor_x,
+        pos_data->anchor_y,
+        pos_data->anchor_width,
+        pos_data->anchor_height);
+#endif
+
+    int32_t x = prsurf->x;
+    int32_t y = prsurf->y;
+
+    x += pos_data->anchor_x;
+    y += pos_data->anchor_y;
+
+    switch (pos_data->anchor) {
+        case XDG_POSITIONER_ANCHOR_TOP_LEFT:
+            break;
+        case XDG_POSITIONER_ANCHOR_BOTTOM_LEFT:
+            y += pos_data->anchor_height;
+            break;
+        case XDG_POSITIONER_ANCHOR_TOP_RIGHT:
+            x += pos_data->anchor_width;
+            break;
+        case XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT:
+            x += pos_data->anchor_width;
+            y += pos_data->anchor_height;
+            break;
+        default:
+            ROG_WARN("unhandled pos anchor!!");
+            break;
+    }
+    switch (pos_data->gravity) {
+        case XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT:
+            break;
+        case XDG_POSITIONER_GRAVITY_BOTTOM_LEFT:
+            x -= pos_data->width;
+            break;
+        default:
+            ROG_WARN("unhandled pos gravity!!");
+            break;
+    }
+
+    uint32_t scale = red_get_scale(rsurf);
+
+    x += pos_data->off_x / (int32_t)scale;
+    y += pos_data->off_y / (int32_t)scale;
+
+    rsurf->x      = x;
+    rsurf->y      = y;
+    rsurf->w      = pos_data->width;
+    rsurf->h      = pos_data->height;
+    rsurf->parent = prsurf;
+    dll_push_tail(prsurf->subsurfs, rsurf);
 }
 
 static void
@@ -847,6 +950,9 @@ xdg_positioner_set_size(struct wl_client*   client,
                         int32_t             width,
                         int32_t             height)
 {
+    struct positioner_data* pos_data = wl_resource_get_user_data(resource);
+    pos_data->width                  = width;
+    pos_data->height                 = height;
 }
 static void
 xdg_positioner_set_anchor_rect(struct wl_client*   client,
@@ -856,30 +962,42 @@ xdg_positioner_set_anchor_rect(struct wl_client*   client,
                                int32_t             width,
                                int32_t             height)
 {
+    struct positioner_data* pos_data = wl_resource_get_user_data(resource);
+    pos_data->anchor_x               = x;
+    pos_data->anchor_y               = y;
+    pos_data->anchor_width           = width;
+    pos_data->anchor_height          = height;
 }
 static void
 xdg_positioner_set_anchor(struct wl_client*   client,
                           struct wl_resource* resource,
                           uint32_t            anchor)
 {
+    struct positioner_data* pos_data = wl_resource_get_user_data(resource);
+    pos_data->anchor                 = anchor;
 }
 static void
 xdg_positioner_set_gravity(struct wl_client*   client,
                            struct wl_resource* resource,
                            uint32_t            gravity)
 {
-}
-static void
-xdg_positioner_set_constraint_adjustment(struct wl_client*   client,
-                                         struct wl_resource* resource,
-                                         uint32_t constraint_adjustment)
-{
+    struct positioner_data* pos_data = wl_resource_get_user_data(resource);
+    pos_data->gravity                = gravity;
 }
 static void
 xdg_positioner_set_offset(struct wl_client*   client,
                           struct wl_resource* resource,
                           int32_t             x,
                           int32_t             y)
+{
+    struct positioner_data* pos_data = wl_resource_get_user_data(resource);
+    pos_data->off_x                  = x;
+    pos_data->off_y                  = y;
+}
+static void
+xdg_positioner_set_constraint_adjustment(struct wl_client*   client,
+                                         struct wl_resource* resource,
+                                         uint32_t constraint_adjustment)
 {
 }
 static void
@@ -915,6 +1033,13 @@ static const struct xdg_positioner_interface xdg_positioner_implementation = {
 };
 
 static void
+xdg_positioner_resource_destroy(struct wl_resource* resource)
+{
+    struct positioner_data* pos_data = wl_resource_get_user_data(resource);
+    free(pos_data);
+}
+
+static void
 xdg_wm_base_destroy(struct wl_client* client, struct wl_resource* resource)
 {
     wl_resource_destroy(resource);
@@ -925,13 +1050,26 @@ xdg_wm_base_create_positioner(struct wl_client*   client,
                               struct wl_resource* resource,
                               uint32_t            id)
 {
+    struct positioner_data* pos_data;
+    pos_data                = calloc(1, sizeof(*pos_data));
+    pos_data->off_x         = 0;
+    pos_data->off_y         = 0;
+    pos_data->width         = 0;
+    pos_data->height        = 0;
+    pos_data->gravity       = 0;
+    pos_data->anchor        = 0;
+    pos_data->anchor_x      = 0;
+    pos_data->anchor_y      = 0;
+    pos_data->anchor_width  = 0;
+    pos_data->anchor_height = 0;
+
     struct wl_resource* xdg_positioner = wl_resource_create(
       client, &xdg_positioner_interface, wl_resource_get_version(resource), id);
     assert(xdg_positioner);
     wl_resource_set_implementation(xdg_positioner,
                                    &xdg_positioner_implementation,
-                                   wl_resource_get_user_data(resource),
-                                   NULL);
+                                   pos_data,
+                                   xdg_positioner_resource_destroy);
 }
 
 static void
@@ -1247,8 +1385,8 @@ subsurface_set_position(struct wl_client*   client,
                         int32_t             y)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
-    rsurf->x                 = x * red_get_scale(rsurf);
-    rsurf->y                 = y * red_get_scale(rsurf);
+    rsurf->x                 = x;
+    rsurf->y                 = y;
 }
 
 static void
