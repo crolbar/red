@@ -57,7 +57,7 @@ int
 gl_setup_program(struct redstate* rs);
 
 int
-gl_bind_texture_from_surface(struct redsurface* rsurf);
+gl_bind_texture_from_surface(struct redsurface* rsurf, uint32_t* width, uint32_t* height);
 
 void
 gl_destroy_surface_texture(struct redsurface* rsurf);

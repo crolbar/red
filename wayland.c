@@ -388,6 +388,8 @@ init_redsurface()
     }
     rsurf->rs                    = NULL;
     rsurf->rc                    = NULL;
+    rsurf->x                     = 0;
+    rsurf->y                     = 0;
     rsurf->configured            = 0;
     rsurf->pending_buffer        = NULL;
     rsurf->current_buffer        = NULL;
@@ -1241,7 +1243,9 @@ subsurface_set_position(struct wl_client*   client,
                         int32_t             x,
                         int32_t             y)
 {
-    // ROG("pos: %d,%d", x, y)
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    rsurf->x                 = x * red_get_scale(rsurf);
+    rsurf->y                 = y * red_get_scale(rsurf);
 }
 
 static void

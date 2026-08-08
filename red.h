@@ -78,6 +78,11 @@ struct redsurface
     struct redsurface* parent;
     dll(struct redsurface*) subsurfs;
 
+    // used in:
+    //   subsurf x and y
+    int32_t x;
+    int32_t y;
+
     // shm buf texture image dimentions
     int32_t gl_tex_w;
     int32_t gl_tex_h;
@@ -196,6 +201,7 @@ struct redstate
     GLuint vao;
     GLuint vbo;
     GLint  texture_loc;
+    GLint  dimentions_loc;
 
     GLuint   cursor_gl_program;
     GLuint   cursor_gl_vao;

@@ -2,7 +2,6 @@
 #include "config.h"
 #include "dll.h"
 #include "drm.h"
-#include "log.h"
 #include "red.h"
 #include "relative-pointer-server-protocol.h"
 #include "render.h"

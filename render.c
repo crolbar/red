@@ -107,7 +107,10 @@ fail:
 }
 
 int
-render_surface(struct redstate* rs, struct redsurface* rsurf)
+render_surface(struct redstate*   rs,
+               struct redsurface* rsurf,
+               uint32_t           screen_width,
+               uint32_t           screen_height)
 {
     if (!rsurf->current_buffer) {
         // if buff is null but we have tex while shm buf,
@@ -118,21 +121,44 @@ render_surface(struct redstate* rs, struct redsurface* rsurf)
             return 0;
     }
 
+    uint32_t w = 0;
+    uint32_t h = 0;
+
     CALL(glUseProgram(rs->program));
-    if (gl_bind_texture_from_surface(rsurf))
+    if (rsurf->parent) {
+        CALL(glEnable(GL_BLEND));
+        CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+    }
+
+    if (gl_bind_texture_from_surface(rsurf, &w, &h))
         goto fail;
+    assert(w != 0 && h != 0);
+
+    CALL(glUniform2fv(rs->dimentions_loc,
+                      3,
+                      (GLfloat[]){
+                        rsurf->x,
+                        rsurf->y,
+                        w,
+                        h,
+                        screen_width,
+                        screen_height,
+                      }));
+
     CALL(glBindVertexArray(rs->vao));
 
     CALL(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
 
     CALL(glBindVertexArray(0));
     CALL(glBindTexture(GL_TEXTURE_2D, 0));
+    CALL(glDisable(GL_BLEND));
     CALL(glUseProgram(0));
 
     return 0;
 fail:
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_BLEND);
     glUseProgram(0);
     return 1;
 }
@@ -164,12 +190,12 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
         if (!(rsurf = rs->focused_rt->rsurf))
             return 0;
 
-        if (render_surface(rs, rsurf))
+        if (render_surface(rs, rsurf, width, height))
             goto fail;
 
         dll_for_each(rsurf->subsurfs, v)
         {
-            if (render_surface(rs, v->val))
+            if (render_surface(rs, v->val, width, height))
                 goto fail;
         }
     }

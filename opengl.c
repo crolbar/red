@@ -2,6 +2,7 @@
 #include "opengl.h"
 #include "red.h"
 #include "wayland.h"
+#include <GLES2/gl2ext.h>
 #include <GLES3/gl3.h>
 #include <drm/drm_fourcc.h>
 #include <string.h>
@@ -9,10 +10,18 @@
 static const char* vertex_shader_src = "\
 #version 300 es\n\
 precision highp float;\n\
+uniform vec2 dim[3];\n\
 in vec2 pos;\n\
 out vec2 v_uv;\n\
 void main() {\n\
-    gl_Position = vec4(pos, 0.0, 1.0);\n\
+    vec2 p = pos;\n\
+    p *= vec2(dim[1][0], dim[1][1]);\n\
+    p -= vec2(abs(dim[1][0] - dim[2][0]), abs(dim[1][1] - dim[2][1]));\n\
+    p *= vec2(1.0 / dim[2][0], 1.0 / dim[2][1]);\n\
+    float x = (dim[0][0] / dim[2][0]) * 2.0;\n\
+    float y = (dim[0][1] / dim[2][1]) * 2.0;\n\
+    p += vec2(x, y);\n\
+    gl_Position = vec4(p, 0.0, 1.0);\n\
     v_uv = (pos + 1.0) / 2.0;\n\
 }";
 
@@ -87,8 +96,9 @@ gl_setup_program(struct redstate* rs)
     if (ok == GL_FALSE)
         return 0;
 
-    rs->texture_loc = glGetAttribLocation(rs->program, "u_texture");
-    GLuint pos      = glGetAttribLocation(rs->program, "pos");
+    rs->texture_loc    = glGetAttribLocation(rs->program, "u_texture");
+    GLuint pos         = glGetAttribLocation(rs->program, "pos");
+    rs->dimentions_loc = glGetUniformLocation(rs->program, "dim");
 
     const float vertices[] = {
         -1, -1, // top left
@@ -192,7 +202,9 @@ fail:
 
 int
 gl_surface_texture_map_image(struct redsurface*  rsurf,
-                             struct wl_resource* buffer)
+                             struct wl_resource* buffer,
+                             uint32_t*           width,
+                             uint32_t*           height)
 {
     CALL(glBindTexture(GL_TEXTURE_2D, rsurf->gl_tex));
 
@@ -201,12 +213,12 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
     struct wl_shm_buffer* shmbuf = NULL;
     struct dmabuf*        dmabuf = NULL;
     if ((shmbuf = wl_shm_buffer_get(buffer))) {
-        src_w = wl_shm_buffer_get_width(shmbuf);
-        src_h = wl_shm_buffer_get_height(shmbuf);
+        src_w                        = wl_shm_buffer_get_width(shmbuf);
+        src_h                        = wl_shm_buffer_get_height(shmbuf);
         rsurf->old_rendered_buf_type = 1;
     } else if ((dmabuf = red_get_dmabuf(buffer))) {
-        src_w = dmabuf->width;
-        src_h = dmabuf->height;
+        src_w                        = dmabuf->width;
+        src_h                        = dmabuf->height;
         rsurf->old_rendered_buf_type = 2;
     } else {
         ROG_ERR("not shm or dmabuf buffer");
@@ -261,6 +273,9 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
         }
     }
 
+    *width  = w;
+    *height = h;
+
     if (shmbuf)
         gl_surface_texture_map_shm_image(rsurf, shmbuf, x, y, w, h);
     if (dmabuf)
@@ -273,7 +288,9 @@ fail:
 
 int
 init_surface_texture_from_buffer(struct redsurface*  rsurf,
-                                 struct wl_resource* buffer)
+                                 struct wl_resource* buffer,
+                                 uint32_t*           width,
+                                 uint32_t*           height)
 {
     CALL(glGenTextures(1, &rsurf->gl_tex));
     CALL(glBindTexture(GL_TEXTURE_2D, rsurf->gl_tex));
@@ -283,7 +300,7 @@ init_surface_texture_from_buffer(struct redsurface*  rsurf,
     CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 
-    if (gl_surface_texture_map_image(rsurf, buffer))
+    if (gl_surface_texture_map_image(rsurf, buffer, width, height))
         goto fail;
 
     CALL(glBindTexture(GL_TEXTURE_2D, 0));
@@ -293,7 +310,9 @@ fail:
 }
 
 int
-gl_bind_texture_from_surface(struct redsurface* rsurf)
+gl_bind_texture_from_surface(struct redsurface* rsurf,
+                             uint32_t*          width,
+                             uint32_t*          height)
 {
     struct wl_resource* buffer = rsurf->current_buffer;
 
@@ -302,16 +321,22 @@ gl_bind_texture_from_surface(struct redsurface* rsurf)
         if (!rsurf->gl_tex)
         // init texture && map buffer to texture
         {
-            if (init_surface_texture_from_buffer(rsurf, buffer))
+            if (init_surface_texture_from_buffer(rsurf, buffer, width, height))
                 goto fail;
         } else
         // map new buffer to texture
         {
-            if (gl_surface_texture_map_image(rsurf, buffer))
+            if (gl_surface_texture_map_image(rsurf, buffer, width, height))
                 goto fail;
         }
-    } else if (buffer == NULL && !rsurf->gl_tex)
+    } else if (buffer == NULL && !rsurf->gl_tex) {
         ROG("gl_bind_texture, called with buffer of NULL, and no old texture")
+    }
+    // shm buffer without a buffer
+    else {
+        *width  = rsurf->gl_tex_w;
+        *height = rsurf->gl_tex_h;
+    }
 
     // binding to texture unit 0
     CALL(glActiveTexture(GL_TEXTURE0));

@@ -1,7 +1,9 @@
 - [x]rendering
-  - [ ]dmabuf sync
-- [ ]overlay (subsurface...)
 - [x]surface scaling
+- [ ]subsurf, popup
+  - [ ]subsurf hit testing + pointer events
+- [ ]wlr layers (overlay plane?)
+- [ ]ipc
 
 - [ ]run through valgrind (proper memory management)
 
