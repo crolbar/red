@@ -231,7 +231,7 @@ red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
         red_keyboard_send_enter(rt->rc, rt->rsurf->wl_surface);
 
     if (rt->rsurf)
-        red_send_configure(rt->rsurf, 1, 0);
+        red_send_toplevel_configure(rt->rsurf, 1, 0);
 
     if (rs->backend->is_ready_for_frame(rs->backend->d))
         red_send_pending_callbacks(rt->rsurf, time_get_now_msec());
@@ -252,7 +252,7 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
             red_keyboard_send_leave(frt->rc, frt->rsurf->wl_surface);
 
         if (frt->rsurf)
-            red_send_configure(frt->rsurf, 0, 0);
+            red_send_toplevel_configure(frt->rsurf, 0, 0);
     }
     frt = NULL;
 

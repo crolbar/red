@@ -267,7 +267,7 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
             if (w != (int32_t)width && h != (int32_t)height) {
                 rsurf->buffer_scale     = 1;
                 rsurf->buffer_scale_set = 1;
-                red_send_configure(rsurf, 1, 0);
+                red_send_toplevel_configure(rsurf, 1, 0);
             }
         }
     }

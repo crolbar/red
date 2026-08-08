@@ -197,7 +197,7 @@ xdg_toplevel_configure(void*                data,
     }
 
     if (rs->focused_rt && rs->focused_rt->rsurf)
-        red_send_configure(rs->focused_rt->rsurf, activated, resizing);
+        red_send_toplevel_configure(rs->focused_rt->rsurf, activated, resizing);
 }
 
 void

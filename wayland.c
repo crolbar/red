@@ -201,17 +201,9 @@ red_commit_handle_configure(struct redsurface* rsurf)
         xdg_toplevel_send_wm_capabilities(rsurf->xdg_toplevel, &a);
         wl_array_release(&a);
 
-        red_send_configure(rsurf, 0, 0);
+        red_send_toplevel_configure(rsurf, 0, 0);
     } else if (rsurf->xdg_popup) {
-        // NOTE: if we send this after we render, we will send scaled width and
-        // height as render stores buffer dimentions in w, h
-        xdg_popup_send_configure(rsurf->xdg_popup,
-                                 red_get_rsurf_x(rsurf),
-                                 red_get_rsurf_y(rsurf),
-                                 rsurf->w,
-                                 rsurf->h);
-        uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
-        xdg_surface_send_configure(rsurf->xdg_surface, serial);
+        red_send_popup_configure(rsurf);
     } else {
         uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
         xdg_surface_send_configure(rsurf->xdg_surface, serial);
@@ -706,7 +698,9 @@ red_get_scale(struct redsurface* rsurf)
 }
 
 int
-red_send_configure(struct redsurface* rsurf, int activated, int resizing)
+red_send_toplevel_configure(struct redsurface* rsurf,
+                            int                activated,
+                            int                resizing)
 {
     // rsurf->configured = 0;
 
@@ -745,6 +739,21 @@ red_send_configure(struct redsurface* rsurf, int activated, int resizing)
     uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
     xdg_surface_send_configure(rsurf->xdg_surface, serial);
 
+    return 0;
+}
+
+int
+red_send_popup_configure(struct redsurface* rsurf)
+{
+    // NOTE: if we send this after we render, we will send scaled width and
+    // height as render stores buffer dimentions in w, h
+    xdg_popup_send_configure(rsurf->xdg_popup,
+                             red_get_rsurf_x(rsurf),
+                             red_get_rsurf_y(rsurf),
+                             rsurf->w,
+                             rsurf->h);
+    uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
+    xdg_surface_send_configure(rsurf->xdg_surface, serial);
     return 0;
 }
 
@@ -787,6 +796,8 @@ xdg_popup_resource_destroy(struct wl_resource* resource)
             break;
         }
     }
+    rsurf->xdg_popup = NULL;
+    rsurf->parent    = NULL;
 }
 
 static void
@@ -899,6 +910,7 @@ xdg_surface_get_popup(struct wl_client*   client,
     rsurf->h      = pos_data->height;
     rsurf->parent = prsurf;
     dll_push_tail(prsurf->subsurfs, rsurf);
+    red_send_popup_configure(rsurf);
 }
 
 static void
