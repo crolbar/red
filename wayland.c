@@ -386,6 +386,9 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     ROG("destroing rsurf: %d", rsurf);
 #endif
 
+    if (rsurf->rs->keyboard_focused_rsurf == rsurf)
+        red_keyboard_send_leave_and_find_new(rsurf);
+
     if (rsurf->rs->pointer_focused_rsurf == rsurf)
         rsurf->rs->pointer_focused_rsurf = NULL;
 
@@ -1217,23 +1220,50 @@ static const struct wl_keyboard_interface wl_keyboard_implementation = {
 };
 
 int
-red_keyboard_send_enter(struct redclient* rc, struct wl_resource* wl_surface)
+red_keyboard_send_enter(struct redsurface* rsurf)
 {
 #ifdef RED_DEBUG_TRACK_CLIENT_CREATION
     ROG("keybord focus on client: %d", rc->wl_client)
 #endif
-    uint32_t        serial = wl_display_next_serial(rc->rs->wl_display);
+    // we must send leave on the exclusive surf first
+    if (rsurf->rs->keyboard_focused_rsurf_exclusive)
+        return 0;
+
+    if (rsurf->rs->keyboard_focused_rsurf)
+        red_keyboard_send_leave(rsurf->rs->keyboard_focused_rsurf);
+
+    if (!rsurf->rc->wl_keyboard)
+        return 0;
+
+    uint32_t        serial = wl_display_next_serial(rsurf->rs->wl_display);
     struct wl_array keys;
     wl_array_init(&keys);
-    wl_keyboard_send_enter(rc->wl_keyboard, serial, wl_surface, &keys);
+    wl_keyboard_send_enter(
+      rsurf->rc->wl_keyboard, serial, rsurf->wl_surface, &keys);
     wl_array_release(&keys);
+    rsurf->rs->keyboard_focused_rsurf = rsurf;
     return 0;
 }
 int
-red_keyboard_send_leave(struct redclient* rc, struct wl_resource* wl_surface)
+red_keyboard_send_leave(struct redsurface* rsurf)
 {
-    uint32_t serial = wl_display_next_serial(rc->rs->wl_display);
-    wl_keyboard_send_leave(rc->wl_keyboard, serial, wl_surface);
+    if (rsurf->rs->keyboard_focused_rsurf == rsurf) {
+        rsurf->rs->keyboard_focused_rsurf           = NULL;
+        rsurf->rs->keyboard_focused_rsurf_exclusive = 0;
+    }
+    if (!rsurf->rc->wl_keyboard)
+        return 0;
+
+    uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
+    wl_keyboard_send_leave(rsurf->rc->wl_keyboard, serial, rsurf->wl_surface);
+    return 0;
+}
+int
+red_keyboard_send_leave_and_find_new(struct redsurface* rsurf)
+{
+    red_keyboard_send_leave(rsurf);
+    if (rsurf->rs->focused_rt && rsurf->rs->focused_rt->rsurf)
+        red_keyboard_send_enter(rsurf->rs->focused_rt->rsurf);
     return 0;
 }
 
@@ -2419,6 +2449,22 @@ zwlr_layer_surface_set_keyboard_interactivity(struct wl_client*   client,
                                               struct wl_resource* resource,
                                               uint32_t keyboard_interactivity)
 {
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    switch (keyboard_interactivity) {
+        case ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE:
+            if (rsurf->rs->keyboard_focused_rsurf == rsurf) {
+                rsurf->rs->keyboard_focused_rsurf_exclusive = 0;
+                red_keyboard_send_leave_and_find_new(rsurf);
+            }
+            break;
+        case ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE:
+            red_keyboard_send_enter(rsurf);
+            rsurf->rs->keyboard_focused_rsurf_exclusive = 1;
+            break;
+        case ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND:
+            ROG_WARN("on demand keyboard interactivity not implemented!");
+            break;
+    }
 }
 static void
 zwlr_layer_surface_get_popup(struct wl_client*   client,

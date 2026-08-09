@@ -90,21 +90,34 @@ main(int argc, char** argv)
         goto end;
     }
 
-    rs->wl_display             = NULL;
-    rs->wl_event_loop          = NULL;
-    rs->wl_compositor          = NULL;
-    rs->xdg_wm_base            = NULL;
-    rs->xdg_decoration_manager = NULL;
-    rs->wl_output              = NULL;
-    rs->wl_seat                = NULL;
-    rs->zwp_linux_dmabuf       = NULL;
-    rs->needs_redraw           = 1;
-    rs->should_draw            = 0;
+    rs->wl_display                   = NULL;
+    rs->wl_event_loop                = NULL;
+    rs->wl_compositor                = NULL;
+    rs->xdg_wm_base                  = NULL;
+    rs->xdg_decoration_manager       = NULL;
+    rs->wl_output                    = NULL;
+    rs->wl_seat                      = NULL;
+    rs->zwp_linux_dmabuf             = NULL;
+    rs->wp_viewporter                = NULL;
+    rs->zwp_relative_pointer_manager = NULL;
+    rs->zwp_pointer_constraints      = NULL;
+    rs->zwlr_layer_shell             = NULL;
+    rs->wp_presentation              = NULL;
+    rs->subcompositor_global         = NULL;
+    rs->data_device_manager_global   = NULL;
+    rs->client_created               = (struct wl_listener){};
 
-    rs->rcs          = (typeof(rs->rcs))dll_init();
-    rs->rts          = (typeof(rs->rts))dll_init();
-    rs->layer_rsurfs = (typeof(rs->layer_rsurfs))dll_init();
-    rs->focused_rt   = NULL;
+    rs->needs_redraw = 1;
+    rs->should_draw  = 0;
+
+    rs->rcs                   = (typeof(rs->rcs))dll_init();
+    rs->rts                   = (typeof(rs->rts))dll_init();
+    rs->layer_rsurfs          = (typeof(rs->layer_rsurfs))dll_init();
+    rs->focused_rt            = NULL;
+    rs->pointer_focused_rsurf = NULL;
+
+    rs->keyboard_focused_rsurf           = NULL;
+    rs->keyboard_focused_rsurf_exclusive = 0;
 
     rs->cursor_gl_program       = 0;
     rs->cursor_gl_vao           = 0;
@@ -118,10 +131,11 @@ main(int argc, char** argv)
     rs->cursor_locked           = 0;
     rs->cursor_hidden           = 0;
 
-    rs->program     = 0;
-    rs->vao         = 0;
-    rs->vbo         = 0;
-    rs->texture_loc = 0;
+    rs->program        = 0;
+    rs->vao            = 0;
+    rs->vbo            = 0;
+    rs->texture_loc    = 0;
+    rs->dimentions_loc = 0;
 
     rs->queued_rb = NULL;
 

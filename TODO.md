@@ -4,7 +4,7 @@
   - [x]subsurf hit testing + pointer events
     - [ ]subsurf ot top of subsurf hit testing breaks
 - [x]wlr layers
-  - [ ]layer keyboard input
+  - [x]layer keyboard input
   - [x]layer pointer input
   - [ ]layer in overlay plane?
 - [ ]toplevel focus switch animation

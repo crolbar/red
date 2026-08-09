@@ -15,16 +15,20 @@ int
 red_send_pending_callbacks(struct redsurface* rsurf, uint32_t time_msec);
 
 int
-red_send_toplevel_configure(struct redsurface* rsurf, int activated, int resizing);
+red_send_toplevel_configure(struct redsurface* rsurf,
+                            int                activated,
+                            int                resizing);
 int
 red_send_popup_configure(struct redsurface* rsurf);
 int
 red_send_zwlr_layer_configure(struct redsurface* rsurf);
 
 int
-red_keyboard_send_enter(struct redclient* rc, struct wl_resource* wl_surface);
+red_keyboard_send_enter(struct redsurface* rsurf);
 int
-red_keyboard_send_leave(struct redclient* rc, struct wl_resource* wl_surface);
+red_keyboard_send_leave(struct redsurface* rsurf);
+int
+red_keyboard_send_leave_and_find_new(struct redsurface* rsurf);
 
 int
 red_pointer_send_enter(struct redclient* rc, struct wl_resource* wl_surface);

@@ -103,6 +103,11 @@ redconfig cfg = (redconfig){
           A( RED_ACTION_SPAWN, "foot" )
         },
         {
+          .key = "r",
+          .mods = RED_MOD_SUPER,
+          A( RED_ACTION_SPAWN, "fuzzel" )
+        },
+        {
           .key = "XF86AudioPlay",
           .mods = RED_MOD_NO_MODS,
           A( RED_ACTION_SPAWN, "brokctl", "play-pause")

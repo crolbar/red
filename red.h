@@ -254,6 +254,9 @@ struct redstate
 
     dll(struct redsurface*) layer_rsurfs;
 
+    struct redsurface* keyboard_focused_rsurf;
+    int                keyboard_focused_rsurf_exclusive;
+
     int                xkb_keymap_fd;
     char*              xkb_keymap_string;
     struct xkb_keymap* xkb_keymap;

@@ -243,11 +243,8 @@ red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
     assert(rt->rc);
     assert(rt->rsurf);
 
-    if (rt->rc->wl_pointer)
-        red_pointer_send_enter(rt->rc, rt->rsurf->wl_surface);
-
     if (rt->rc->wl_keyboard)
-        red_keyboard_send_enter(rt->rc, rt->rsurf->wl_surface);
+        red_keyboard_send_enter(rt->rsurf);
 
     if (rt->rsurf)
         red_send_toplevel_configure(rt->rsurf, 1, 0);
@@ -264,11 +261,8 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
     // send leave on keyboard, pointer and surface to old focus
     struct redtoplevel* frt = rs->focused_rt;
     if (frt && red_is_client_valid(rs, frt->rc)) {
-        if (frt->rc->wl_pointer)
-            red_pointer_send_leave(frt->rc, frt->rsurf->wl_surface);
-
         if (frt->rc->wl_keyboard)
-            red_keyboard_send_leave(frt->rc, frt->rsurf->wl_surface);
+            red_keyboard_send_leave(frt->rsurf);
 
         if (frt->rsurf)
             red_send_toplevel_configure(frt->rsurf, 0, 0);
@@ -353,25 +347,24 @@ red_kb_send_keys(struct redstate* rs,
                  int              press,
                  int              mods_have_changed)
 {
-    if (!rs->focused_rt)
+    if (!rs->keyboard_focused_rsurf)
         return 0;
+    assert(rs->keyboard_focused_rsurf->rc &&
+           rs->keyboard_focused_rsurf->rc->wl_keyboard);
 
-    if (!rs->focused_rt->rc->wl_keyboard)
-        return 0;
+    wl_keyboard_send_key(rs->keyboard_focused_rsurf->rc->wl_keyboard,
+                         wl_display_next_serial(rs->wl_display),
+                         time_msec,
+                         key,
+                         press);
 
-    uint32_t serial = wl_display_next_serial(rs->wl_display);
-    wl_keyboard_send_key(
-      rs->focused_rt->rc->wl_keyboard, serial, time_msec, key, press);
-
-    if (mods_have_changed) {
-        serial = wl_display_next_serial(rs->wl_display);
-        wl_keyboard_send_modifiers(rs->focused_rt->rc->wl_keyboard,
-                                   serial,
+    if (mods_have_changed)
+        wl_keyboard_send_modifiers(rs->keyboard_focused_rsurf->rc->wl_keyboard,
+                                   wl_display_next_serial(rs->wl_display),
                                    rs->xkb_mods_depressed,
                                    rs->xkb_mods_latched,
                                    rs->xkb_mods_locked,
                                    rs->xkb_group);
-    }
 
     return 0;
 }
