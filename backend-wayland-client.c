@@ -333,11 +333,7 @@ wl_pointer_button(void*              data,
                   uint32_t           state)
 {
     struct redstate* rs = data;
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
-        return;
-    uint32_t _serial = wl_display_next_serial(rs->wl_display);
-    wl_pointer_send_button(
-      rs->focused_rt->rc->wl_pointer, _serial, time, button, state);
+    red_pointer_send_button(rs, time, button, state);
 }
 void
 wl_pointer_axis(void*              data,
@@ -347,17 +343,16 @@ wl_pointer_axis(void*              data,
                 wl_fixed_t         value)
 {
     struct redstate* rs = data;
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+    if (!rs->pointer_focused_rsurf)
         return;
-    wl_pointer_send_axis(rs->focused_rt->rc->wl_pointer, time, axis, value);
+    wl_pointer_send_axis(
+      rs->pointer_focused_rsurf->rc->wl_pointer, time, axis, value);
 }
 void
 wl_pointer_frame(void* data, struct wl_pointer* wl_pointer)
 {
     struct redstate* rs = data;
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
-        return;
-    wl_pointer_send_frame(rs->focused_rt->rc->wl_pointer);
+    red_pointer_send_frame(rs);
 }
 void
 wl_pointer_axis_source(void*              data,
@@ -365,9 +360,10 @@ wl_pointer_axis_source(void*              data,
                        uint32_t           axis_source)
 {
     struct redstate* rs = data;
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+    if (!rs->pointer_focused_rsurf)
         return;
-    wl_pointer_send_axis_source(rs->focused_rt->rc->wl_pointer, axis_source);
+    wl_pointer_send_axis_source(rs->pointer_focused_rsurf->rc->wl_pointer,
+                                axis_source);
 }
 void
 wl_pointer_axis_stop(void*              data,
@@ -376,9 +372,10 @@ wl_pointer_axis_stop(void*              data,
                      uint32_t           axis)
 {
     struct redstate* rs = data;
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+    if (!rs->pointer_focused_rsurf)
         return;
-    wl_pointer_send_axis_stop(rs->focused_rt->rc->wl_pointer, time, axis);
+    wl_pointer_send_axis_stop(
+      rs->pointer_focused_rsurf->rc->wl_pointer, time, axis);
 }
 void
 wl_pointer_axis_discrete(void*              data,
@@ -387,10 +384,10 @@ wl_pointer_axis_discrete(void*              data,
                          int32_t            discrete)
 {
     struct redstate* rs = data;
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+    if (!rs->pointer_focused_rsurf)
         return;
     wl_pointer_send_axis_discrete(
-      rs->focused_rt->rc->wl_pointer, axis, discrete);
+      rs->pointer_focused_rsurf->rc->wl_pointer, axis, discrete);
 }
 void
 wl_pointer_axis_value120(void*              data,
@@ -399,10 +396,10 @@ wl_pointer_axis_value120(void*              data,
                          int32_t            value120)
 {
     struct redstate* rs = data;
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+    if (!rs->pointer_focused_rsurf)
         return;
     wl_pointer_send_axis_value120(
-      rs->focused_rt->rc->wl_pointer, axis, value120);
+      rs->pointer_focused_rsurf->rc->wl_pointer, axis, value120);
 }
 void
 wl_pointer_axis_relative_direction(void*              data,
@@ -411,10 +408,10 @@ wl_pointer_axis_relative_direction(void*              data,
                                    uint32_t           direction)
 {
     struct redstate* rs = data;
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+    if (!rs->pointer_focused_rsurf)
         return;
     wl_pointer_send_axis_relative_direction(
-      rs->focused_rt->rc->wl_pointer, axis, direction);
+      rs->pointer_focused_rsurf->rc->wl_pointer, axis, direction);
 }
 
 struct wayland_client*

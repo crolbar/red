@@ -120,59 +120,78 @@ red_get_rsurf_by_wl_surf(struct redstate* rs, struct wl_resource* wl_surface)
     return NULL;
 }
 
-// using rs->cursor_x/y get the surface under that
-// currently only used for subsurface hit testing
+// check if point at x,y is on rsurf, using x,y,w,h as dimentions
 struct redsurface*
-red_hit_test_r(struct redsurface* rsurf, double x, double y)
+red_hit_test(struct redsurface* rsurf, double x, double y, uint32_t scale)
 {
-    uint32_t scale = red_get_scale(rsurf);
-    dll_for_each(rsurf->subsurfs, v)
-    {
-        double sx = v->val->x * scale;
-        double sy = v->val->y * scale;
-        double sw = (float)v->val->w;
-        double sh = (float)v->val->h;
+    double sx = rsurf->x * scale;
+    double sy = rsurf->y * scale;
+    double sw = rsurf->w;
+    double sh = rsurf->h;
 
-        struct redsurface* r;
-        if ((r = red_hit_test_r(v->val, x, y)))
-            return r;
+    if (x < sx)
+        return NULL;
+    if (y < sy)
+        return NULL;
+    if (x > sx + sw)
+        return NULL;
+    if (y > sy + sh)
+        return NULL;
 
-        if (x < sx)
-            continue;
-        if (y < sy)
-            continue;
-
-        if (x > sx + sw)
-            continue;
-        if (y > sy + sh)
-            continue;
-
-        return v->val;
-    }
-    return NULL;
+    return rsurf;
 }
+
 struct redsurface*
-red_hit_test(struct redstate* rs)
+red_hit_test_r(struct redsurface* rsurf, double x, double y, uint32_t scale)
 {
-    assert(rs->focused_rt && rs->focused_rt->rsurf);
+    // first go through subsurfs as they should be above
+    dll_rfor_each(rsurf->subsurfs, v)
+    {
+        struct redsurface* r;
+        if ((r = red_hit_test_r(v->val, x, y, scale)))
+            return r;
+    }
+
+    return red_hit_test(rsurf, x, y, scale);
+}
+
+struct redsurface*
+red_get_pointer_focused_rsurf(struct redstate* rs)
+{
+    if (!rs->focused_rt || !rs->focused_rt->rsurf)
+        return NULL;
+
     double x = rs->cursor_x;
     double y = rs->cursor_y;
 
-    struct redsurface* ret;
-    if ((ret = red_hit_test_r(rs->focused_rt->rsurf, x, y)))
-        return ret;
+    // check other layers first, as all they should be above toplevel
+    struct redsurface* ret = NULL;
+    dll_rfor_each(rs->layer_rsurfs, v)
+    {
+        uint32_t scale = red_get_scale(v->val);
+        if ((ret = red_hit_test_r(v->val, x, y, scale)))
+            return ret;
+    }
 
-    return rs->focused_rt->rsurf;
+    uint32_t scale = red_get_scale(rs->focused_rt->rsurf);
+    return red_hit_test_r(rs->focused_rt->rsurf, x, y, scale);
 }
 
 int
 red_update_pointer_focused_rsurf(struct redstate* rs)
 {
-    struct redsurface* ht_rsurf = red_hit_test(rs);
-    assert(ht_rsurf != NULL);
+    struct redsurface* ht_rsurf = red_get_pointer_focused_rsurf(rs);
+    if (ht_rsurf == NULL) {
+        rs->pointer_focused_rsurf = NULL;
+        return 0;
+    }
 
     // focus has not changed, do nothing
     if (ht_rsurf == rs->pointer_focused_rsurf)
+        return 0;
+
+    // pointer focus should be on a surface with a registered wl_pointer
+    if (ht_rsurf->rc->wl_pointer == NULL)
         return 0;
 
     if (rs->pointer_focused_rsurf)
@@ -385,39 +404,51 @@ red_pointer_send_relative_motion(struct redstate* rs,
 }
 
 int
+red_pointer_update_visibility(struct redstate* rs)
+{
+    struct itimerspec its = {
+        .it_value    = { .tv_sec = cfg.cursor_autohide_time / 1000,
+                         .tv_nsec =
+                           (cfg.cursor_autohide_time % 1000) * 1000 * 1000 },
+        .it_interval = { 0, 0 },
+    };
+    timerfd_settime(rs->cursor_hide_timer_fd, 0, &its, NULL);
+
+    if (rs->using_hardware_cursor) {
+        if (drm_update_cursor_plane(rs))
+            return 1;
+    }
+    // need to redraw the whole frame on software cursor
+    else
+        request_redraw(rs);
+
+    return 0;
+}
+
+int
 red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
 {
-    if (!rs->is_wayland_client && !rs->cursor_hidden) {
-        struct itimerspec its = {
-            .it_value    = { .tv_sec = cfg.cursor_autohide_time / 1000,
-                             .tv_nsec =
-                               (cfg.cursor_autohide_time % 1000) * 1000 * 1000 },
-            .it_interval = { 0, 0 },
-        };
-        timerfd_settime(rs->cursor_hide_timer_fd, 0, &its, NULL);
+    if (!rs->is_wayland_client && !rs->cursor_hidden)
+        if (red_pointer_update_visibility(rs))
+            return 1;
 
-        if (rs->using_hardware_cursor) {
-            if (drm_update_cursor_plane(rs))
-                return 1;
-        }
-        // need to redraw the whole frame on software cursor
-        else
-            request_redraw(rs);
-    }
+    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+        return 0;
 
     // give some time between scroll and motion events to stop starvation
     if (time_msec - rs->cursor_last_scroll_time < 30)
         return 0;
 
-    if (rs->focused_rt && rs->focused_rt->rc->wl_pointer) {
-        if (red_update_pointer_focused_rsurf(rs))
-            return 1;
+    if (red_update_pointer_focused_rsurf(rs))
+        return 1;
+    if (!rs->pointer_focused_rsurf)
+        return 0;
 
-        wl_pointer_send_motion(rs->focused_rt->rc->wl_pointer,
-                               time_msec,
-                               wl_fixed_from_double(red_get_lc_x(rs)),
-                               wl_fixed_from_double(red_get_lc_y(rs)));
-    }
+    wl_pointer_send_motion(rs->pointer_focused_rsurf->rc->wl_pointer,
+                           time_msec,
+                           wl_fixed_from_double(red_get_lc_x(rs)),
+                           wl_fixed_from_double(red_get_lc_y(rs)));
+
     return 0;
 }
 
@@ -427,13 +458,14 @@ red_pointer_send_button(struct redstate* rs,
                         uint32_t         button,
                         int              state)
 {
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+    if (!rs->pointer_focused_rsurf)
         return 0;
 
-    uint32_t serial = wl_display_next_serial(rs->wl_display);
-    wl_pointer_send_button(
-      rs->focused_rt->rc->wl_pointer, serial, time_msec, button, state);
-
+    wl_pointer_send_button(rs->pointer_focused_rsurf->rc->wl_pointer,
+                           wl_display_next_serial(rs->wl_display),
+                           time_msec,
+                           button,
+                           state);
     return 0;
 }
 
@@ -445,9 +477,10 @@ red_pointer_send_scroll(struct redstate*                  rs,
                         double                            value,
                         double                            value120)
 {
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+    if (!rs->pointer_focused_rsurf)
         return 0;
-    struct wl_resource* pointer = rs->focused_rt->rc->wl_pointer;
+
+    struct wl_resource* pointer = rs->pointer_focused_rsurf->rc->wl_pointer;
     int                 version = wl_resource_get_version(pointer);
 
     uint32_t axis_source;
@@ -500,10 +533,10 @@ red_pointer_send_scroll(struct redstate*                  rs,
 int
 red_pointer_send_frame(struct redstate* rs)
 {
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
+    if (!rs->pointer_focused_rsurf)
         return 0;
 
-    struct wl_resource* pointer = rs->focused_rt->rc->wl_pointer;
+    struct wl_resource* pointer = rs->pointer_focused_rsurf->rc->wl_pointer;
     int                 version = wl_resource_get_version(pointer);
 
     if (version < 5)

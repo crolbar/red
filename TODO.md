@@ -5,9 +5,12 @@
     - [ ]subsurf ot top of subsurf hit testing breaks
 - [x]wlr layers
   - [ ]layer keyboard input
-  - [ ]layer pointer input
+  - [x]layer pointer input
   - [ ]layer in overlay plane?
+- [ ]toplevel focus switch animation
+  - [ ]toplevel open/close animation?
 - [ ]ipc
+- [ ]windows like alt-tap with quickshell
 
 - [ ]run through valgrind (proper memory management)
 
