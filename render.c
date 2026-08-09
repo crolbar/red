@@ -1,4 +1,5 @@
 #include "compositor.h"
+#include "dll.h"
 #include "log.h"
 #include "opengl.h"
 #include "red.h"
@@ -122,7 +123,7 @@ render_surface(struct redstate*   rs,
     }
 
     CALL(glUseProgram(rs->program));
-    if (rsurf->parent) {
+    if (rsurf->parent || rsurf->zwlr_layer_surface) {
         CALL(glEnable(GL_BLEND));
         CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
     }
@@ -217,6 +218,11 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     else {
         CALL(glClearColor(0x66 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 1.0f));
         CALL(glClear(GL_COLOR_BUFFER_BIT));
+    }
+
+    dll_for_each(rs->layer_rsurfs, v)
+    {
+        render_surface(rs, v->val, width, height);
     }
 
     if (!rs->using_hardware_cursor)

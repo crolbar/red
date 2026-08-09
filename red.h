@@ -90,6 +90,7 @@ struct redsurface
     struct wl_resource* xdg_surface;
     struct wl_resource* xdg_toplevel;
     struct wl_resource* xdg_popup;
+    struct wl_resource* zwlr_layer_surface;
 
     struct redsurface* parent;
     // containing subsurfaceses and xdg_popups
@@ -131,6 +132,14 @@ struct redsurface
     dll(struct wl_resource*) pending_pres_cbs;  // wp_presentation_feedback
 
     int configured; // xdg_surface configure
+
+    int32_t  layer_width;
+    int32_t  layer_height;
+    int32_t  layer_margin_top;
+    int32_t  layer_margin_right;
+    int32_t  layer_margin_bottom;
+    int32_t  layer_margin_left;
+    uint32_t layer_anchor;
 };
 
 struct redclient
@@ -210,6 +219,7 @@ struct redstate
     struct wl_global*     wp_viewporter;
     struct wl_global*     zwp_relative_pointer_manager;
     struct wl_global*     zwp_pointer_constraints;
+    struct wl_global*     zwlr_layer_shell;
     struct wl_global*     wp_presentation;
     struct wl_global*     subcompositor_global;
     struct wl_global*     data_device_manager_global;
@@ -241,6 +251,8 @@ struct redstate
     dll(struct redtoplevel*) rts; // red toplevels
     struct redtoplevel* focused_rt;
     struct redsurface*  pointer_focused_rsurf;
+
+    dll(struct redsurface*) layer_rsurfs;
 
     int                xkb_keymap_fd;
     char*              xkb_keymap_string;

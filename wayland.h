@@ -18,6 +18,8 @@ int
 red_send_toplevel_configure(struct redsurface* rsurf, int activated, int resizing);
 int
 red_send_popup_configure(struct redsurface* rsurf);
+int
+red_send_zwlr_layer_configure(struct redsurface* rsurf);
 
 int
 red_keyboard_send_enter(struct redclient* rc, struct wl_resource* wl_surface);

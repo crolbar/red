@@ -103,9 +103,34 @@ redconfig cfg = (redconfig){
           A( RED_ACTION_SPAWN, "foot" )
         },
         {
+          .key = "XF86AudioPlay",
+          .mods = RED_MOD_NO_MODS,
+          A( RED_ACTION_SPAWN, "brokctl", "play-pause")
+        },
+        {
+          .key = "XF86AudioNext",
+          .mods = RED_MOD_NO_MODS,
+          A( RED_ACTION_SPAWN, "brokctl", "next")
+        },
+        {
+          .key = "XF86AudioPrev",
+          .mods = RED_MOD_NO_MODS,
+          A( RED_ACTION_SPAWN, "brokctl", "previous")
+        },
+        {
           .key = "X",
           .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
           A( RED_ACTION_SPAWN, "ghostty" )
+        },
+        {
+          .key = "s",
+          .mods = RED_MOD_SUPER,
+          A( RED_ACTION_SPAWN, "qs", "ipc", "call", "main", "toggle", "dashboard")
+        },
+        {
+          .key = "w",
+          .mods = RED_MOD_SUPER,
+          A( RED_ACTION_SPAWN, "qs", "ipc", "call", "main", "toggle", "bar")
         },
 
 
@@ -119,7 +144,7 @@ redconfig cfg = (redconfig){
 
     AUTO_START(
         PROG("bash", "-c", "xwayland-satellite :67"),
-        // PROG("bash", "-c", "foot"),
+        PROG("bash", "-c", "foot"),
     )
 
     ENV(

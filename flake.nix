@@ -10,6 +10,7 @@
       clang-tools
       wayland-scanner
       wayland-protocols
+      wlr-protocols
       gdb
       gperftools # libprofiler
       pprof # visualization of profiling data

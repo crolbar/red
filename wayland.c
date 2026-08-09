@@ -2,6 +2,7 @@
 #include "config.h"
 #include "dll.h"
 #include "drm.h"
+#include "layer-shell-server-protocol.h"
 #include "linux-dmabuf-server-protocol.h"
 #include "log.h"
 #include "opengl.h"
@@ -84,6 +85,9 @@ red_on_frame_done(struct redstate* rs, uint32_t time_msec)
 
     if (rs->focused_rt)
         red_handle_send_callbacks(rs->focused_rt->rsurf, time_msec);
+
+    dll_for_each(rs->layer_rsurfs, v)
+      red_handle_send_callbacks(v->val, time_msec);
 
     // if updates happened on page flip
     redraw(rs);
@@ -195,19 +199,21 @@ red_current_buffer_release(struct redsurface* rsurf)
 int
 red_commit_handle_configure(struct redsurface* rsurf)
 {
-    if (rsurf->xdg_toplevel) {
-        struct wl_array a;
-        wl_array_init(&a);
-        xdg_toplevel_send_wm_capabilities(rsurf->xdg_toplevel, &a);
-        wl_array_release(&a);
+    if (rsurf->xdg_surface) {
+        if (rsurf->xdg_toplevel) {
+            struct wl_array a;
+            wl_array_init(&a);
+            xdg_toplevel_send_wm_capabilities(rsurf->xdg_toplevel, &a);
+            wl_array_release(&a);
 
-        red_send_toplevel_configure(rsurf, 0, 0);
-    } else if (rsurf->xdg_popup) {
-        red_send_popup_configure(rsurf);
-    } else {
-        uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
-        xdg_surface_send_configure(rsurf->xdg_surface, serial);
+            red_send_toplevel_configure(rsurf, 0, 0);
+        } else if (rsurf->xdg_popup) {
+            red_send_popup_configure(rsurf);
+        }
+    } else if (rsurf->zwlr_layer_surface) {
+        red_send_zwlr_layer_configure(rsurf);
     }
+
     return 0;
 }
 
@@ -244,9 +250,7 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     struct redstate*   rs    = rsurf->rs;
     assert(rsurf);
     assert(rs);
-    int surf_is_focused = red_is_rsurf_focused(rs, rsurf);
-    int surf_parent_is_focused =
-      rsurf->parent && red_is_rsurf_focused(rs, rsurf->parent);
+    int rsurf_is_focused = red_is_rsurf_focused(rs, rsurf);
 
 #ifdef RED_DEBUG_TRACK_SURFACE_BUFS
     ROG("commit rsurf: %d, conf: %d, client: %d",
@@ -262,7 +266,8 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 #endif
 
     // on first commit, configure surface
-    if (rsurf->xdg_surface && !rsurf->configured) {
+    if ((rsurf->xdg_surface || rsurf->zwlr_layer_surface) &&
+        !rsurf->configured) {
         red_commit_handle_configure(rsurf);
         return;
     }
@@ -273,14 +278,16 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 
     rsurf->commited = 0;
 
-    if (!rs->focused_rt)
-        return;
-
     // NOTE: redsurfaces that are on background
     // do not need redraw or frame callback
-    if (!surf_is_focused && !surf_parent_is_focused)
-        return;
+    if (rsurf_is_focused)
+        goto req_redraw;
 
+    if (rsurf->zwlr_layer_surface)
+        goto req_redraw;
+
+    return;
+req_redraw:
     request_redraw(rsurf->rs);
 }
 
@@ -382,6 +389,8 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     if (rsurf->rs->pointer_focused_rsurf == rsurf)
         rsurf->rs->pointer_focused_rsurf = NULL;
 
+    dll_remove_val(rsurf->rs->layer_rsurfs, rsurf);
+
     // remove wl_surf from rsurfs of redclient
     if (red_is_client_valid(rsurf->rs, rsurf->rc))
         dll_remove_val(rsurf->rc->rsurfs, rsurf);
@@ -428,6 +437,14 @@ init_redsurface()
     rsurf->gl_tex                = 0;
     rsurf->buffer_scale          = 1;
     rsurf->buffer_scale_set      = 0;
+    rsurf->zwlr_layer_surface    = NULL;
+    rsurf->layer_anchor          = 0;
+    rsurf->layer_margin_bottom   = 0;
+    rsurf->layer_margin_top      = 0;
+    rsurf->layer_margin_left     = 0;
+    rsurf->layer_margin_right    = 0;
+    rsurf->layer_width           = 0;
+    rsurf->layer_height          = 0;
     rsurf->current_buffer_destroyed.notify =
       wl_surface_current_buffer_resource_destroyed;
     wl_list_init(&rsurf->current_buffer_destroyed.link);
@@ -840,6 +857,7 @@ xdg_surface_get_popup(struct wl_client*   client,
     struct redsurface*      rsurf    = wl_resource_get_user_data(resource);
     struct redsurface*      prsurf   = wl_resource_get_user_data(parent);
     struct positioner_data* pos_data = wl_resource_get_user_data(positioner);
+    assert(rsurf && prsurf && pos_data);
 
     struct wl_resource* xdg_popup = wl_resource_create(
       client, &xdg_popup_interface, wl_resource_get_version(resource), id);
@@ -939,8 +957,8 @@ xdg_surface_ack_configure(struct wl_client*   client,
     struct redsurface* rsurf = resource->data;
     assert(rsurf);
     rsurf->configured = 1;
-    // if (red_is_rsurf_focused(rsurf->rs, rsurf))
-    request_redraw(rsurf->rs);
+    if (red_is_rsurf_focused(rsurf->rs, rsurf))
+        request_redraw(rsurf->rs);
 }
 
 static const struct xdg_surface_interface xdg_surface_implementation = {
@@ -2351,6 +2369,332 @@ wl_global_bind_wp_presentation(struct wl_client* client,
     wl_resource_set_implementation(
       wp_presentation, &wp_presentation_implementation, data, NULL);
 }
+
+static void
+zwlr_layer_surface_set_size(struct wl_client*   client,
+                            struct wl_resource* resource,
+                            uint32_t            width,
+                            uint32_t            height)
+{
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    rsurf->layer_width       = width;
+    rsurf->layer_height      = height;
+    if (rsurf->configured)
+        red_send_zwlr_layer_configure(rsurf);
+}
+static void
+zwlr_layer_surface_set_anchor(struct wl_client*   client,
+                              struct wl_resource* resource,
+                              uint32_t            anchor)
+{
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    rsurf->layer_anchor      = anchor;
+    if (rsurf->configured)
+        red_send_zwlr_layer_configure(rsurf);
+}
+static void
+zwlr_layer_surface_set_exclusive_zone(struct wl_client*   client,
+                                      struct wl_resource* resource,
+                                      int32_t             zone)
+{
+}
+static void
+zwlr_layer_surface_set_margin(struct wl_client*   client,
+                              struct wl_resource* resource,
+                              int32_t             top,
+                              int32_t             right,
+                              int32_t             bottom,
+                              int32_t             left)
+{
+    struct redsurface* rsurf   = wl_resource_get_user_data(resource);
+    rsurf->layer_margin_bottom = bottom;
+    rsurf->layer_margin_top    = top;
+    rsurf->layer_margin_left   = left;
+    rsurf->layer_margin_right  = right;
+    if (rsurf->configured)
+        red_send_zwlr_layer_configure(rsurf);
+}
+static void
+zwlr_layer_surface_set_keyboard_interactivity(struct wl_client*   client,
+                                              struct wl_resource* resource,
+                                              uint32_t keyboard_interactivity)
+{
+}
+static void
+zwlr_layer_surface_get_popup(struct wl_client*   client,
+                             struct wl_resource* resource,
+                             struct wl_resource* popup)
+{
+}
+static void
+zwlr_layer_surface_ack_configure(struct wl_client*   client,
+                                 struct wl_resource* resource,
+                                 uint32_t            serial)
+{
+    struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    rsurf->configured        = 1;
+    request_redraw(rsurf->rs);
+}
+static void
+zwlr_layer_surface_destroy(struct wl_client*   client,
+                           struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+static void
+zwlr_layer_surface_set_layer(struct wl_client*   client,
+                             struct wl_resource* resource,
+                             uint32_t            layer)
+{
+}
+
+static const struct zwlr_layer_surface_v1_interface
+  zwlr_layer_surface_implementation = {
+      .set_size           = zwlr_layer_surface_set_size,
+      .set_anchor         = zwlr_layer_surface_set_anchor,
+      .set_exclusive_zone = zwlr_layer_surface_set_exclusive_zone,
+      .set_margin         = zwlr_layer_surface_set_margin,
+      .set_keyboard_interactivity =
+        zwlr_layer_surface_set_keyboard_interactivity,
+      .get_popup     = zwlr_layer_surface_get_popup,
+      .ack_configure = zwlr_layer_surface_ack_configure,
+      .destroy       = zwlr_layer_surface_destroy,
+      .set_layer     = zwlr_layer_surface_set_layer,
+  };
+
+// TODO store layer data not in redsurface
+static void
+zwlr_layer_surface_resource_destroy(struct wl_resource* resource)
+{
+    // struct redsurface* rsurf = wl_resource_get_user_data(resource);
+    // assert(rsurf && rsurf->rs);
+    // dll_for_each(rsurf->rs->layer_rsurfs, v)
+    // {
+    //     if (rsurf == v->val) {
+    //         dll_remove(rsurf->rs->layer_rsurfs, v);
+    //         break;
+    //     }
+    // }
+    // rsurf->zwlr_layer_surface  = NULL;
+    // rsurf->layer_anchor        = 0;
+    // rsurf->layer_margin_bottom = 0;
+    // rsurf->layer_margin_top    = 0;
+    // rsurf->layer_margin_left   = 0;
+    // rsurf->layer_margin_right  = 0;
+}
+
+#define RA_TOP    ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP
+#define RA_BOTTOM ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
+#define RA_LEFT   ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
+#define RA_RIGHT  ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT
+int
+red_send_zwlr_layer_configure(struct redsurface* rsurf)
+{
+    uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
+
+    uint32_t scale = red_get_scale(rsurf);
+    uint32_t screen_width =
+      rsurf->rs->backend->get_width(rsurf->rs->backend->d);
+    uint32_t screen_height =
+      rsurf->rs->backend->get_height(rsurf->rs->backend->d);
+    screen_width /= scale;
+    screen_height /= scale;
+
+    int32_t x = 0;
+    int32_t y = 0;
+    int32_t w = rsurf->layer_width;
+    int32_t h = rsurf->layer_height;
+
+    switch (rsurf->layer_anchor) {
+        case 0:
+            x = screen_width / 2 - rsurf->layer_width / 2;
+            y = screen_height / 2 - rsurf->layer_height / 2;
+            w = rsurf->layer_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_TOP:
+            x = screen_width / 2 - rsurf->layer_width / 2;
+            y = 0;
+            w = rsurf->layer_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_BOTTOM:
+            x = screen_width / 2 - rsurf->layer_width / 2;
+            y = screen_height - rsurf->layer_height;
+            w = rsurf->layer_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_LEFT:
+            x = 0;
+            y = screen_height / 2 - rsurf->layer_height / 2;
+            w = rsurf->layer_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_RIGHT:
+            x = screen_width - rsurf->layer_width;
+            y = screen_height / 2 - rsurf->layer_height / 2;
+            w = rsurf->layer_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_RIGHT | RA_LEFT:
+            x = 0;
+            y = screen_height / 2 - rsurf->layer_height / 2;
+            w = screen_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_TOP | RA_BOTTOM:
+            x = screen_width / 2 - rsurf->layer_width / 2;
+            y = 0;
+            w = rsurf->layer_width;
+            h = screen_height;
+            break;
+        case RA_TOP | RA_LEFT:
+            x = 0;
+            y = 0;
+            w = rsurf->layer_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_TOP | RA_RIGHT:
+            x = screen_width - rsurf->layer_width;
+            y = 0;
+            w = rsurf->layer_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_BOTTOM | RA_LEFT:
+            x = 0;
+            y = screen_height - rsurf->layer_height;
+            w = rsurf->layer_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_BOTTOM | RA_RIGHT:
+            x = screen_width - rsurf->layer_width;
+            y = screen_height - rsurf->layer_height;
+            w = rsurf->layer_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_TOP | RA_LEFT | RA_BOTTOM:
+            x = 0;
+            y = 0;
+            w = rsurf->layer_width;
+            h = screen_height;
+            break;
+        case RA_TOP | RA_RIGHT | RA_BOTTOM:
+            x = screen_width - rsurf->layer_width;
+            y = 0;
+            w = rsurf->layer_width;
+            h = screen_height;
+            break;
+        case RA_LEFT | RA_TOP | RA_RIGHT:
+            x = 0;
+            y = 0;
+            w = screen_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_LEFT | RA_BOTTOM | RA_RIGHT:
+            x = 0;
+            y = screen_height - rsurf->layer_height;
+            w = screen_width;
+            h = rsurf->layer_height;
+            break;
+        case RA_LEFT | RA_BOTTOM | RA_RIGHT | RA_TOP:
+            x = 0;
+            y = 0;
+            w = screen_width;
+            h = screen_height;
+            break;
+        default:
+            ROG_WARN("unhandled layer anchor");
+            break;
+    }
+
+    if (rsurf->layer_anchor & RA_TOP)
+        y += rsurf->layer_margin_top;
+    if (rsurf->layer_anchor & RA_BOTTOM)
+        y = max(y - rsurf->layer_margin_bottom, 0);
+    if (rsurf->layer_anchor & RA_LEFT)
+        x += rsurf->layer_margin_left;
+    if (rsurf->layer_anchor & RA_RIGHT)
+        x = max(x - rsurf->layer_margin_right, 0);
+
+    if ((rsurf->layer_anchor & RA_BOTTOM) && (rsurf->layer_anchor & RA_TOP)) {
+        y = rsurf->layer_margin_top;
+        h = max(h - rsurf->layer_margin_top, 0);
+        h = max(h - rsurf->layer_margin_bottom, 0);
+    }
+
+    if ((rsurf->layer_anchor & RA_LEFT) && (rsurf->layer_anchor & RA_RIGHT)) {
+        x = rsurf->layer_margin_left;
+        w = max(w - rsurf->layer_margin_left, 0);
+        w = max(w - rsurf->layer_margin_right, 0);
+    }
+
+    rsurf->x = x;
+    rsurf->y = y;
+    rsurf->w = w;
+    rsurf->h = h;
+    zwlr_layer_surface_v1_send_configure(
+      rsurf->zwlr_layer_surface, serial, rsurf->w, rsurf->h);
+
+    return 0;
+}
+
+static void
+zwlr_layer_shell_get_layer_surface(struct wl_client*   client,
+                                   struct wl_resource* resource,
+                                   uint32_t            id,
+                                   struct wl_resource* surface,
+                                   struct wl_resource* output,
+                                   uint32_t            layer,
+                                   const char* namespace)
+{
+    struct redstate* rs = wl_resource_get_user_data(resource);
+
+    struct wl_resource* zwlr_layer_surface =
+      wl_resource_create(client,
+                         &zwlr_layer_surface_v1_interface,
+                         wl_resource_get_version(resource),
+                         id);
+    assert(zwlr_layer_surface);
+
+    struct redsurface* rsurf = red_get_rsurf_by_wl_surf(rs, surface);
+    assert(rsurf);
+    rsurf->zwlr_layer_surface = zwlr_layer_surface;
+
+    wl_resource_set_implementation(zwlr_layer_surface,
+                                   &zwlr_layer_surface_implementation,
+                                   rsurf,
+                                   zwlr_layer_surface_resource_destroy);
+
+    dll_push_tail(rs->layer_rsurfs, rsurf);
+}
+
+static void
+zwlr_layer_shell_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static const struct zwlr_layer_shell_v1_interface
+  zwlr_layer_shell_implementation = {
+      .get_layer_surface = zwlr_layer_shell_get_layer_surface,
+      .destroy           = zwlr_layer_shell_destroy,
+  };
+
+static void
+wl_global_bind_zwlr_layer_shell(struct wl_client* client,
+                                void*             data,
+                                uint32_t          version,
+                                uint32_t          id)
+{
+
+    struct wl_resource* zwlr_layer_shell =
+      wl_resource_create(client, &zwlr_layer_shell_v1_interface, version, id);
+    assert(zwlr_layer_shell);
+
+    wl_resource_set_implementation(
+      zwlr_layer_shell, &zwlr_layer_shell_implementation, data, NULL);
+}
+
 void
 handle_wl_log(const char* _fmt, va_list args)
 {
@@ -2485,6 +2829,13 @@ init_compositor(struct redstate* rs)
                                            rs,
                                            wl_global_bind_wp_presentation);
     assert(rs->wp_presentation);
+
+    rs->zwlr_layer_shell = wl_global_create(rs->wl_display,
+                                            &zwlr_layer_shell_v1_interface,
+                                            3,
+                                            rs,
+                                            wl_global_bind_zwlr_layer_shell);
+    assert(rs->zwlr_layer_shell);
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);

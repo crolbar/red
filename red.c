@@ -101,9 +101,10 @@ main(int argc, char** argv)
     rs->needs_redraw           = 1;
     rs->should_draw            = 0;
 
-    rs->rcs        = (typeof(rs->rcs))dll_init();
-    rs->rts        = (typeof(rs->rts))dll_init();
-    rs->focused_rt = NULL;
+    rs->rcs          = (typeof(rs->rcs))dll_init();
+    rs->rts          = (typeof(rs->rts))dll_init();
+    rs->layer_rsurfs = (typeof(rs->layer_rsurfs))dll_init();
+    rs->focused_rt   = NULL;
 
     rs->cursor_gl_program       = 0;
     rs->cursor_gl_vao           = 0;

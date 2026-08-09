@@ -39,6 +39,8 @@ PREFIX ?= /usr/local
 BINS ?= red
 
 WAYLAND_PROTOCOLS_DIR = $(shell pkg-config --variable=pkgdatadir wayland-protocols)
+WLR_PROTOCOLS_DIR = $(shell pkg-config --variable=pkgdatadir wlr-protocols)
+
 XDG_SHELL_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/xdg-shell/xdg-shell.xml
 XDG_DECORATION_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
 LINUX_DMABUF_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/linux-dmabuf/linux-dmabuf-v1.xml
@@ -46,8 +48,14 @@ VIEWPORTER_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/viewporter/viewporter.xml
 RELATIVE_POINTER_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/relative-pointer/relative-pointer-unstable-v1.xml
 POINTER_CONSTRAINTS_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml
 PRESENTATION_TIME_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/presentation-time/presentation-time.xml
+LAYER_SHELL_XML = $(WLR_PROTOCOLS_DIR)/unstable/wlr-layer-shell-unstable-v1.xml
 
 all: $(BINS)
+
+layer-shell-server-protocol.h: $(LAYER_SHELL_XML)
+	wayland-scanner server-header $< $@
+layer-shell-protocol.c: $(LAYER_SHELL_XML)
+	wayland-scanner private-code $< $@
 
 presentation-time-server-protocol.h: $(PRESENTATION_TIME_XML)
 	wayland-scanner server-header $< $@
@@ -91,6 +99,8 @@ linux-dmabuf-protocol.c: $(LINUX_DMABUF_XML)
 PRO_SRC=linux-dmabuf-protocol.c \
 		 linux-dmabuf-client-protocol.h \
 		 linux-dmabuf-server-protocol.h \
+		 layer-shell-server-protocol.h \
+		 layer-shell-protocol.c \
 		 presentation-time-protocol.c \
 		 presentation-time-server-protocol.h \
 		 pointer-constraints-server-protocol.h \
