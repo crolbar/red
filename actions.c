@@ -1,5 +1,7 @@
 #include "actions.h"
 #include "compositor.h"
+#include "dll.h"
+#include "limits.h"
 #include "log.h"
 #include "red.h"
 #include "render.h"
@@ -40,6 +42,39 @@ redaction_focus_prev(struct redstate* rs, char** args, size_t args_len)
                 break;
             }
         }
+    }
+}
+
+void
+redaction_focus_last(struct redstate* rs, char** args, size_t args_len)
+{
+    if (rs->last_focused_rt)
+        red_focus_rt(rs, rs->last_focused_rt);
+}
+
+void
+redaction_focus_n(struct redstate* rs, char** args, size_t args_len)
+{
+    if (args_len < 1)
+        return;
+    char* end;
+    int   n = (int)strtol(args[0], &end, 10);
+    if (end == args[0] || *end != '\0' || n < INT_MIN || n > INT_MAX || n < 0) {
+        ROG_ERR("invalid number in red_action_focus_n: %s", args[0]);
+        return;
+    }
+
+    if (n > (int)rs->rts.size) {
+        return;
+    }
+
+    int i = 0;
+    dll_for_each(rs->rts, v)
+    {
+        if (i++ != n)
+            continue;
+
+        red_focus_rt(rs, v->val);
     }
 }
 
@@ -128,6 +163,8 @@ ACTIONS(
     { .action_type = RED_ACTION_SPAWN, redaction_spawn },
     { .action_type = RED_ACTION_CLOSE, redaction_close },
     { .action_type = RED_ACTION_STOP_RENDERER, redaction_stop_renderer },
+    { .action_type = RED_ACTION_FOCUS_LAST, redaction_focus_last },
+    { .action_type = RED_ACTION_FOCUS_N, redaction_focus_n },
 )
 // clang-format on
 

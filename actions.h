@@ -12,6 +12,10 @@
 #define RED_ACTION_FOCUS_NEXT "focus_next"
 // focus prev toplevel
 #define RED_ACTION_FOCUS_PREV "focus_prev"
+// focus the last focused toplevel (alt+tap)
+#define RED_ACTION_FOCUS_LAST "focus_last"
+// focus the nth toplevel. start from 0 using the number as an index in a list
+#define RED_ACTION_FOCUS_N "focus_n"
 // draw blank frame & stop rendering until action is send again
 #define RED_ACTION_STOP_RENDERER "stop_renderer"
 

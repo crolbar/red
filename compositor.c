@@ -275,7 +275,8 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
     // send enter + frame callback on new focus
     red_rt_send_enter(rs, rt);
 
-    rs->focused_rt = rt;
+    rs->last_focused_rt = rs->focused_rt;
+    rs->focused_rt      = rt;
 
     if (!rt)
         request_redraw(rs);

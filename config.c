@@ -95,6 +95,21 @@ redconfig cfg = (redconfig){
           .mods = RED_MOD_SUPER,
           A( RED_ACTION_FOCUS_NEXT )
         },
+        {
+          .key = "Tab",
+          .mods = RED_MOD_ALT,
+          A( RED_ACTION_FOCUS_LAST )
+        },
+        { .key = "1", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "0" ) },
+        { .key = "2", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "1" ) },
+        { .key = "3", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "2" ) },
+        { .key = "4", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "3" ) },
+        { .key = "5", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "4" ) },
+        { .key = "6", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "5" ) },
+        { .key = "7", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "6" ) },
+        { .key = "8", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "7" ) },
+        { .key = "9", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "8" ) },
+        { .key = "0", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "9" ) },
 
         /* SPAWNERS */
         {

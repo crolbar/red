@@ -116,6 +116,7 @@ main(int argc, char** argv)
     rs->rts                   = (typeof(rs->rts))dll_init();
     rs->layer_rsurfs          = (typeof(rs->layer_rsurfs))dll_init();
     rs->focused_rt            = NULL;
+    rs->last_focused_rt       = NULL;
     rs->pointer_focused_rsurf = NULL;
 
     rs->keyboard_focused_rsurf           = NULL;

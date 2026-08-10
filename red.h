@@ -250,6 +250,7 @@ struct redstate
     // clients that have xdg_toplevel as wl_surface
     dll(struct redtoplevel*) rts; // red toplevels
     struct redtoplevel* focused_rt;
+    struct redtoplevel* last_focused_rt;
     struct redsurface*  pointer_focused_rsurf;
 
     dll(struct redsurface*) layer_rsurfs;
