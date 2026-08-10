@@ -243,6 +243,9 @@ red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
     assert(rt->rc);
     assert(rt->rsurf);
 
+    if (rt->rc->wl_pointer)
+        red_pointer_send_enter(rt->rc, rt->rsurf->wl_surface);
+
     if (rt->rc->wl_keyboard)
         red_keyboard_send_enter(rt->rsurf);
 
@@ -289,6 +292,9 @@ red_destroy_rt(struct redstate* rs, struct redtoplevel* rt)
     // move focus to prev or next for now.
     // later we should do prev focus
     if (rs->focused_rt == rt) {
+        rs->keyboard_focused_rsurf = NULL;
+        rs->pointer_focused_rsurf  = NULL;
+        rs->focused_rt             = NULL;
         dll_for_each(rs->rts, v)
         {
             if (v->val != rt)
@@ -424,9 +430,6 @@ red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
     if (!rs->is_wayland_client && !rs->cursor_hidden && rs->active)
         if (red_pointer_update_visibility(rs))
             return 1;
-
-    if (!rs->focused_rt || !rs->focused_rt->rc->wl_pointer)
-        return 0;
 
     // give some time between scroll and motion events to stop starvation
     if (time_msec - rs->cursor_last_scroll_time < 30)

@@ -1,5 +1,4 @@
 #include "backend-drm.h"
-#include "compositor.h"
 #include "config.h"
 #include "drm.h"
 #include "drmProps.h"
@@ -20,35 +19,6 @@
 #include <unistd.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
-
-int
-drm_flip(struct backend_drm* bd, uint32_t buf_id, struct redstate* rs)
-{
-    // shouldn't happen
-    if (!bd->page_flip_ready) {
-        ROG_ERR("calling drm flip when prev flip is not finished");
-        return 1;
-    }
-
-    bd->page_flip_ready = 0;
-
-    // NOTE: do we need atomic for this?
-    drmModeAtomicReqPtr req = drmModeAtomicAlloc();
-    assert(req);
-
-    add_prop(req, bd->primary_plane_id, bd->props->pp_fb_id, buf_id);
-
-    // TODO: utilize `DRM_MODE_PAGE_FLIP_ASYNC` to enable tearing?
-    if (drmModeAtomicCommit(bd->drm_fd,
-                            req,
-                            DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_ATOMIC_NONBLOCK,
-                            rs)) {
-        ROG_ERR("failed commit a page flip: %s", strerror(errno));
-        return 1;
-    }
-    drmModeAtomicFree(req);
-    return 0;
-}
 
 int
 drm_set_crct(struct backend_drm* bd, uint32_t buf_id)
@@ -130,7 +100,7 @@ drm_set_crct(struct backend_drm* bd, uint32_t buf_id)
 }
 
 int
-drm_update_cursor_plane(struct redstate* rs)
+drm_add_cursor_plane_props(struct redstate* rs, drmModeAtomicReqPtr req)
 {
     if (!rs->active)
         return 0;
@@ -141,10 +111,81 @@ drm_update_cursor_plane(struct redstate* rs)
         x -= gimp_image.width / 2;
         y -= gimp_image.height / 2;
     }
-    if (drmModeMoveCursor(bd->drm_fd, bd->crtc_id, x, y)) {
-        ROG_ERR("drmMode move cursor failed: %s", strerror(errno));
+    add_prop(req, bd->cursor_plane_id, bd->props->cp_crtc_x, x);
+    add_prop(req, bd->cursor_plane_id, bd->props->cp_crtc_y, y);
+    return 0;
+}
+
+int
+drm_commit(struct redstate* rs)
+{
+    if (!rs->active)
+        return 0;
+    struct backend_drm* bd = rs->backend->d;
+
+    // shouldn't happen
+    if (!bd->page_flip_ready) {
+        ROG_ERR("calling drm flip when prev flip is not finished");
         return 1;
-    };
+    }
+
+    bd->page_flip_ready = 0;
+
+    drmModeAtomicReqPtr req = drmModeAtomicAlloc();
+    assert(req);
+
+    if (bd->page_change & PAGE_CHANGE_CURSOR_PLANE_COORD) {
+        drm_add_cursor_plane_props(rs, req);
+    }
+
+    if (bd->page_change & PAGE_CHANGE_PRIMARY_PLANE_FB) {
+        assert(bd->pending_buf_id != 0);
+        add_prop(
+          req, bd->primary_plane_id, bd->props->pp_fb_id, bd->pending_buf_id);
+        bd->pending_buf_id = 0;
+    }
+
+    if (drmModeAtomicCommit(bd->drm_fd,
+                            req,
+                            DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_ATOMIC_NONBLOCK,
+                            rs)) {
+        ROG_ERR("failed commit a page flip: %s", strerror(errno));
+        return 1;
+    }
+    drmModeAtomicFree(req);
+
+    bd->page_change = 0;
+    return 0;
+}
+
+int
+drm_update_cursor_plane(struct redstate* rs)
+{
+    struct backend_drm* bd = rs->backend->d;
+    bd->page_change |= PAGE_CHANGE_CURSOR_PLANE_COORD;
+
+    // if we have a queued redraw, when its done we will commit this change
+    if (bd->page_flip_ready && !rs->queued_rb) {
+        drm_commit(rs);
+    }
+
+    return 0;
+}
+
+int
+drm_update_primary_plane(struct redstate* rs, uint32_t buf_id)
+{
+    struct backend_drm* bd = rs->backend->d;
+    bd->pending_buf_id     = buf_id;
+    bd->page_change |= PAGE_CHANGE_PRIMARY_PLANE_FB;
+
+    // if we have no page flip in progress just commit.
+    // if we have, on the page flip done event we will see we have
+    // changes and will commit them
+    if (bd->page_flip_ready) {
+        drm_commit(rs);
+    }
+
     return 0;
 }
 

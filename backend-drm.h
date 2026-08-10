@@ -5,6 +5,12 @@
 #include <stdint.h>
 #include <xf86drmMode.h>
 
+enum backend_drm_page_change
+{
+    PAGE_CHANGE_PRIMARY_PLANE_FB   = 1 << 0,
+    PAGE_CHANGE_CURSOR_PLANE_COORD = 1 << 1,
+};
+
 struct backend_drm
 {
     struct redstate* rs;
@@ -33,6 +39,10 @@ struct backend_drm
     uint32_t       cursor_buf_id;
     uint64_t       cursor_plane_w;
     uint64_t       cursor_plane_h;
+
+    // changes to be made in the next atomic commit
+    int      page_change;
+    uint32_t pending_buf_id;
 };
 
 extern struct backend backend_drm;

@@ -387,7 +387,7 @@ wl_surface_resource_destroy(struct wl_resource* resource)
 #endif
 
     if (rsurf->rs->keyboard_focused_rsurf == rsurf)
-        red_keyboard_send_leave_and_find_new(rsurf);
+        rsurf->rs->keyboard_focused_rsurf = NULL;
 
     if (rsurf->rs->pointer_focused_rsurf == rsurf)
         rsurf->rs->pointer_focused_rsurf = NULL;

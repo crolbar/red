@@ -41,6 +41,8 @@ backend_drm_init_data()
     bd->cursor_buf_id    = 0;
     bd->cursor_plane_w   = 0;
     bd->cursor_plane_h   = 0;
+    bd->page_change      = 0;
+    bd->pending_buf_id   = 0;
 
     return bd;
 }
@@ -200,10 +202,8 @@ backend_drm_pull_buffer(void* data)
 int
 backend_drm_push_buffer(void* data, redbuffer* rb)
 {
-    struct redstate*    rs = data;
-    struct backend_drm* bd = rs->backend->d;
-
-    drm_flip(bd, rb->buf_id, rs);
+    struct redstate* rs = data;
+    drm_update_primary_plane(rs, rb->buf_id);
     return 0;
 }
 
