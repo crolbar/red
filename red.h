@@ -237,7 +237,6 @@ struct redstate
     double   cursor_x;
     double   cursor_y;
     int      using_hardware_cursor;
-    uint32_t cursor_last_motion_time;
     uint32_t cursor_last_scroll_time;
     int      cursor_hide_timer_fd;
     int      cursor_locked;

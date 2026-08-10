@@ -364,10 +364,6 @@ input_pointer_motion(struct redstate* rs,
         rs->cursor_y = max(min(y, (double)height), 0);
     }
 
-    if (time_msec - rs->cursor_last_motion_time < 8)
-        return 0;
-    rs->cursor_last_motion_time = time_msec;
-
     if (red_pointer_send_relative_motion(rs, time_usec, dx, dy, udx, udy))
         return 1;
 

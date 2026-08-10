@@ -389,7 +389,8 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     if (rsurf->rs->keyboard_focused_rsurf == rsurf) {
         rsurf->rs->keyboard_focused_rsurf           = NULL;
         rsurf->rs->keyboard_focused_rsurf_exclusive = 0;
-        if (rsurf->rs->focused_rt && rsurf->rs->focused_rt->rsurf)
+        if (rsurf->rs->focused_rt && rsurf->rs->focused_rt->rsurf &&
+            rsurf->rs->focused_rt->rsurf != rsurf)
             red_keyboard_send_enter(rsurf->rs->focused_rt->rsurf);
     }
 

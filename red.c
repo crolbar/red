@@ -126,7 +126,6 @@ main(int argc, char** argv)
     rs->cursor_x                = 0;
     rs->cursor_y                = 0;
     rs->using_hardware_cursor   = 1;
-    rs->cursor_last_motion_time = 0;
     rs->cursor_last_scroll_time = 0;
     rs->cursor_hide_timer_fd    = timerfd_create(CLOCK_REALTIME, 0);
     rs->tick_timer_fd           = timerfd_create(CLOCK_MONOTONIC, 0);
