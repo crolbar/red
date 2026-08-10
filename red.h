@@ -178,6 +178,7 @@ enum redpfds
     RFD_WAYLAND,
     RFD_CURSOR,
     RFD_REDRAWSYNC,
+    RFD_TICK,
     __REDPFDS_SIZE,
     __REDPFDS_NONE,
 };
@@ -268,6 +269,9 @@ struct redstate
     xkb_layout_index_t xkb_group;
 
     struct redbuffer* queued_rb; // buffer we got queued rendering to
+
+    // runs every second
+    int tick_timer_fd;
 };
 
 extern struct gl_proc* gl_proc;

@@ -6,6 +6,7 @@
 #include "actions.h"
 #include "backend-drm.h"
 #include "backend-wayland.h"
+#include "compositor.h"
 #include "config.h"
 #include "dll.h"
 #include "drm.h"
@@ -62,6 +63,7 @@ main(int argc, char** argv)
         [RFD_WAYLAND]    = { .fd = -1, .events = POLLIN },
         [RFD_CURSOR]     = { .fd = -1, .events = POLLIN },
         [RFD_REDRAWSYNC] = { .fd = -1, .events = POLLIN },
+        [RFD_TICK]       = { .fd = -1, .events = POLLIN },
     };
     rs->li                = NULL;
     rs->active            = 1;
@@ -127,15 +129,21 @@ main(int argc, char** argv)
     rs->cursor_last_motion_time = 0;
     rs->cursor_last_scroll_time = 0;
     rs->cursor_hide_timer_fd    = timerfd_create(CLOCK_REALTIME, 0);
+    rs->tick_timer_fd           = timerfd_create(CLOCK_MONOTONIC, 0);
     rs->relative_pointers       = (typeof(rs->relative_pointers))dll_init();
     rs->cursor_locked           = 0;
     rs->cursor_hidden           = 0;
 
-    rs->program        = 0;
-    rs->vao            = 0;
-    rs->vbo            = 0;
-    rs->texture_loc    = 0;
-    rs->dimentions_loc = 0;
+    rs->program           = 0;
+    rs->vao               = 0;
+    rs->vbo               = 0;
+    rs->texture_loc       = 0;
+    rs->dimentions_loc    = 0;
+    struct itimerspec its = {
+        .it_value    = { .tv_sec = 1, 0 },
+        .it_interval = { .tv_sec = 1, 0 },
+    };
+    timerfd_settime(rs->tick_timer_fd, 0, &its, NULL);
 
     rs->queued_rb = NULL;
 
@@ -207,6 +215,7 @@ main(int argc, char** argv)
     rs->pfds[RFD_BACKEND].fd  = rs->backend_fd;
     rs->pfds[RFD_WAYLAND].fd  = rs->wl_event_loop_fd;
     rs->pfds[RFD_CURSOR].fd   = rs->cursor_hide_timer_fd;
+    rs->pfds[RFD_TICK].fd     = rs->tick_timer_fd;
 
     ROG_INFO("Starting loop...");
     while (!rs->should_quit) {
@@ -274,6 +283,19 @@ main(int argc, char** argv)
                 case RFD_REDRAWSYNC:
                     redraw_done(rs);
                     break;
+
+                case RFD_TICK: {
+                    {
+                        uint64_t expirations;
+                        int      n = read(
+                          rs->tick_timer_fd, &expirations, sizeof(expirations));
+                        if (n != sizeof(expirations))
+                            continue;
+                    }
+
+                    red_on_tick(rs);
+                    break;
+                }
 
                 case __REDPFDS_SIZE:
                 case __REDPFDS_NONE:

@@ -542,3 +542,31 @@ red_pointer_send_frame(struct redstate* rs)
     wl_pointer_send_frame(pointer);
     return 0;
 }
+
+int
+red_on_tick(struct redstate* rs)
+{
+    uint64_t time_msec = time_get_now_msec();
+    dll_for_each(rs->rts, rt)
+    {
+        if (rs->focused_rt == rt->val)
+            continue;
+
+        red_send_pending_callbacks(rt->val->rsurf, time_msec);
+        if (rt->val->rsurf->current_buffer)
+            wl_buffer_send_release(rt->val->rsurf->current_buffer);
+        if (rt->val->rsurf->pending_buffer)
+            wl_buffer_send_release(rt->val->rsurf->pending_buffer);
+
+        dll_for_each(rt->val->rsurf->subsurfs, v)
+        {
+            red_send_pending_callbacks(v->val, time_msec);
+
+            if (v->val->current_buffer)
+                wl_buffer_send_release(v->val->current_buffer);
+            if (v->val->pending_buffer)
+                wl_buffer_send_release(v->val->pending_buffer);
+        }
+    }
+    return 0;
+}
