@@ -158,5 +158,21 @@ redconfig cfg = (redconfig){
         {"XDG_SESSION_DESKTOP", "red"},
         {"XDG_SESSION_TYPE", "wayland"},
     )
+
+    // name -> libinput name, can be set to `*` to set to all devices
+    // speed -> val between -1 and 1. -1 being the slowest
+    // flat_profile -> 0 for adaptive, 1 for flat
+    MOUSES(
+      {
+        .name = "crolbar YUKI",
+        .speed = 1.0,
+        .flat_profile = 0,
+      },
+      {
+        .name = "*",
+        .speed = -0.4,
+        .flat_profile = 0,
+      }
+    )
     // clang-format on
 };

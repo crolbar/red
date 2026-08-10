@@ -355,13 +355,10 @@ input_pointer_motion(struct redstate* rs,
     if (!rs->cursor_locked) {
         uint32_t width  = rs->backend->get_width(rs->backend->d);
         uint32_t height = rs->backend->get_height(rs->backend->d);
-
-        // TODO: add setting for this in cfg
-        double x = rs->cursor_x + udx * 0.4;
-        double y = rs->cursor_y + udy * 0.4;
-
-        rs->cursor_x = max(min(x, (double)width), 0);
-        rs->cursor_y = max(min(y, (double)height), 0);
+        double   x      = rs->cursor_x + dx;
+        double   y      = rs->cursor_y + dy;
+        rs->cursor_x    = max(min(x, (double)width), 0);
+        rs->cursor_y    = max(min(y, (double)height), 0);
     }
 
     if (red_pointer_send_relative_motion(rs, time_usec, dx, dy, udx, udy))
@@ -411,6 +408,26 @@ input_dispatch(struct redstate* rs)
                 if (libinput_device_config_tap_get_finger_count(device) > 0) {
                     libinput_device_config_tap_set_enabled(
                       device, LIBINPUT_CONFIG_TAP_ENABLED);
+                }
+
+                if (libinput_device_config_accel_is_available(device)) {
+                    const char* name = libinput_device_get_name(device);
+                    for (size_t i = 0; i < cfg.mouses_len; i++) {
+                        if (strcmp(name, cfg.mouses[i].name) != 0 &&
+                            strcmp("*", cfg.mouses[i].name) != 0) {
+                            continue;
+                        }
+
+                        libinput_device_config_accel_set_profile(
+                          device,
+                          cfg.mouses[i].flat_profile
+                            ? LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT
+                            : LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE);
+
+                        libinput_device_config_accel_set_speed(
+                          device, cfg.mouses[i].speed);
+                        break;
+                    }
                 }
                 break;
             }

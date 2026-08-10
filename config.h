@@ -30,11 +30,25 @@
     .env_vars_len = (sizeof((envvar[]){ __VA_ARGS__ }) /                       \
                      sizeof(((envvar[]){ __VA_ARGS__ })[0])),
 
+#define MOUSES(...)                                                            \
+    .mouses     = (redmousecfg[]){ __VA_ARGS__ },                              \
+    .mouses_len = (sizeof((redmousecfg[]){ __VA_ARGS__ }) /                    \
+                   sizeof(((redmousecfg[]){ __VA_ARGS__ })[0])),
+
 typedef struct redautostartprog
 {
     char** args;
     size_t args_len;
 } redautostartprog;
+
+typedef struct redmousecfg
+{
+    // TODO: print all dev names?
+    const char* name;
+    double      speed;
+    int         flat_profile;
+
+} redmousecfg;
 
 typedef char* envvar[2];
 
@@ -66,6 +80,9 @@ typedef struct redconfig
 
     envvar* env_vars;
     size_t  env_vars_len;
+
+    redmousecfg* mouses;
+    size_t       mouses_len;
 } redconfig;
 
 extern struct redconfig cfg;
