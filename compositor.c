@@ -292,9 +292,10 @@ red_destroy_rt(struct redstate* rs, struct redtoplevel* rt)
     // move focus to prev or next for now.
     // later we should do prev focus
     if (rs->focused_rt == rt) {
-        rs->keyboard_focused_rsurf = NULL;
-        rs->pointer_focused_rsurf  = NULL;
-        rs->focused_rt             = NULL;
+        if (!rs->keyboard_focused_rsurf_exclusive)
+            rs->keyboard_focused_rsurf = NULL;
+        rs->pointer_focused_rsurf = NULL;
+        rs->focused_rt            = NULL;
         dll_for_each(rs->rts, v)
         {
             if (v->val != rt)

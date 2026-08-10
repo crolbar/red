@@ -386,8 +386,12 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     ROG("destroing rsurf: %d", rsurf);
 #endif
 
-    if (rsurf->rs->keyboard_focused_rsurf == rsurf)
-        rsurf->rs->keyboard_focused_rsurf = NULL;
+    if (rsurf->rs->keyboard_focused_rsurf == rsurf) {
+        rsurf->rs->keyboard_focused_rsurf           = NULL;
+        rsurf->rs->keyboard_focused_rsurf_exclusive = 0;
+        if (rsurf->rs->focused_rt && rsurf->rs->focused_rt->rsurf)
+            red_keyboard_send_enter(rsurf->rs->focused_rt->rsurf);
+    }
 
     if (rsurf->rs->pointer_focused_rsurf == rsurf)
         rsurf->rs->pointer_focused_rsurf = NULL;
@@ -1223,7 +1227,7 @@ int
 red_keyboard_send_enter(struct redsurface* rsurf)
 {
 #ifdef RED_DEBUG_TRACK_CLIENT_CREATION
-    ROG("keybord focus on client: %d", rc->wl_client)
+    ROG("keybord focus on client: %d", rsurf->rc->wl_client)
 #endif
     // we must send leave on the exclusive surf first
     if (rsurf->rs->keyboard_focused_rsurf_exclusive)
@@ -1250,7 +1254,9 @@ red_keyboard_send_leave(struct redsurface* rsurf)
     if (rsurf->rs->keyboard_focused_rsurf == rsurf) {
         rsurf->rs->keyboard_focused_rsurf           = NULL;
         rsurf->rs->keyboard_focused_rsurf_exclusive = 0;
-    }
+    } else if (rsurf->rs->keyboard_focused_rsurf_exclusive)
+        return 0;
+
     if (!rsurf->rc->wl_keyboard)
         return 0;
 
