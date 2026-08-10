@@ -59,6 +59,7 @@ handle_signal(struct redstate* rs)
 
             ROG_INFO("Releasing drm_master and vt_display");
             struct backend_drm* bd = rs->backend->d;
+            rs->active             = 0;
 
             while (!bd->page_flip_ready) {
                 rs->backend->handle_events(bd);
@@ -80,8 +81,6 @@ handle_signal(struct redstate* rs)
                 libinput_event_destroy(ev);
             }
             libinput_suspend(rs->li);
-
-            rs->active = 0;
             break;
 
         case SIGUSR2:

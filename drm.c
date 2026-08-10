@@ -132,6 +132,8 @@ drm_set_crct(struct backend_drm* bd, uint32_t buf_id)
 int
 drm_update_cursor_plane(struct redstate* rs)
 {
+    if (!rs->active)
+        return 0;
     struct backend_drm* bd = rs->backend->d;
     int                 x  = rs->cursor_x;
     int                 y  = rs->cursor_y;
@@ -149,10 +151,12 @@ drm_update_cursor_plane(struct redstate* rs)
 int
 drm_hide_cursor(struct redstate* rs)
 {
+    if (!rs->active)
+        return 0;
     struct backend_drm* bd = rs->backend->d;
     if (drmModeMoveCursor(
           bd->drm_fd, bd->crtc_id, -gimp_image.width, -gimp_image.height)) {
-        ROG_ERR("drmMode move cursor failed: %s", strerror(errno));
+        ROG_ERR("drmMode move cursor failed for hide: %s", strerror(errno));
         return 1;
     };
     return 0;

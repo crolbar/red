@@ -421,7 +421,7 @@ red_pointer_update_visibility(struct redstate* rs)
 int
 red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
 {
-    if (!rs->is_wayland_client && !rs->cursor_hidden)
+    if (!rs->is_wayland_client && !rs->cursor_hidden && rs->active)
         if (red_pointer_update_visibility(rs))
             return 1;
 
