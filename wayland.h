@@ -49,3 +49,7 @@ red_current_buffer_deref(struct redsurface* rsurf);
 
 int
 red_current_buffer_release(struct redsurface* rsurf);
+
+void
+red_data_device_offer_selection(struct data_device* device,
+                                struct data_source* source);

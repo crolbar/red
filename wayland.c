@@ -1272,6 +1272,15 @@ red_keyboard_send_enter(struct redsurface* rsurf)
       rsurf->rc->wl_keyboard, serial, rsurf->wl_surface, &keys);
     wl_array_release(&keys);
     rsurf->rs->keyboard_focused_rsurf = rsurf;
+
+    dll_for_each(rsurf->rs->dds, v)
+    {
+        if (v->val->wl_client == rsurf->rc->wl_client) {
+            red_data_device_offer_selection(v->val,
+                                            rsurf->rs->selection_source);
+            break;
+        }
+    }
     return 0;
 }
 int
@@ -1757,7 +1766,7 @@ red_data_offer_create(struct wl_client*   client,
     return offer->wl_data_offer;
 }
 
-static void
+void
 red_data_device_offer_selection(struct data_device* device,
                                 struct data_source* source)
 {
@@ -1894,9 +1903,6 @@ wl_data_device_manager_get_data_device(struct wl_client*   client,
                                    &wl_data_device_implementation,
                                    dd,
                                    wl_data_device_resource_destroy);
-
-    if (rs->keyboard_focused_rsurf)
-        red_data_device_offer_selection(dd, rs->selection_source);
 }
 
 static void
@@ -3043,6 +3049,127 @@ wl_global_bind_zwlr_layer_shell(struct wl_client* client,
 
     wl_resource_set_implementation(
       zwlr_layer_shell, &zwlr_layer_shell_implementation, data, NULL);
+}
+
+static void
+wl_shell_surface_pong(struct wl_client*   client,
+                      struct wl_resource* resource,
+                      uint32_t            serial)
+{
+}
+static void
+wl_shell_surface_move(struct wl_client*   client,
+                      struct wl_resource* resource,
+                      struct wl_resource* seat,
+                      uint32_t            serial)
+{
+}
+static void
+wl_shell_surface_resize(struct wl_client*   client,
+                        struct wl_resource* resource,
+                        struct wl_resource* seat,
+                        uint32_t            serial,
+                        uint32_t            edges)
+{
+}
+static void
+wl_shell_surface_set_toplevel(struct wl_client*   client,
+                              struct wl_resource* resource)
+{
+}
+static void
+wl_shell_surface_set_transient(struct wl_client*   client,
+                               struct wl_resource* resource,
+                               struct wl_resource* parent,
+                               int32_t             x,
+                               int32_t             y,
+                               uint32_t            flags)
+{
+}
+static void
+wl_shell_surface_set_fullscreen(struct wl_client*   client,
+                                struct wl_resource* resource,
+                                uint32_t            method,
+                                uint32_t            framerate,
+                                struct wl_resource* output)
+{
+}
+static void
+wl_shell_surface_set_popup(struct wl_client*   client,
+                           struct wl_resource* resource,
+                           struct wl_resource* seat,
+                           uint32_t            serial,
+                           struct wl_resource* parent,
+                           int32_t             x,
+                           int32_t             y,
+                           uint32_t            flags)
+{
+}
+static void
+wl_shell_surface_set_maximized(struct wl_client*   client,
+                               struct wl_resource* resource,
+                               struct wl_resource* output)
+{
+}
+static void
+wl_shell_surface_set_title(struct wl_client*   client,
+                           struct wl_resource* resource,
+                           const char*         title)
+{
+}
+static void
+wl_shell_surface_set_class(struct wl_client*   client,
+                           struct wl_resource* resource,
+                           const char*         class_)
+{
+}
+
+static const struct wl_shell_surface_interface
+  wl_shell_surface_implementation = {
+      .pong           = wl_shell_surface_pong,
+      .move           = wl_shell_surface_move,
+      .resize         = wl_shell_surface_resize,
+      .set_toplevel   = wl_shell_surface_set_toplevel,
+      .set_transient  = wl_shell_surface_set_transient,
+      .set_fullscreen = wl_shell_surface_set_fullscreen,
+      .set_popup      = wl_shell_surface_set_popup,
+      .set_maximized  = wl_shell_surface_set_maximized,
+      .set_title      = wl_shell_surface_set_title,
+      .set_class      = wl_shell_surface_set_class,
+  };
+
+static void
+wl_shell_get_shell_surface(struct wl_client*   client,
+                           struct wl_resource* resource,
+                           uint32_t            id,
+                           struct wl_resource* surface)
+{
+    struct wl_resource* wl_shell_surf =
+      wl_resource_create(client,
+                         &wl_shell_surface_interface,
+                         wl_resource_get_version(resource),
+                         id);
+    wl_resource_set_implementation(wl_shell_surf,
+                                   &wl_shell_surface_implementation,
+                                   wl_resource_get_user_data(resource),
+                                   NULL);
+}
+
+static const struct wl_shell_interface wl_shell_implementation = {
+    .get_shell_surface = wl_shell_get_shell_surface,
+};
+
+static __attribute__((unused)) void
+wl_global_bind_wl_shell(struct wl_client* client,
+                        void*             data,
+                        uint32_t          version,
+                        uint32_t          id)
+{
+    struct wl_resource* wl_shell =
+      wl_resource_create(client, &wl_shell_interface, version, id);
+    assert(wl_shell);
+    wl_resource_set_implementation(
+      wl_shell, &wl_shell_implementation, data, NULL);
 }
 
 void

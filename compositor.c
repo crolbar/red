@@ -250,7 +250,7 @@ red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
     if (rt->rc->wl_keyboard)
         red_keyboard_send_enter(rt->rsurf);
 
-    if (rt->rsurf)
+    if (rt->rsurf && rt->rsurf->configured)
         red_send_toplevel_configure(rt->rsurf, 1, 0);
 
     if (rs->backend->is_ready_for_frame(rs->backend->d))
@@ -291,26 +291,12 @@ red_destroy_rt(struct redstate* rs, struct redtoplevel* rt)
 #ifdef RED_DEBUG_TRACK_CLIENT_CREATION
     ROG("destroy rt %d(%s) %d", rt, rt->app_id, rt->rc->wl_client);
 #endif
-    // move focus to prev or next for now.
-    // later we should do prev focus
     if (rs->focused_rt == rt) {
         if (!rs->keyboard_focused_rsurf_exclusive)
             rs->keyboard_focused_rsurf = NULL;
         rs->pointer_focused_rsurf = NULL;
         rs->focused_rt            = NULL;
-        dll_for_each(rs->rts, v)
-        {
-            if (v->val != rt)
-                continue;
-
-            if (v->prev)
-                red_focus_rt(rs, v->prev->val);
-            else if (v->next)
-                red_focus_rt(rs, v->next->val);
-            else
-                red_focus_rt(rs, NULL);
-            break;
-        }
+        red_focus_rt(rs, rs->last_focused_rt);
     }
 
     dll_remove_val(rs->rts, rt);
