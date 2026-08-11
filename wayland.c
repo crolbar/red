@@ -385,6 +385,10 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     ROG("destroing rsurf: %d", rsurf);
 #endif
 
+    if (rsurf->rs->last_focused_rt &&
+        rsurf->rs->last_focused_rt->rsurf == rsurf)
+        rsurf->rs->last_focused_rt = NULL;
+
     if (rsurf->rs->keyboard_focused_rsurf == rsurf) {
         rsurf->rs->keyboard_focused_rsurf           = NULL;
         rsurf->rs->keyboard_focused_rsurf_exclusive = 0;

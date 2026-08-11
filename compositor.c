@@ -21,7 +21,12 @@ red_get_lc_x(struct redstate* rs)
     double x = rs->cursor_x;
 
     if (rs->pointer_focused_rsurf) {
-        uint32_t scale = red_get_scale(rs->pointer_focused_rsurf);
+        uint32_t scale = 1;
+        // TODO: better?
+        if (rs->pointer_focused_rsurf->parent)
+            scale = red_get_scale(rs->pointer_focused_rsurf->parent);
+        else
+            scale = red_get_scale(rs->pointer_focused_rsurf);
 
         // add geom of surface, because we remove it
         if (rs->pointer_focused_rsurf->xdg_toplevel &&
@@ -45,7 +50,11 @@ red_get_lc_y(struct redstate* rs)
     double y = rs->cursor_y;
 
     if (rs->pointer_focused_rsurf) {
-        uint32_t scale = red_get_scale(rs->pointer_focused_rsurf);
+        uint32_t scale = 1;
+        if (rs->pointer_focused_rsurf->parent)
+            scale = red_get_scale(rs->pointer_focused_rsurf->parent);
+        else
+            scale = red_get_scale(rs->pointer_focused_rsurf);
 
         if (rs->pointer_focused_rsurf->xdg_toplevel &&
             rs->pointer_focused_rsurf->geom_configured)
@@ -268,7 +277,7 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
         if (frt->rc->wl_keyboard)
             red_keyboard_send_leave(frt->rsurf);
 
-        if (frt->rsurf)
+        if (frt->rsurf && frt->rsurf->xdg_toplevel)
             red_send_toplevel_configure(frt->rsurf, 0, 0);
     }
     frt = NULL;
