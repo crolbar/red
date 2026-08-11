@@ -1469,16 +1469,16 @@ wl_global_bind_seat(struct wl_client* client,
 }
 
 static void
-subsurface_destroy(struct wl_client* c, struct wl_resource* r)
+wl_subsurface_destroy(struct wl_client* client, struct wl_resource* resource)
 {
-    wl_resource_destroy(r);
+    wl_resource_destroy(resource);
 }
 
 static void
-subsurface_set_position(struct wl_client*   client,
-                        struct wl_resource* resource,
-                        int32_t             x,
-                        int32_t             y)
+wl_subsurface_set_position(struct wl_client*   client,
+                           struct wl_resource* resource,
+                           int32_t             x,
+                           int32_t             y)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     rsurf->x                 = x;
@@ -1486,33 +1486,33 @@ subsurface_set_position(struct wl_client*   client,
 }
 
 static void
-subsurface_place_above(struct wl_client*   c,
-                       struct wl_resource* r,
-                       struct wl_resource* sibling)
+wl_subsurface_place_above(struct wl_client*   client,
+                          struct wl_resource* resource,
+                          struct wl_resource* sibling)
 {
 }
 static void
-subsurface_place_below(struct wl_client*   c,
-                       struct wl_resource* r,
-                       struct wl_resource* sibling)
+wl_subsurface_place_below(struct wl_client*   client,
+                          struct wl_resource* resource,
+                          struct wl_resource* sibling)
 {
 }
 static void
-subsurface_set_sync(struct wl_client* c, struct wl_resource* r)
+wl_subsurface_set_sync(struct wl_client* client, struct wl_resource* resource)
 {
 }
 static void
-subsurface_set_desync(struct wl_client* c, struct wl_resource* r)
+wl_subsurface_set_desync(struct wl_client* client, struct wl_resource* resource)
 {
 }
 
-static const struct wl_subsurface_interface subsurface_impl = {
-    .destroy      = subsurface_destroy,
-    .set_position = subsurface_set_position,
-    .place_above  = subsurface_place_above,
-    .place_below  = subsurface_place_below,
-    .set_sync     = subsurface_set_sync,
-    .set_desync   = subsurface_set_desync,
+static const struct wl_subsurface_interface wl_subsurface_implementation = {
+    .destroy      = wl_subsurface_destroy,
+    .set_position = wl_subsurface_set_position,
+    .place_above  = wl_subsurface_place_above,
+    .place_below  = wl_subsurface_place_below,
+    .set_sync     = wl_subsurface_set_sync,
+    .set_desync   = wl_subsurface_set_desync,
 };
 
 static void
@@ -1530,23 +1530,23 @@ wl_subsurface_resource_destroy(struct wl_resource* resource)
 }
 
 static void
-subcompositor_destroy(struct wl_client* c, struct wl_resource* r)
+wl_subcompositor_destroy(struct wl_client* client, struct wl_resource* resource)
 {
-    wl_resource_destroy(r);
+    wl_resource_destroy(resource);
 }
 
 static void
-subcompositor_get_subsurface(struct wl_client*   client,
-                             struct wl_resource* resource,
-                             uint32_t            id,
-                             struct wl_resource* surface_resource,
-                             struct wl_resource* parent_resource)
+wl_subcompositor_get_subsurface(struct wl_client*   client,
+                                struct wl_resource* resource,
+                                uint32_t            id,
+                                struct wl_resource* surface,
+                                struct wl_resource* parent)
 {
-    struct wl_resource* r = wl_resource_create(
+    struct wl_resource* wl_subsurface = wl_resource_create(
       client, &wl_subsurface_interface, wl_resource_get_version(resource), id);
 
-    struct redsurface* rsurf  = wl_resource_get_user_data(surface_resource);
-    struct redsurface* prsurf = wl_resource_get_user_data(parent_resource);
+    struct redsurface* rsurf  = wl_resource_get_user_data(surface);
+    struct redsurface* prsurf = wl_resource_get_user_data(parent);
 
 #ifdef RED_DEBUG_TRACK_CLIENT_CREATION
     ROG("creating SUBsurface. client: %d, rsurf: %d",
@@ -1554,119 +1554,378 @@ subcompositor_get_subsurface(struct wl_client*   client,
         rsurf);
 #endif
 
-    wl_resource_set_implementation(
-      r, &subsurface_impl, rsurf, wl_subsurface_resource_destroy);
+    wl_resource_set_implementation(wl_subsurface,
+                                   &wl_subsurface_implementation,
+                                   rsurf,
+                                   wl_subsurface_resource_destroy);
 
     rsurf->parent = prsurf;
     dll_push_tail(prsurf->subsurfs, rsurf);
 }
 
-static const struct wl_subcompositor_interface subcompositor_impl = {
-    .destroy        = subcompositor_destroy,
-    .get_subsurface = subcompositor_get_subsurface,
-};
+static const struct wl_subcompositor_interface
+  wl_subcompositor_implementation = {
+      .destroy        = wl_subcompositor_destroy,
+      .get_subsurface = wl_subcompositor_get_subsurface,
+  };
 
 static void
-bind_subcompositor(struct wl_client* client,
-                   void*             data,
-                   uint32_t          version,
-                   uint32_t          id)
+wl_global_bind_wl_subcompositor(struct wl_client* client,
+                                void*             data,
+                                uint32_t          version,
+                                uint32_t          id)
 {
-    struct wl_resource* r =
+    struct wl_resource* wl_subcompositor =
       wl_resource_create(client, &wl_subcompositor_interface, version, id);
-    wl_resource_set_implementation(r, &subcompositor_impl, data, NULL);
+    wl_resource_set_implementation(
+      wl_subcompositor, &wl_subcompositor_implementation, data, NULL);
 }
 
 static void
-data_source_offer(struct wl_client*   c,
-                  struct wl_resource* r,
-                  const char*         mime_type)
+wl_data_source_offer(struct wl_client*   client,
+                     struct wl_resource* resource,
+                     const char*         mime_type)
 {
-}
-static void
-data_source_destroy(struct wl_client* c, struct wl_resource* r)
-{
-    wl_resource_destroy(r);
-}
-static void
-data_source_set_actions(struct wl_client*   c,
-                        struct wl_resource* r,
-                        uint32_t            dnd_actions)
-{
+    struct data_source* source = wl_resource_get_user_data(resource);
+    if (!mime_type)
+        return;
+
+    char* dub_mime_type = strdup(mime_type);
+    dll_push_tail(source->mime_types, dub_mime_type);
 }
 
-static const struct wl_data_source_interface data_source_impl = {
-    .offer       = data_source_offer,
-    .destroy     = data_source_destroy,
-    .set_actions = data_source_set_actions,
+static void
+wl_data_source_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static void
+wl_data_source_set_actions(struct wl_client*   client,
+                           struct wl_resource* resource,
+                           uint32_t            dnd_actions)
+{
+    struct data_source* source = wl_resource_get_user_data(resource);
+
+    source->dnd_actions = dnd_actions;
+    source->actions_set = true;
+}
+
+static const struct wl_data_source_interface wl_data_source_implementation = {
+    .offer       = wl_data_source_offer,
+    .destroy     = wl_data_source_destroy,
+    .set_actions = wl_data_source_set_actions,
 };
 
 static void
-data_device_start_drag(struct wl_client*   client,
-                       struct wl_resource* resource,
-                       struct wl_resource* source,
-                       struct wl_resource* origin,
-                       struct wl_resource* icon,
-                       uint32_t            serial)
+wl_data_source_resource_destroy(struct wl_resource* resource)
 {
+    struct data_source* source = wl_resource_get_user_data(resource);
+    assert(source);
+
+    if (source->rs && source->rs->selection_source == source)
+        source->rs->selection_source = NULL;
+
+    dll_for_each(source->offers, v)
+    {
+        v->val->source = NULL;
+    }
+    dll_for_each(source->mime_types, v)
+    {
+        free(v->val);
+    }
+
+    dll_destroy(source->offers);
+    dll_destroy(source->mime_types);
+    free(source);
 }
 
 static void
-data_device_set_selection(struct wl_client*   client,
+wl_data_offer_accept(struct wl_client*   client,
+                     struct wl_resource* resource,
+                     uint32_t            serial,
+                     const char*         mime_type)
+{
+    struct data_offer* offer = wl_resource_get_user_data(resource);
+    if (offer->source)
+        wl_data_source_send_target(offer->source->wl_data_source, mime_type);
+}
+
+static void
+wl_data_offer_receive(struct wl_client*   client,
+                      struct wl_resource* resource,
+                      const char*         mime_type,
+                      int32_t             fd)
+{
+    struct data_offer* offer = wl_resource_get_user_data(resource);
+    if (offer->source) {
+        wl_data_source_send_send(offer->source->wl_data_source, mime_type, fd);
+    }
+    close(fd);
+}
+
+static void
+wl_data_offer_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static void
+wl_data_offer_finish(struct wl_client* client, struct wl_resource* resource)
+{
+    struct data_offer* offer = wl_resource_get_user_data(resource);
+
+    if (offer->source)
+        wl_data_source_send_dnd_finished(offer->source->wl_data_source);
+}
+
+static void
+wl_data_offer_set_actions(struct wl_client*   client,
+                          struct wl_resource* resource,
+                          uint32_t            dnd_actions,
+                          uint32_t            preferred_action)
+{
+    struct data_offer* offer = wl_resource_get_user_data(resource);
+
+    offer->actions          = dnd_actions;
+    offer->preferred_action = preferred_action;
+
+    if (!offer->source)
+        return;
+
+    uint32_t available = dnd_actions & offer->source->dnd_actions;
+    uint32_t chosen    = 0;
+    if (preferred_action & available)
+        chosen = preferred_action;
+    else if (available)
+        chosen = available & ~(available - 1);
+
+    if (wl_resource_get_version(resource) >= WL_DATA_OFFER_ACTION_SINCE_VERSION)
+        wl_data_offer_send_action(resource, chosen);
+
+    if (offer->source)
+        if (wl_resource_get_version(offer->source->wl_data_source) >=
+            WL_DATA_SOURCE_ACTION_SINCE_VERSION)
+            wl_data_source_send_action(offer->source->wl_data_source, chosen);
+}
+
+static const struct wl_data_offer_interface wl_data_offer_implementation = {
+    .accept      = wl_data_offer_accept,
+    .receive     = wl_data_offer_receive,
+    .destroy     = wl_data_offer_destroy,
+    .finish      = wl_data_offer_finish,
+    .set_actions = wl_data_offer_set_actions,
+};
+
+static void
+wl_data_offer_resource_destroy(struct wl_resource* resource)
+{
+    struct data_offer* offer = wl_resource_get_user_data(resource);
+    assert(offer);
+
+    if (offer->source)
+        dll_remove_val(offer->source->offers, offer);
+    free(offer);
+}
+
+static struct wl_resource*
+red_data_offer_create(struct wl_client*   client,
+                      uint32_t            version,
+                      struct data_source* source)
+{
+    struct data_offer* offer = calloc(1, sizeof(*offer));
+    if (!offer)
+        return NULL;
+
+    offer->wl_data_offer =
+      wl_resource_create(client, &wl_data_offer_interface, version, 0);
+    if (!offer->wl_data_offer) {
+        free(offer);
+        return NULL;
+    }
+
+    offer->actions          = 0;
+    offer->preferred_action = 0;
+    offer->source           = source;
+    dll_push_tail(source->offers, offer);
+
+    wl_resource_set_implementation(offer->wl_data_offer,
+                                   &wl_data_offer_implementation,
+                                   offer,
+                                   wl_data_offer_resource_destroy);
+
+    return offer->wl_data_offer;
+}
+
+static void
+red_data_device_offer_selection(struct data_device* device,
+                                struct data_source* source)
+{
+    if (!source) {
+        wl_data_device_send_selection(device->wl_data_device, NULL);
+        return;
+    }
+
+    struct wl_resource* offer_resource =
+      red_data_offer_create(device->wl_client,
+                            wl_resource_get_version(device->wl_data_device),
+                            source);
+    assert(offer_resource);
+
+    wl_data_device_send_data_offer(device->wl_data_device, offer_resource);
+
+    dll_for_each(source->mime_types, v)
+      wl_data_offer_send_offer(offer_resource, v->val);
+
+    wl_data_device_send_selection(device->wl_data_device, offer_resource);
+}
+
+void
+red_data_device_send_selection_to_clients(struct redstate*  rs,
+                                          struct wl_client* client)
+{
+    dll_for_each(rs->dds, v)
+    {
+        red_data_device_offer_selection(v->val, rs->selection_source);
+    }
+}
+
+static void
+wl_data_device_start_drag(struct wl_client*   client,
                           struct wl_resource* resource,
                           struct wl_resource* source,
+                          struct wl_resource* origin,
+                          struct wl_resource* icon,
                           uint32_t            serial)
 {
 }
 
 static void
-data_device_release(struct wl_client* c, struct wl_resource* r)
+wl_data_device_set_selection(struct wl_client*   client,
+                             struct wl_resource* resource,
+                             struct wl_resource* source,
+                             uint32_t            serial)
 {
-    wl_resource_destroy(r);
+    struct data_device* device = wl_resource_get_user_data(resource);
+    struct redstate*    rs     = device->rs;
+    struct data_source* new_source =
+      source ? wl_resource_get_user_data(source) : NULL;
+
+    if (rs->selection_source && rs->selection_source != new_source) {
+        wl_data_source_send_cancelled(rs->selection_source->wl_data_source);
+    }
+
+    if (new_source)
+        new_source->rs = rs;
+    rs->selection_source = new_source;
+
+    red_data_device_send_selection_to_clients(
+      rs, rs->keyboard_focused_rsurf->rc->wl_client);
 }
 
-static const struct wl_data_device_interface data_device_impl = {
-    .start_drag    = data_device_start_drag,
-    .set_selection = data_device_set_selection,
-    .release       = data_device_release,
+static void
+wl_data_device_release(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static const struct wl_data_device_interface wl_data_device_implementation = {
+    .start_drag    = wl_data_device_start_drag,
+    .set_selection = wl_data_device_set_selection,
+    .release       = wl_data_device_release,
 };
 
 static void
-data_device_manager_create_data_source(struct wl_client*   client,
-                                       struct wl_resource* resource,
-                                       uint32_t            id)
+wl_data_device_resource_destroy(struct wl_resource* resource)
 {
-    struct wl_resource* r = wl_resource_create(
-      client, &wl_data_source_interface, wl_resource_get_version(resource), id);
-    wl_resource_set_implementation(r, &data_source_impl, NULL, NULL);
+    struct data_device* dd = wl_resource_get_user_data(resource);
+    assert(dd);
+
+    dll_remove_val(dd->rs->dds, dd);
+    free(dd);
 }
 
 static void
-data_device_manager_get_data_device(struct wl_client*   client,
-                                    struct wl_resource* resource,
-                                    uint32_t            id,
-                                    struct wl_resource* seat)
+wl_data_device_manager_create_data_source(struct wl_client*   client,
+                                          struct wl_resource* resource,
+                                          uint32_t            id)
 {
-    struct wl_resource* r = wl_resource_create(
+
+    struct data_source* source;
+    source = calloc(1, sizeof(*source));
+    assert(source);
+
+    source->mime_types     = (typeof(source->mime_types))dll_init();
+    source->offers         = (typeof(source->offers))dll_init();
+    source->dnd_actions    = 0;
+    source->actions_set    = 0;
+    source->wl_data_source = wl_resource_create(
+      client, &wl_data_source_interface, wl_resource_get_version(resource), id);
+    assert(source->wl_data_source);
+
+    wl_resource_set_implementation(source->wl_data_source,
+                                   &wl_data_source_implementation,
+                                   source,
+                                   wl_data_source_resource_destroy);
+}
+
+static void
+wl_data_device_manager_get_data_device(struct wl_client*   client,
+                                       struct wl_resource* resource,
+                                       uint32_t            id,
+                                       struct wl_resource* seat)
+{
+    struct redstate* rs = wl_resource_get_user_data(seat);
+
+    struct data_device* dd;
+    dd = calloc(1, sizeof(*dd));
+    assert(dd);
+
+    struct wl_resource* wl_data_device = wl_resource_create(
       client, &wl_data_device_interface, wl_resource_get_version(resource), id);
-    wl_resource_set_implementation(r, &data_device_impl, NULL, NULL);
+    assert(wl_data_device);
+
+    dd->rs             = rs;
+    dd->wl_data_device = wl_data_device;
+    dd->wl_client      = client;
+    dll_push_tail(rs->dds, dd);
+
+    wl_resource_set_implementation(wl_data_device,
+                                   &wl_data_device_implementation,
+                                   dd,
+                                   wl_data_device_resource_destroy);
+
+    if (rs->keyboard_focused_rsurf)
+        red_data_device_offer_selection(dd, rs->selection_source);
+}
+
+static void
+wl_data_device_manager_release(struct wl_client*   client,
+                               struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
 }
 
 static const struct wl_data_device_manager_interface
-  data_device_manager_impl = {
-      .create_data_source = data_device_manager_create_data_source,
-      .get_data_device    = data_device_manager_get_data_device,
+  wl_data_device_manager_implementation = {
+      .create_data_source = wl_data_device_manager_create_data_source,
+      .get_data_device    = wl_data_device_manager_get_data_device,
+      .release            = wl_data_device_manager_release,
   };
 
 static void
-bind_data_device_manager(struct wl_client* client,
-                         void*             data,
-                         uint32_t          version,
-                         uint32_t          id)
+wl_global_bind_wl_data_device_manager(struct wl_client* client,
+                                      void*             data,
+                                      uint32_t          version,
+                                      uint32_t          id)
 {
-    struct wl_resource* r = wl_resource_create(
+    struct wl_resource* wl_data_device_manager = wl_resource_create(
       client, &wl_data_device_manager_interface, version, id);
-    wl_resource_set_implementation(r, &data_device_manager_impl, data, NULL);
+    assert(wl_data_device_manager);
+    wl_resource_set_implementation(wl_data_device_manager,
+                                   &wl_data_device_manager_implementation,
+                                   data,
+                                   NULL);
 }
 
 static void
@@ -2864,17 +3123,20 @@ init_compositor(struct redstate* rs)
         goto fail;
     }
 
-    rs->subcompositor_global = wl_global_create(
-      rs->wl_display, &wl_subcompositor_interface, 1, rs, bind_subcompositor);
-    assert(rs->subcompositor_global);
+    rs->wl_subcompositor = wl_global_create(rs->wl_display,
+                                            &wl_subcompositor_interface,
+                                            1,
+                                            rs,
+                                            wl_global_bind_wl_subcompositor);
+    assert(rs->wl_subcompositor);
 
-    rs->data_device_manager_global =
+    rs->wl_data_device_manager =
       wl_global_create(rs->wl_display,
                        &wl_data_device_manager_interface,
-                       3,
+                       4,
                        rs,
-                       bind_data_device_manager);
-    assert(rs->data_device_manager_global);
+                       wl_global_bind_wl_data_device_manager);
+    assert(rs->wl_data_device_manager);
 
     rs->xdg_decoration_manager =
       wl_global_create(rs->wl_display,

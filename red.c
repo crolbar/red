@@ -92,22 +92,22 @@ main(int argc, char** argv)
         goto end;
     }
 
-    rs->wl_display                   = NULL;
-    rs->wl_event_loop                = NULL;
-    rs->wl_compositor                = NULL;
-    rs->xdg_wm_base                  = NULL;
-    rs->xdg_decoration_manager       = NULL;
-    rs->wl_output                    = NULL;
-    rs->wl_seat                      = NULL;
-    rs->zwp_linux_dmabuf             = NULL;
-    rs->wp_viewporter                = NULL;
-    rs->zwp_relative_pointer_manager = NULL;
-    rs->zwp_pointer_constraints      = NULL;
-    rs->zwlr_layer_shell             = NULL;
-    rs->wp_presentation              = NULL;
-    rs->subcompositor_global         = NULL;
-    rs->data_device_manager_global   = NULL;
-    rs->client_created               = (struct wl_listener){};
+    rs->wl_display                    = NULL;
+    rs->wl_event_loop                 = NULL;
+    rs->wl_compositor                 = NULL;
+    rs->xdg_wm_base                   = NULL;
+    rs->xdg_decoration_manager        = NULL;
+    rs->wl_output                     = NULL;
+    rs->wl_seat                       = NULL;
+    rs->zwp_linux_dmabuf              = NULL;
+    rs->wp_viewporter                 = NULL;
+    rs->zwp_relative_pointer_manager  = NULL;
+    rs->zwp_pointer_constraints       = NULL;
+    rs->zwlr_layer_shell              = NULL;
+    rs->wp_presentation               = NULL;
+    rs->wl_subcompositor          = NULL;
+    rs->wl_data_device_manager = NULL;
+    rs->client_created                = (struct wl_listener){};
 
     rs->needs_redraw = 1;
     rs->should_draw  = 0;
@@ -146,6 +146,9 @@ main(int argc, char** argv)
     timerfd_settime(rs->tick_timer_fd, 0, &its, NULL);
 
     rs->queued_rb = NULL;
+
+    rs->dds              = (typeof(rs->dds))dll_init();
+    rs->selection_source = NULL;
 
     if (init_gl_proc()) {
         goto end;

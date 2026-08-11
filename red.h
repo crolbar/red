@@ -72,9 +72,29 @@ typedef struct redbuffer
     GLuint            rbo, fbo;
 } redbuffer;
 
-struct redsubsurface
+struct data_source
 {
-    struct redsurface* rsurf;
+    struct redstate*    rs;
+    struct wl_resource* wl_data_source;
+    dll(char*) mime_types;
+    dll(struct data_offer*) offers;
+    uint32_t dnd_actions;
+    bool     actions_set;
+};
+
+struct data_offer
+{
+    struct wl_resource* wl_data_offer;
+    struct data_source* source;
+    uint32_t            actions;
+    uint32_t            preferred_action;
+};
+
+struct data_device
+{
+    struct redstate*    rs;
+    struct wl_resource* wl_data_device;
+    struct wl_client*   wl_client;
 };
 
 enum red_surf_commited
@@ -208,22 +228,22 @@ struct redstate
     double last_frame_time;
     double frame_latency;
 
-    struct wl_display*    wl_display;
     const char*           wayland_display;
     struct wl_event_loop* wl_event_loop;
+    struct wl_display*    wl_display;
     struct wl_global*     wl_compositor;
-    struct wl_global*     xdg_wm_base;
-    struct wl_global*     xdg_decoration_manager;
     struct wl_global*     wl_output;
     struct wl_global*     wl_seat;
+    struct wl_global*     wl_subcompositor;
+    struct wl_global*     wl_data_device_manager;
+    struct wl_global*     xdg_wm_base;
+    struct wl_global*     xdg_decoration_manager;
     struct wl_global*     zwp_linux_dmabuf;
     struct wl_global*     wp_viewporter;
     struct wl_global*     zwp_relative_pointer_manager;
     struct wl_global*     zwp_pointer_constraints;
     struct wl_global*     zwlr_layer_shell;
     struct wl_global*     wp_presentation;
-    struct wl_global*     subcompositor_global;
-    struct wl_global*     data_device_manager_global;
     struct wl_listener    client_created;
 
     GLuint program;
@@ -272,6 +292,9 @@ struct redstate
 
     // runs every second
     int tick_timer_fd;
+
+    dll(struct data_device*) dds;
+    struct data_source* selection_source;
 };
 
 extern struct gl_proc* gl_proc;
