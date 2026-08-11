@@ -6,7 +6,7 @@
 - [x]wlr layers
   - [x]layer keyboard input
   - [x]layer pointer input
-  - [ ]layer in overlay plane?
+  - ~[ ]layer in overlay plane?~
 - [ ]toplevel focus switch animation
   - [ ]toplevel open/close animation?
 - [ ]ipc

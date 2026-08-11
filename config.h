@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define BIND_PRESETS(...)                                                      \
+    .bind_presets     = (redbindpreset[]){ __VA_ARGS__ },                      \
+    .bind_presets_len = (sizeof((redbindpreset[]){ __VA_ARGS__ }) /            \
+                         sizeof(((redbindpreset[]){ __VA_ARGS__ })[0])),
 #define BINDS(...)                                                             \
     .binds     = (redbind[]){ __VA_ARGS__ },                                   \
     .binds_len = (sizeof((redbind[]){ __VA_ARGS__ }) /                         \
@@ -52,6 +56,12 @@ typedef struct redmousecfg
 
 typedef char* envvar[2];
 
+typedef struct redbindpreset
+{
+    redbind* binds;
+    size_t   binds_len;
+} redbindpreset;
+
 typedef struct redconfig
 {
     char* dri_dev;
@@ -70,8 +80,9 @@ typedef struct redconfig
 
     uint32_t cursor_autohide_time;
 
-    redbind* binds;
-    size_t   binds_len;
+    uint32_t              sel_bind_preset;
+    struct redbindpreset* bind_presets;
+    size_t                bind_presets_len;
 
     bool center_cursor_hotspot;
 

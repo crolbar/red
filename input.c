@@ -255,8 +255,9 @@ input_handle_internal(struct redstate* rs, char* key_str, int press)
 int
 input_handle_binds(struct redstate* rs, char* key_str, int press)
 {
-    for (size_t i = 0; i < cfg.binds_len; i++) {
-        redbind bind = cfg.binds[i];
+    redbindpreset preset = cfg.bind_presets[cfg.sel_bind_preset];
+    for (size_t i = 0; i < preset.binds_len; i++) {
+        redbind bind = preset.binds[i];
 
         // key
         if (strcmp(bind.key, key_str) != 0)

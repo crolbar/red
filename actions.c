@@ -1,5 +1,6 @@
 #include "actions.h"
 #include "compositor.h"
+#include "config.h"
 #include "dll.h"
 #include "limits.h"
 #include "log.h"
@@ -88,6 +89,28 @@ redaction_close(struct redstate* rs, char** args, size_t args_len)
 }
 
 void
+redaction_select_bind_preset(struct redstate* rs, char** args, size_t args_len)
+{
+    if (args_len < 1)
+        return;
+    char* end;
+    int   n = (int)strtol(args[0], &end, 10);
+    if (end == args[0] || *end != '\0' || n < INT_MIN || n > INT_MAX || n < 0) {
+        ROG_ERR("invalid number in redaction_select_bind_preset: %s", args[0]);
+        return;
+    }
+    if ((uint32_t)n > cfg.bind_presets_len) {
+        ROG_ERR("number in redaction_select_bind_preset: %s, bigger than bind "
+                "prsets: %d",
+                args[0],
+                cfg.bind_presets_len);
+        return;
+    }
+
+    cfg.sel_bind_preset = n;
+}
+
+void
 redaction_stop_renderer(struct redstate* rs, char** args, size_t args_len)
 {
     if (rs->should_draw) {
@@ -165,6 +188,7 @@ ACTIONS(
     { .action_type = RED_ACTION_STOP_RENDERER, redaction_stop_renderer },
     { .action_type = RED_ACTION_FOCUS_LAST, redaction_focus_last },
     { .action_type = RED_ACTION_FOCUS_N, redaction_focus_n },
+    { .action_type = RED_ACTION_SELECT_BIND_PRESET, redaction_select_bind_preset},
 )
 // clang-format on
 

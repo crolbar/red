@@ -58,108 +58,134 @@ redconfig cfg = (redconfig){
     // will get hidden after the last motion event
     .cursor_autohide_time = 2000,
 
-    // bind that use the shift mod, should change the
-    // key - if it is a char (a - Z) - to uppercase
+    // initially selected bind preset
+    // can be changed at runtime with RED_ACTION_SELECT_BIND_PRESET
+    .sel_bind_preset = 0,
+
     // clang-format off
-    BINDS(
-        /* SERVER CONTROL */
-        {
-          .key = "F4",
-          .mods = RED_MOD_NO_MODS,
-          A( RED_ACTION_QUIT )
-        },
-        {
-          .key = "F4",
-          .mods = RED_MOD_SUPER | RED_MOD_ALT | RED_MOD_CTRL | RED_MOD_SHIFT,
-          A( RED_ACTION_QUIT )
-        },
-        {
-          .key = "R",
-          .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
-          A( RED_ACTION_STOP_RENDERER )
-        },
+    // bind presets are a way to change your binds at runtime
+    BIND_PRESETS(
+      // bind that use the shift mod, should change the
+      // key - if it is a char (a - Z) - to uppercase
+      {BINDS(
+          /* SERVER CONTROL */
+          {
+            .key = "F4",
+            .mods = RED_MOD_NO_MODS,
+            A( RED_ACTION_QUIT )
+          },
+          {
+            .key = "F4",
+            .mods = RED_MOD_SUPER | RED_MOD_ALT | RED_MOD_CTRL | RED_MOD_SHIFT,
+            A( RED_ACTION_QUIT )
+          },
+          {
+            .key = "R",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
+            A( RED_ACTION_STOP_RENDERER )
+          },
 
-        /* TOPLEVEL CONTROL */
-        {
-          .key = "Q",
-          .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
-          A( RED_ACTION_CLOSE )
-        },
-        {
-          .key = "k",
-          .mods = RED_MOD_SUPER,
-          A( RED_ACTION_FOCUS_PREV )
-        },
-        {
-          .key = "j",
-          .mods = RED_MOD_SUPER,
-          A( RED_ACTION_FOCUS_NEXT )
-        },
-        {
-          .key = "Tab",
-          .mods = RED_MOD_ALT,
-          A( RED_ACTION_FOCUS_LAST )
-        },
-        { .key = "1", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "0" ) },
-        { .key = "2", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "1" ) },
-        { .key = "3", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "2" ) },
-        { .key = "4", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "3" ) },
-        { .key = "5", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "4" ) },
-        { .key = "6", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "5" ) },
-        { .key = "7", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "6" ) },
-        { .key = "8", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "7" ) },
-        { .key = "9", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "8" ) },
-        { .key = "0", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "9" ) },
+          /* TOPLEVEL CONTROL */
+          {
+            .key = "Q",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
+            A( RED_ACTION_CLOSE )
+          },
+          {
+            .key = "k",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_FOCUS_PREV )
+          },
+          {
+            .key = "j",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_FOCUS_NEXT )
+          },
+          {
+            .key = "Tab",
+            .mods = RED_MOD_ALT,
+            A( RED_ACTION_FOCUS_LAST )
+          },
+          { .key = "1", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "0" ) },
+          { .key = "2", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "1" ) },
+          { .key = "3", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "2" ) },
+          { .key = "4", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "3" ) },
+          { .key = "5", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "4" ) },
+          { .key = "6", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "5" ) },
+          { .key = "7", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "6" ) },
+          { .key = "8", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "7" ) },
+          { .key = "9", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "8" ) },
+          { .key = "0", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "9" ) },
 
-        /* SPAWNERS */
-        {
-          .key = "x",
-          .mods = RED_MOD_SUPER,
-          A( RED_ACTION_SPAWN, "foot" )
-        },
-        {
-          .key = "r",
-          .mods = RED_MOD_SUPER,
-          A( RED_ACTION_SPAWN, "fuzzel" )
-        },
-        {
-          .key = "XF86AudioPlay",
-          .mods = RED_MOD_NO_MODS,
-          A( RED_ACTION_SPAWN, "brokctl", "play-pause")
-        },
-        {
-          .key = "XF86AudioNext",
-          .mods = RED_MOD_NO_MODS,
-          A( RED_ACTION_SPAWN, "brokctl", "next")
-        },
-        {
-          .key = "XF86AudioPrev",
-          .mods = RED_MOD_NO_MODS,
-          A( RED_ACTION_SPAWN, "brokctl", "previous")
-        },
-        {
-          .key = "X",
-          .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
-          A( RED_ACTION_SPAWN, "ghostty" )
-        },
-        {
-          .key = "s",
-          .mods = RED_MOD_SUPER,
-          A( RED_ACTION_SPAWN, "qs", "ipc", "call", "main", "toggle", "dashboard")
-        },
-        {
-          .key = "w",
-          .mods = RED_MOD_SUPER,
-          A( RED_ACTION_SPAWN, "qs", "ipc", "call", "main", "toggle", "bar")
-        },
+          /* SPAWNERS */
+          {
+            .key = "x",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_SPAWN, "foot" )
+          },
+          {
+            .key = "r",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_SPAWN, "fuzzel" )
+          },
+          {
+            .key = "XF86AudioPlay",
+            .mods = RED_MOD_NO_MODS,
+            A( RED_ACTION_SPAWN, "brokctl", "play-pause")
+          },
+          {
+            .key = "XF86AudioNext",
+            .mods = RED_MOD_NO_MODS,
+            A( RED_ACTION_SPAWN, "brokctl", "next")
+          },
+          {
+            .key = "XF86AudioPrev",
+            .mods = RED_MOD_NO_MODS,
+            A( RED_ACTION_SPAWN, "brokctl", "previous")
+          },
+          {
+            .key = "X",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
+            A( RED_ACTION_SPAWN, "ghostty" )
+          },
+          {
+            .key = "s",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_SPAWN, "qs", "ipc", "call", "main", "toggle", "dashboard")
+          },
+          {
+            .key = "w",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_SPAWN, "qs", "ipc", "call", "main", "toggle", "bar")
+          },
 
 
 
-        {
-          .key = "d",
-          .mods = RED_MOD_SUPER,
-          A( RED_ACTION_DEBUG )
-        },
+          {
+            .key = "F8",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
+            A( RED_ACTION_SELECT_BIND_PRESET, "1" )
+          },
+          {
+            .key = "d",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_DEBUG )
+          },
+      )},
+
+      {BINDS(
+          {
+            .key = "o",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_SPAWN, "ghostty" )
+          },
+
+          {
+            .key = "F8",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
+            A( RED_ACTION_SELECT_BIND_PRESET, "0" )
+          },
+      )},
     )
 
     AUTO_START(

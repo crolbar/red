@@ -2,7 +2,7 @@
 #include "config.h"
 #include "dll.h"
 #include "drm.h"
-#include "log.h"
+#include "log.h" // IWYU pragma: keep
 #include "red.h"
 #include "relative-pointer-server-protocol.h"
 #include "render.h"
