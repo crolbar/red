@@ -201,11 +201,6 @@ red_commit_handle_configure(struct redsurface* rsurf)
 {
     if (rsurf->xdg_surface) {
         if (rsurf->xdg_toplevel) {
-            struct wl_array a;
-            wl_array_init(&a);
-            xdg_toplevel_send_wm_capabilities(rsurf->xdg_toplevel, &a);
-            wl_array_release(&a);
-
             red_send_toplevel_configure(rsurf, 0, 0);
         } else if (rsurf->xdg_popup) {
             red_send_popup_configure(rsurf);
@@ -755,7 +750,15 @@ red_send_toplevel_configure(struct redsurface* rsurf,
         *s          = XDG_TOPLEVEL_STATE_MAXIMIZED;
     }
     assert(rsurf->xdg_toplevel);
-    xdg_toplevel_send_configure_bounds(rsurf->xdg_toplevel, width, height);
+    if (wl_resource_get_version(rsurf->xdg_toplevel) > 4) {
+        struct wl_array a;
+        wl_array_init(&a);
+        xdg_toplevel_send_wm_capabilities(rsurf->xdg_toplevel, &a);
+        wl_array_release(&a);
+    }
+
+    if (wl_resource_get_version(rsurf->xdg_toplevel) > 3)
+        xdg_toplevel_send_configure_bounds(rsurf->xdg_toplevel, width, height);
     xdg_toplevel_send_configure(rsurf->xdg_toplevel, width, height, &states);
     wl_array_release(&states);
 
@@ -1211,7 +1214,8 @@ wl_global_bind_output(struct wl_client* client,
         wl_output_send_description(wl_output,
                                    "Dell Inc. - DELL S2725QS - DP-1");
     }
-    wl_output_send_done(wl_output);
+    if (version >= 2)
+        wl_output_send_done(wl_output);
 }
 
 static void
@@ -1317,7 +1321,9 @@ red_pointer_send_enter(struct redclient* rc, struct wl_resource* wl_surface)
     wl_fixed_t x      = wl_fixed_from_double(red_get_lc_x(rc->rs));
     wl_fixed_t y      = wl_fixed_from_double(red_get_lc_y(rc->rs));
     wl_pointer_send_enter(rc->wl_pointer, serial, wl_surface, x, y);
-    wl_pointer_send_frame(rc->wl_pointer);
+    if (wl_resource_get_version(rc->wl_pointer) >=
+        WL_POINTER_FRAME_SINCE_VERSION)
+        wl_pointer_send_frame(rc->wl_pointer);
     return 0;
 }
 
@@ -1326,7 +1332,9 @@ red_pointer_send_leave(struct redclient* rc, struct wl_resource* wl_surface)
 {
     uint32_t serial = wl_display_next_serial(rc->rs->wl_display);
     wl_pointer_send_leave(rc->wl_pointer, serial, wl_surface);
-    wl_pointer_send_frame(rc->wl_pointer);
+    if (wl_resource_get_version(rc->wl_pointer) >=
+        WL_POINTER_FRAME_SINCE_VERSION)
+        wl_pointer_send_frame(rc->wl_pointer);
     return 0;
 }
 
@@ -2381,8 +2389,11 @@ wp_presentation_feedback(struct wl_client*   client,
     struct redstate* rs = wl_resource_get_user_data(resource);
     assert(rs);
 
-    struct wl_resource* pres_cb = wl_resource_create(
-      client, &wp_presentation_feedback_interface, 2, callback);
+    struct wl_resource* pres_cb =
+      wl_resource_create(client,
+                         &wp_presentation_feedback_interface,
+                         wl_resource_get_version(resource),
+                         callback);
     assert(pres_cb);
     wl_resource_set_implementation(pres_cb, NULL, NULL, NULL);
 
@@ -2794,7 +2805,7 @@ init_compositor(struct redstate* rs)
 
     rs->wl_compositor = wl_global_create(rs->wl_display,
                                          &wl_compositor_interface,
-                                         6,
+                                         7,
                                          rs,
                                          wl_global_bind_compositor);
     if (!rs->wl_compositor) {
@@ -2804,7 +2815,7 @@ init_compositor(struct redstate* rs)
 
     rs->xdg_wm_base = wl_global_create(rs->wl_display,
                                        &xdg_wm_base_interface,
-                                       6,
+                                       7,
                                        rs,
                                        wl_global_bind_xdg_wm_base);
     if (!rs->xdg_wm_base) {
