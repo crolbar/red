@@ -184,6 +184,9 @@ int
 red_current_buffer_release(struct redsurface* rsurf)
 {
     assert(rsurf->current_buffer);
+#ifdef RED_DEBUG_TRACK_SURFACE_BUFS
+    ROG("releasing buf: %d rsurf: %d", rsurf->current_buffer, rsurf);
+#endif
 
     // if the attached pending buffer is the same as the one
     // we are currently holding, we do not send release
@@ -221,9 +224,9 @@ red_commit_handle_attach(struct redsurface* rsurf)
     if (rsurf->pending_buffer == NULL)
         ROG("pending buffer NULL. handle!")
 
-    // when we are still holding the buffer and its not shm one
-    // it should be a dmabuf, that should be released now
-    if (rsurf->current_buffer && !wl_shm_buffer_get(rsurf->current_buffer))
+    // mostly this should be a dmabuf, that should be released now
+    // also can be a shmbuf that we did not use to draw
+    if (rsurf->current_buffer)
         red_current_buffer_release(rsurf);
 
     rsurf->current_buffer = rsurf->pending_buffer;
@@ -256,9 +259,13 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     ROG("comm pending: %d, current: %d",
         rsurf->pending_buffer,
         rsurf->current_buffer)
-    if (surf_is_focused)
-        ROG("req redraw")
 #endif
+
+    // handle attached buffer
+    if (rsurf->commited & RED_SURF_COMMITED_BUFFER)
+        red_commit_handle_attach(rsurf);
+
+    rsurf->commited = 0;
 
     // on first commit, configure surface
     if ((rsurf->xdg_surface || rsurf->zwlr_layer_surface) &&
@@ -266,12 +273,6 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
         red_commit_handle_configure(rsurf);
         return;
     }
-
-    // handle attached buffer
-    if (rsurf->commited & RED_SURF_COMMITED_BUFFER)
-        red_commit_handle_attach(rsurf);
-
-    rsurf->commited = 0;
 
     // NOTE: redsurfaces that are on background
     // do not need redraw or frame callback
@@ -283,6 +284,9 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
 
     return;
 req_redraw:
+#ifdef RED_DEBUG_TRACK_SURFACE_BUFS
+    ROG("req redraw")
+#endif
     request_redraw(rsurf->rs);
 }
 
@@ -391,6 +395,9 @@ wl_surface_resource_destroy(struct wl_resource* resource)
 
     if (rsurf->rs->pointer_focused_rsurf == rsurf)
         rsurf->rs->pointer_focused_rsurf = NULL;
+
+    if (rsurf->current_buffer)
+        red_current_buffer_release(rsurf);
 
     dll_remove_val(rsurf->rs->layer_rsurfs, rsurf);
 
@@ -653,12 +660,16 @@ static void
 xdg_toplevel_set_maximized(struct wl_client*   client,
                            struct wl_resource* resource)
 {
+    struct redtoplevel* rt = resource->data;
+    red_send_toplevel_configure(rt->rsurf, 1, 0);
 }
 
 static void
 xdg_toplevel_unset_maximized(struct wl_client*   client,
                              struct wl_resource* resource)
 {
+    struct redtoplevel* rt = resource->data;
+    red_send_toplevel_configure(rt->rsurf, 1, 0);
 }
 
 static void
@@ -666,18 +677,24 @@ xdg_toplevel_set_fullscreen(struct wl_client*   client,
                             struct wl_resource* resource,
                             struct wl_resource* output)
 {
+    struct redtoplevel* rt = resource->data;
+    red_send_toplevel_configure(rt->rsurf, 1, 0);
 }
 
 static void
 xdg_toplevel_unset_fullscreen(struct wl_client*   client,
                               struct wl_resource* resource)
 {
+    struct redtoplevel* rt = resource->data;
+    red_send_toplevel_configure(rt->rsurf, 1, 0);
 }
 
 static void
 xdg_toplevel_set_minimized(struct wl_client*   client,
                            struct wl_resource* resource)
 {
+    struct redtoplevel* rt = resource->data;
+    red_send_toplevel_configure(rt->rsurf, 1, 0);
 }
 
 static const struct xdg_toplevel_interface xdg_toplevel_implementation = {
@@ -722,6 +739,10 @@ red_send_toplevel_configure(struct redsurface* rsurf,
                             int                activated,
                             int                resizing)
 {
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG(
+      "sendig tl configure. client: %d, rsurf: %d", rsurf->rc->wl_client, rsurf)
+#endif
     // rsurf->configured = 0;
 
     uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
@@ -1526,6 +1547,12 @@ subcompositor_get_subsurface(struct wl_client*   client,
 
     struct redsurface* rsurf  = wl_resource_get_user_data(surface_resource);
     struct redsurface* prsurf = wl_resource_get_user_data(parent_resource);
+
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("creating SUBsurface. client: %d, rsurf: %d",
+        rsurf->rc->wl_client,
+        rsurf);
+#endif
 
     wl_resource_set_implementation(
       r, &subsurface_impl, rsurf, wl_subsurface_resource_destroy);
