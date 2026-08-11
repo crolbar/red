@@ -13,6 +13,7 @@
 - [ ]windows like alt-tap with quickshell
 
 - [ ]run through valgrind (proper memory management)
+- [ ]make vt recover on crash
 
 - [x]dmabuf
 - [x]refac gbm.c

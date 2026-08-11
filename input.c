@@ -54,7 +54,7 @@ xkb_init_keyboard(struct redstate* rs)
             .rules   = cfg.xkb_rules,
             .model   = cfg.xkb_model,
             .layout  = cfg.xkb_layout,
-            .variant = cfg.xkb_variant,
+            .variant = "", // TODO fix variants
             .options = "",
         };
 

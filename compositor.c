@@ -296,7 +296,25 @@ red_destroy_rt(struct redstate* rs, struct redtoplevel* rt)
             rs->keyboard_focused_rsurf = NULL;
         rs->pointer_focused_rsurf = NULL;
         rs->focused_rt            = NULL;
-        red_focus_rt(rs, rs->last_focused_rt);
+
+        // first if there is last focus, focus it
+        if (rs->last_focused_rt) {
+            red_focus_rt(rs, rs->last_focused_rt);
+        }
+        // if no last, focus prev neighbour
+        else if (rs->rts.tail) {
+            dll_for_each(rs->rts, v)
+            {
+                if (v->val == rt) {
+                    if (v->prev)
+                        red_focus_rt(rs, v->prev->val);
+                    else
+                        red_focus_rt(rs, NULL);
+                    break;
+                }
+            }
+        } else
+            red_focus_rt(rs, NULL);
     }
 
     dll_remove_val(rs->rts, rt);
