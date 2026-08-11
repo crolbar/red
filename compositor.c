@@ -20,13 +20,13 @@ red_get_lc_x(struct redstate* rs)
 {
     double x = rs->cursor_x;
 
-    // add decorations in account
-    if (rs->focused_rt && rs->focused_rt->rsurf) {
-        uint32_t scale = red_get_scale(rs->focused_rt->rsurf);
+    if (rs->pointer_focused_rsurf) {
+        uint32_t scale = red_get_scale(rs->pointer_focused_rsurf);
 
         // add geom of surface, because we remove it
-        if (rs->focused_rt->rsurf->geom_configured)
-            x += rs->focused_rt->rsurf->geom_x;
+        if (rs->pointer_focused_rsurf->xdg_toplevel &&
+            rs->pointer_focused_rsurf->geom_configured)
+            x += rs->pointer_focused_rsurf->geom_x;
 
         if (rs->pointer_focused_rsurf)
             x -= red_get_rsurf_x(rs->pointer_focused_rsurf);
@@ -44,11 +44,12 @@ red_get_lc_y(struct redstate* rs)
 {
     double y = rs->cursor_y;
 
-    if (rs->focused_rt && rs->focused_rt->rsurf) {
-        uint32_t scale = red_get_scale(rs->focused_rt->rsurf);
+    if (rs->pointer_focused_rsurf) {
+        uint32_t scale = red_get_scale(rs->pointer_focused_rsurf);
 
-        if (rs->focused_rt->rsurf->geom_configured)
-            y += rs->focused_rt->rsurf->geom_y;
+        if (rs->pointer_focused_rsurf->xdg_toplevel &&
+            rs->pointer_focused_rsurf->geom_configured)
+            y += rs->pointer_focused_rsurf->geom_y;
 
         if (rs->pointer_focused_rsurf)
             y -= red_get_rsurf_y(rs->pointer_focused_rsurf);
