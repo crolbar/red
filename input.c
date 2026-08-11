@@ -18,67 +18,96 @@
 int
 xkb_init_keyboard(struct redstate* rs)
 {
-    struct xkb_keymap*    keymap;
-    struct xkb_rule_names names = {
-        .rules   = cfg.xkb_rules,
-        .model   = cfg.xkb_model,
-        .layout  = cfg.xkb_layout,
-        .variant = cfg.xkb_variant,
-        .options = cfg.xkb_options,
-    };
+    struct xkb_keymap* red_keymap = NULL;
+    struct xkb_state*  state      = NULL;
+    {
+        struct xkb_rule_names names = {
+            .rules   = cfg.xkb_rules,
+            .model   = cfg.xkb_model,
+            .layout  = cfg.xkb_layout,
+            .variant = cfg.xkb_variant,
+            .options = cfg.xkb_options,
+        };
 
-    keymap = xkb_keymap_new_from_names2(
-      rs->xkb, &names, XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
-    if (!keymap) {
-        ROG_ERR("failed to create xkb keymap");
-        return 1;
+        red_keymap = xkb_keymap_new_from_names2(rs->xkb,
+                                                &names,
+                                                XKB_KEYMAP_FORMAT_TEXT_V1,
+                                                XKB_KEYMAP_COMPILE_NO_FLAGS);
+        if (!red_keymap) {
+            ROG_ERR("failed to create xkb keymap");
+            return 1;
+        }
+
+        state = xkb_state_new(red_keymap);
+        if (!state) {
+            ROG_ERR("xkb failed to create state from kemap");
+            return 1;
+        }
     }
 
-    char* keymap_string =
-      xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
-    size_t keymap_size = strlen(keymap_string) + 1;
-    if (keymap_size <= 0) {
-        ROG_ERR("failed to create xkb keymap string");
-        return 1;
-    }
+    char*  keymap_string = NULL;
+    size_t keymap_size   = 0;
+    int    fd            = -1;
 
-    char name[64];
-    snprintf(name, sizeof(name), "/wl_red_xkb_keymap-%d", getpid());
-    int fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
-    shm_unlink(name);
-    if (fd < 0) {
-        ROG_ERR(" xkb keymap failed creating shm");
-        return 1;
-    }
+    {
+        struct xkb_rule_names names = {
+            .rules   = cfg.xkb_rules,
+            .model   = cfg.xkb_model,
+            .layout  = cfg.xkb_layout,
+            .variant = cfg.xkb_variant,
+            .options = "",
+        };
 
-    if (ftruncate(fd, keymap_size) == -1) {
-        ROG_ERR("xkb keymap fd shm setting size failed");
-        close(fd);
-        return 1;
-    }
-    void* ptr =
-      mmap(NULL, keymap_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (ptr == MAP_FAILED) {
-        ROG_ERR("xkb keymap fd shm failed to mnap failed");
-        close(fd);
-        return 1;
-    }
-    memcpy(ptr, keymap_string, keymap_size);
+        struct xkb_keymap* keymap =
+          xkb_keymap_new_from_names2(rs->xkb,
+                                     &names,
+                                     XKB_KEYMAP_FORMAT_TEXT_V1,
+                                     XKB_KEYMAP_COMPILE_NO_FLAGS);
+        if (!keymap) {
+            ROG_ERR("failed to create xkb keymap");
+            return 1;
+        }
 
-    struct xkb_state* state = xkb_state_new(keymap);
-    if (!state) {
-        ROG_ERR("xkb failed to create state from kemap");
-        close(fd);
-        return 1;
-    }
+        keymap_string =
+          xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
+        keymap_size = strlen(keymap_string) + 1;
+        if (keymap_size <= 0) {
+            ROG_ERR("failed to create xkb keymap string");
+            return 1;
+        }
 
-    xkb_keymap_unref(keymap);
+        char name[64];
+        snprintf(name, sizeof(name), "/wl_red_xkb_keymap-%d", getpid());
+        fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
+        shm_unlink(name);
+        if (fd < 0) {
+            ROG_ERR(" xkb keymap failed creating shm");
+            return 1;
+        }
+
+        if (ftruncate(fd, keymap_size) == -1) {
+            ROG_ERR("xkb keymap fd shm setting size failed");
+            close(fd);
+            return 1;
+        }
+        void* ptr =
+          mmap(NULL, keymap_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (ptr == MAP_FAILED) {
+            ROG_ERR("xkb keymap fd shm failed to mnap failed");
+            close(fd);
+            return 1;
+        }
+        memcpy(ptr, keymap_string, keymap_size);
+
+        xkb_keymap_unref(keymap);
+    }
+    xkb_keymap_unref(red_keymap);
 
     rs->xkb_keymap_size   = keymap_size;
     rs->xkb_keymap_string = keymap_string;
     rs->xkb_keymap_fd     = fd;
     rs->xkb_state         = state;
-    rs->xkb_keymap        = keymap;
+    rs->xkb_keymap        = red_keymap;
 
     return 0;
 }
