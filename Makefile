@@ -13,6 +13,7 @@ SRC = red.c \
 		log.c \
 		signals.c \
 		vt.c \
+		ipc.c \
 		config.c \
 		gbm.c \
 		render.c \

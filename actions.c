@@ -201,7 +201,8 @@ exec_action(struct redstate* rs, char** action, size_t action_len)
     }
 
     for (size_t i = 0; i < redactions_len; i++) {
-        if (action[0] != redactions[i].action_type)
+        // TODO: remove this, make action_type a numebr not a string
+        if (strcmp(action[0], redactions[i].action_type) != 0)
             continue;
         // found action, now exec it
         redactions[i].f(rs, ++action, --action_len);

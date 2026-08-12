@@ -11,6 +11,7 @@
 #include "dll.h"
 #include "drm.h"
 #include "input.h"
+#include "ipc.h"
 #include "log.h"
 #include "opengl.h"
 #include "red.h"
@@ -53,10 +54,11 @@ main(int argc, char** argv)
 
     rs->sig_fd           = -1;
     rs->tty_fd           = -1;
+    rs->ipc_fd           = -1;
     rs->li_fd            = -1;
     rs->backend_fd       = -1;
     rs->wl_event_loop_fd = -1;
-    rs->pfds             = (struct pollfd[__REDPFDS_SIZE]){
+    rs->pfds = (struct pollfd[__REDPFDS_SIZE + RED_IPC_MAX_CLIENTS]){
         [RFD_LIBINPUT]   = { .fd = -1, .events = POLLIN },
         [RFD_SIGNALS]    = { .fd = -1, .events = POLLIN },
         [RFD_BACKEND]    = { .fd = -1, .events = POLLIN },
@@ -64,6 +66,7 @@ main(int argc, char** argv)
         [RFD_CURSOR]     = { .fd = -1, .events = POLLIN },
         [RFD_REDRAWSYNC] = { .fd = -1, .events = POLLIN },
         [RFD_TICK]       = { .fd = -1, .events = POLLIN },
+        [RFD_IPC]        = { .fd = -1, .events = POLLIN },
     };
     rs->li                = NULL;
     rs->active            = 1;
@@ -92,22 +95,22 @@ main(int argc, char** argv)
         goto end;
     }
 
-    rs->wl_display                    = NULL;
-    rs->wl_event_loop                 = NULL;
-    rs->wl_compositor                 = NULL;
-    rs->xdg_wm_base                   = NULL;
-    rs->xdg_decoration_manager        = NULL;
-    rs->wl_output                     = NULL;
-    rs->wl_seat                       = NULL;
-    rs->zwp_linux_dmabuf              = NULL;
-    rs->wp_viewporter                 = NULL;
-    rs->zwp_relative_pointer_manager  = NULL;
-    rs->zwp_pointer_constraints       = NULL;
-    rs->zwlr_layer_shell              = NULL;
-    rs->wp_presentation               = NULL;
-    rs->wl_subcompositor          = NULL;
-    rs->wl_data_device_manager = NULL;
-    rs->client_created                = (struct wl_listener){};
+    rs->wl_display                   = NULL;
+    rs->wl_event_loop                = NULL;
+    rs->wl_compositor                = NULL;
+    rs->xdg_wm_base                  = NULL;
+    rs->xdg_decoration_manager       = NULL;
+    rs->wl_output                    = NULL;
+    rs->wl_seat                      = NULL;
+    rs->zwp_linux_dmabuf             = NULL;
+    rs->wp_viewporter                = NULL;
+    rs->zwp_relative_pointer_manager = NULL;
+    rs->zwp_pointer_constraints      = NULL;
+    rs->zwlr_layer_shell             = NULL;
+    rs->wp_presentation              = NULL;
+    rs->wl_subcompositor             = NULL;
+    rs->wl_data_device_manager       = NULL;
+    rs->client_created               = (struct wl_listener){};
 
     rs->needs_redraw = 1;
     rs->should_draw  = 0;
@@ -149,6 +152,12 @@ main(int argc, char** argv)
 
     rs->dds              = (typeof(rs->dds))dll_init();
     rs->selection_source = NULL;
+
+    rs->ipc_client_fds = (typeof(rs->ipc_client_fds))dll_init();
+
+    if (ipc_update_pfds(rs)) {
+        goto end;
+    }
 
     if (init_gl_proc()) {
         goto end;
@@ -196,9 +205,6 @@ main(int argc, char** argv)
 
     init_compositor(rs);
 
-    init_env_vars();
-    init_auto_start_progs();
-
     if ((rs->li_fd = libinput_get_fd(rs->li)) < 0) {
         ROG_ERR("failed get libinput fd: %s", strerror(errno));
         goto end;
@@ -213,25 +219,43 @@ main(int argc, char** argv)
         goto end;
     }
 
+    if ((rs->ipc_fd = init_ipc()) < 0) {
+        ROG_ERR("failed to open unix socket for ipc");
+        goto end;
+    }
+
     rs->pfds[RFD_LIBINPUT].fd = rs->li_fd;
     rs->pfds[RFD_SIGNALS].fd  = rs->sig_fd;
     rs->pfds[RFD_BACKEND].fd  = rs->backend_fd;
     rs->pfds[RFD_WAYLAND].fd  = rs->wl_event_loop_fd;
     rs->pfds[RFD_CURSOR].fd   = rs->cursor_hide_timer_fd;
     rs->pfds[RFD_TICK].fd     = rs->tick_timer_fd;
+    rs->pfds[RFD_IPC].fd      = rs->ipc_fd;
+
+    init_env_vars();
+    init_auto_start_progs();
 
     ROG_INFO("Starting loop...");
     while (!rs->should_quit) {
         wl_display_flush_clients(rs->wl_display);
         rs->backend->flush_events(rs->backend->d);
 
-        if (poll(rs->pfds, __REDPFDS_SIZE, -1) == -1) {
+        int nfds = __REDPFDS_SIZE + rs->ipc_client_fds.size;
+        int ret  = poll(rs->pfds, nfds, -1);
+        if (ret == -1) {
             ROG_ERR("poll fds error");
             goto end;
         }
 
         if (rs->pfds[RFD_BACKEND].revents & POLLIN || rs->is_wayland_client)
             rs->backend->handle_events(rs->backend->d);
+
+        for (size_t i = 0; i < rs->ipc_client_fds.size; i++) {
+            if (rs->pfds[__REDPFDS_SIZE + i].revents &
+                (POLLIN | POLLERR | POLLHUP)) {
+                ipc_proccess_client_msg(rs, rs->pfds[__REDPFDS_SIZE + i].fd);
+            }
+        }
 
         enum redpfds revent_pfd;
         do {
@@ -298,6 +322,12 @@ main(int argc, char** argv)
 
                     red_on_tick(rs);
                     break;
+                }
+
+                case RFD_IPC: {
+                    if (ipc_accept_conn(rs))
+                        ROG_ERR("falied to accept ipc connection: %s",
+                                strerror(errno));
                 }
 
                 case __REDPFDS_SIZE:

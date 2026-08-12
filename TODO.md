@@ -9,7 +9,7 @@
   - ~[ ]layer in overlay plane?~
 - [ ]toplevel focus switch animation
   - [ ]toplevel open/close animation?
-- [ ]ipc
+- [x]ipc
 - [ ]windows like alt-tap with quickshell
 
 - [ ]run through valgrind (proper memory management)
@@ -35,6 +35,7 @@
 - [x]modifiers on fbs
 - [ ]gl error catching
 
+- [ ]middle mouse button scroll
 - [ ]zoom like magnifier
 - [ ]screenshots
 - [ ]screencast

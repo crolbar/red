@@ -199,6 +199,7 @@ enum redpfds
     RFD_CURSOR,
     RFD_REDRAWSYNC,
     RFD_TICK,
+    RFD_IPC,
     __REDPFDS_SIZE,
     __REDPFDS_NONE,
 };
@@ -212,6 +213,7 @@ struct redstate
 
     int tty_fd;
     int sig_fd;
+    int ipc_fd;
     int li_fd;
     int backend_fd;
     int wl_event_loop_fd;
@@ -295,6 +297,8 @@ struct redstate
 
     dll(struct data_device*) dds;
     struct data_source* selection_source;
+
+    dll(int) ipc_client_fds;
 };
 
 extern struct gl_proc* gl_proc;
