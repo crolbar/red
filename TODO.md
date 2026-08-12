@@ -10,6 +10,7 @@
 - [ ]toplevel focus switch animation
   - [ ]toplevel open/close animation?
 - [x]ipc
+  - [ ]sub for updates
 - [ ]windows like alt-tap with quickshell
 
 - [ ]run through valgrind (proper memory management)

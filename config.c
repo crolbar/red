@@ -56,7 +56,7 @@ redconfig cfg = (redconfig){
 
     // center the cursor hotspot in the middle of the
     // exported image in red_cursor.c
-    .center_cursor_hotspot = true,
+    .center_cursor_hotspot = false,
 
     // time in miliseconds that the cursor
     // will get hidden after the last motion event
@@ -194,6 +194,7 @@ redconfig cfg = (redconfig){
 
     AUTO_START(
         PROG("bash", "-c", "xwayland-satellite :67"),
+        PROG("bash", "-c", "dunst"),
         PROG("bash", "-c", "foot"),
     )
 
