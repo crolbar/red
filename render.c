@@ -161,22 +161,40 @@ fail:
     return 1;
 }
 
-int
-render_subsurfs(struct redsurface* rsurf,
-                uint32_t           screen_width,
-                uint32_t           screen_height)
+static int
+_render_subsurfs_r(struct redsurface* rsurf,
+                   uint32_t           screen_width,
+                   uint32_t           screen_height,
+                   int                animating)
 {
-    if (rsurf->subsurfs.size == 0)
-        return 0;
-
     dll_for_each(rsurf->subsurfs, v)
     {
-        if (render_surface(rsurf->rs, v->val, screen_width, screen_height, 0))
+        if (render_surface(
+              rsurf->rs, v->val, screen_width, screen_height, animating))
             return 1;
 
-        if (render_subsurfs(v->val, screen_width, screen_height))
+        if (_render_subsurfs_r(v->val, screen_width, screen_height, animating))
             return 1;
     }
+
+    return 0;
+}
+
+int
+render_toplevel(struct redtoplevel* rt,
+                uint32_t            screen_width,
+                uint32_t            screen_height,
+                int                 animating)
+{
+    if (!rt->rsurf)
+        return 0;
+
+    if (render_surface(
+          rt->rs, rt->rsurf, screen_width, screen_height, animating))
+        return 1;
+
+    if (_render_subsurfs_r(rt->rsurf, screen_width, screen_height, animating))
+        return 1;
 
     return 0;
 }
@@ -204,19 +222,12 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
 
     // render toplevel
     else if (rs->focused_rt) {
-        struct redsurface* rsurf;
-        if (!(rsurf = rs->focused_rt->rsurf))
-            return 0;
-
-        if (render_surface(rs, rsurf, width, height, 0))
-            goto fail;
-        if (render_subsurfs(rsurf, width, height))
+        if (render_toplevel(rs->focused_rt, width, height, 0))
             goto fail;
 
-        if (rs->animation_value != 0)
-            if (rs->last_focused_rt && rs->last_focused_rt->rsurf)
-                render_surface(
-                  rs, rs->last_focused_rt->rsurf, width, height, 1);
+        if (rs->animation_value != 0 && rs->last_focused_rt)
+            if (render_toplevel(rs->last_focused_rt, width, height, 1))
+                goto fail;
     }
 
     // render background color
