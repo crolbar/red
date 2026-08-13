@@ -72,7 +72,8 @@ main(int argc, char** argv)
     rs->active            = 1;
     rs->should_quit       = 0;
     rs->time_start        = time_get_now();
-    rs->last_frame_time   = time_get_elapsed_sec(rs->time_start);
+    rs->last_frame_time   = 0;
+    rs->frame_latency     = 0;
     rs->is_wayland_client = false;
     if (!getenv("RED_DONT_SPAWN_CLIENT"))
         if (getenv("WAYLAND_DISPLAY") ||
@@ -137,11 +138,13 @@ main(int argc, char** argv)
     rs->cursor_locked           = 0;
     rs->cursor_hidden           = 0;
 
-    rs->program           = 0;
-    rs->vao               = 0;
-    rs->vbo               = 0;
-    rs->texture_loc       = 0;
-    rs->dimentions_loc    = 0;
+    rs->program        = 0;
+    rs->vao            = 0;
+    rs->vbo            = 0;
+    rs->texture_loc    = 0;
+    rs->dimentions_loc = 0;
+    rs->anim_loc       = 0;
+
     struct itimerspec its = {
         .it_value    = { .tv_sec = 1, 0 },
         .it_interval = { .tv_sec = 1, 0 },
@@ -154,6 +157,8 @@ main(int argc, char** argv)
     rs->selection_source = NULL;
 
     rs->ipc_client_fds = (typeof(rs->ipc_client_fds))dll_init();
+
+    rs->animation_value = 0;
 
     if (ipc_update_pfds(rs)) {
         goto end;

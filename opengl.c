@@ -10,11 +10,20 @@
 static const char* vertex_shader_src = "\
 #version 300 es\n\
 precision highp float;\n\
+vec2 anim(float av, vec2 pos) {\n\
+    vec2 p = pos;\n\
+    mat2 tmat = mat2(1.0, av, av, 1.0);\n\
+    p *= tmat;\n\
+    p = max(vec2(-1, -1), min(vec2(1, 1), p));\n\
+    return p;\n\
+}\n\
+uniform float av;\n\
 uniform vec2 dim[3];\n\
 in vec2 pos;\n\
 out vec2 v_uv;\n\
 void main() {\n\
     vec2 p = pos;\n\
+    if (av != 0.0) p = anim(av, p);\n\
     p *= vec2(dim[1][0], dim[1][1]);\n\
     p -= vec2(abs(dim[1][0] - dim[2][0]), abs(dim[1][1] - dim[2][1]));\n\
     p *= vec2(1.0 / dim[2][0], 1.0 / dim[2][1]);\n\
@@ -96,9 +105,10 @@ gl_setup_program(struct redstate* rs)
     if (ok == GL_FALSE)
         return 0;
 
-    rs->texture_loc    = glGetAttribLocation(rs->program, "u_texture");
     GLuint pos         = glGetAttribLocation(rs->program, "pos");
+    rs->texture_loc    = glGetAttribLocation(rs->program, "u_texture");
     rs->dimentions_loc = glGetUniformLocation(rs->program, "dim");
+    rs->anim_loc       = glGetUniformLocation(rs->program, "av");
 
     const float vertices[] = {
         -1, -1, // top left

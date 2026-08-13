@@ -7,11 +7,12 @@
   - [x]layer keyboard input
   - [x]layer pointer input
   - ~[ ]layer in overlay plane?~
-- [ ]toplevel focus switch animation
-  - [ ]toplevel open/close animation?
+- [x]toplevel focus switch animation
+  - ~[ ]toplevel open/close animation?~
 - [x]ipc
   - [ ]sub for updates
 - [ ]windows like alt-tap with quickshell
+- [ ]put window in overlay plane (kind of like a float window)
 
 - [ ]run through valgrind (proper memory management)
 - [ ]make vt recover on crash

@@ -4,7 +4,6 @@
 #include "opengl.h"
 #include "red.h"
 #include "render.h"
-#include "time.h"
 #include <GLES3/gl3.h>
 #include <unistd.h>
 
@@ -111,7 +110,8 @@ int
 render_surface(struct redstate*   rs,
                struct redsurface* rsurf,
                uint32_t           screen_width,
-               uint32_t           screen_height)
+               uint32_t           screen_height,
+               int                animating)
 {
     if (!rsurf->current_buffer) {
         // if buff is null but we have tex while shm buf,
@@ -142,7 +142,7 @@ render_surface(struct redstate*   rs,
                         screen_width,
                         screen_height,
                       }));
-
+    CALL(glUniform1f(rs->anim_loc, (animating) ? rs->animation_value : 0));
     CALL(glBindVertexArray(rs->vao));
 
     CALL(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
@@ -171,7 +171,7 @@ render_subsurfs(struct redsurface* rsurf,
 
     dll_for_each(rsurf->subsurfs, v)
     {
-        if (render_surface(rsurf->rs, v->val, screen_width, screen_height))
+        if (render_surface(rsurf->rs, v->val, screen_width, screen_height, 0))
             return 1;
 
         if (render_subsurfs(v->val, screen_width, screen_height))
@@ -208,10 +208,15 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
         if (!(rsurf = rs->focused_rt->rsurf))
             return 0;
 
-        if (render_surface(rs, rsurf, width, height))
+        if (render_surface(rs, rsurf, width, height, 0))
             goto fail;
         if (render_subsurfs(rsurf, width, height))
             goto fail;
+
+        if (rs->animation_value != 0)
+            if (rs->last_focused_rt && rs->last_focused_rt->rsurf)
+                render_surface(
+                  rs, rs->last_focused_rt->rsurf, width, height, 1);
     }
 
     // render background color
@@ -222,7 +227,7 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
 
     dll_for_each(rs->layer_rsurfs, v)
     {
-        render_surface(rs, v->val, width, height);
+        render_surface(rs, v->val, width, height, 0);
     }
 
     if (!rs->using_hardware_cursor)
@@ -245,13 +250,6 @@ redraw(struct redstate* rs)
 {
     if (!rs->should_draw || !rs->needs_redraw)
         return;
-
-    {
-        double now          = time_get_elapsed_sec(rs->time_start);
-        double dt           = (now - rs->last_frame_time) * 1000;
-        rs->last_frame_time = now;
-        rs->frame_latency   = dt;
-    }
 
     redbuffer* rb = rs->backend->pull_buffer(rs->backend->d);
     {

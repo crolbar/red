@@ -83,11 +83,26 @@ red_on_frame_done(struct redstate* rs, uint32_t time_msec)
     ROG("frame done");
 #endif
 
-    if (rs->focused_rt)
-        red_handle_send_callbacks(rs->focused_rt->rsurf, time_msec);
+    {
+        uint64_t now = time_get_now_msec();
+        // clamping to 16ms because we don't page flip on every vblank
+        rs->frame_latency   = min(now - rs->last_frame_time, 16);
+        rs->last_frame_time = now;
+    }
 
-    dll_for_each(rs->layer_rsurfs, v)
-      red_handle_send_callbacks(v->val, time_msec);
+    // callbacks
+    {
+        if (rs->focused_rt)
+            red_handle_send_callbacks(rs->focused_rt->rsurf, time_msec);
+
+        dll_for_each(rs->layer_rsurfs, v)
+          red_handle_send_callbacks(v->val, time_msec);
+    }
+
+    if (red_handle_animation_frame_done(rs)) {
+        request_redraw(rs);
+        return 0;
+    }
 
     // if updates happened on page flip
     redraw(rs);

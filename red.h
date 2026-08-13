@@ -227,8 +227,8 @@ struct redstate
     struct timespec* time_start;
 
     // frame info
-    double last_frame_time;
-    double frame_latency;
+    uint64_t last_frame_time;
+    uint64_t frame_latency;
 
     const char*           wayland_display;
     struct wl_event_loop* wl_event_loop;
@@ -253,6 +253,7 @@ struct redstate
     GLuint vbo;
     GLint  texture_loc;
     GLint  dimentions_loc;
+    GLint  anim_loc;
 
     GLuint   cursor_gl_program;
     GLuint   cursor_gl_vao;
@@ -299,6 +300,10 @@ struct redstate
     struct data_source* selection_source;
 
     dll(int) ipc_client_fds;
+
+    // 0 -> no animation running
+    // 1 -> animation is done should stop and reset to 0
+    double animation_value;
 };
 
 extern struct gl_proc* gl_proc;

@@ -74,3 +74,7 @@ double
 red_get_rsurf_y(struct redsurface* rsurf);
 int
 red_on_tick(struct redstate* rs);
+
+int
+red_handle_animation_frame_done(struct redstate* rs);
+

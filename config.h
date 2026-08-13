@@ -94,6 +94,9 @@ typedef struct redconfig
 
     redmousecfg* mouses;
     size_t       mouses_len;
+
+    bool     animations;
+    uint64_t animation_focus_change_duration;
 } redconfig;
 
 extern struct redconfig cfg;

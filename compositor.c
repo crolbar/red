@@ -245,6 +245,33 @@ red_is_client_valid(struct redstate* rs, struct redclient* rc)
     return 0;
 }
 
+inline double
+red_get_animation_step(uint64_t frame_latency)
+{
+    return (double)1.0 / ((double)cfg.animation_focus_change_duration /
+                          (double)frame_latency);
+}
+
+// 0 -> not animating
+// > 1 -> request redraw, animating
+int
+red_handle_animation_frame_done(struct redstate* rs)
+{
+    if (rs->animation_value == 0) {
+        return 0;
+    }
+
+    if (rs->animation_value == 1) {
+        rs->animation_value = 0;
+        return 0;
+    }
+
+    rs->animation_value += red_get_animation_step(rs->frame_latency);
+    if (rs->animation_value > 1)
+        rs->animation_value = 1;
+    return 1;
+}
+
 int
 red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
 {
@@ -287,6 +314,12 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
 
     rs->last_focused_rt = rs->focused_rt;
     rs->focused_rt      = rt;
+
+    // (re)set val to step to start animating
+    if (cfg.animations) {
+        if (rs->last_focused_rt)
+            rs->animation_value = red_get_animation_step(rs->frame_latency);
+    }
 
     if (!rt)
         request_redraw(rs);

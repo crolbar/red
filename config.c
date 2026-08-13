@@ -66,6 +66,13 @@ redconfig cfg = (redconfig){
     // can be changed at runtime with RED_ACTION_SELECT_BIND_PRESET
     .sel_bind_preset = 0,
 
+    // disable/enable animations
+    // currently only one is the `on window focus change` one
+    .animations = true,
+
+    // duration of the focus change animation in miliseconds
+    .animation_focus_change_duration = 200,
+
     // clang-format off
     // bind presets are a way to change your binds at runtime
     BIND_PRESETS(
@@ -74,12 +81,7 @@ redconfig cfg = (redconfig){
       {BINDS(
           /* SERVER CONTROL */
           {
-            .key = "F4",
-            .mods = RED_MOD_NO_MODS,
-            A( RED_ACTION_QUIT )
-          },
-          {
-            .key = "F4",
+            .key = "Q",
             .mods = RED_MOD_SUPER | RED_MOD_ALT | RED_MOD_CTRL | RED_MOD_SHIFT,
             A( RED_ACTION_QUIT )
           },
