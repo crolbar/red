@@ -278,7 +278,7 @@ struct redstate
     int      cursor_locked;
     int      cursor_hidden;
 
-    dll(struct wl_resource*) relative_pointers;
+    dll(struct wl_resource*) rel_pointers;
 
     // all clients
     dll(struct redclient*) rcs; // red clients

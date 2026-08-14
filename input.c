@@ -16,7 +16,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 int
-xkb_init_keyboard(struct redstate* rs)
+init_xkb_keyboard(struct redstate* rs)
 {
     struct xkb_keymap* red_keymap = NULL;
     struct xkb_state*  state      = NULL;
@@ -112,7 +112,7 @@ xkb_init_keyboard(struct redstate* rs)
 }
 
 int
-xkb_destroy(struct redstate* rs)
+destroy_xkb(struct redstate* rs)
 {
     if (rs->xkb_keymap_fd != -1)
         close(rs->xkb_keymap_fd);

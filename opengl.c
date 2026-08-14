@@ -656,8 +656,9 @@ egl_get_proc(char* addr)
 int
 init_gl_proc()
 {
-    gl_proc = malloc(sizeof(*gl_proc));
-    assert(gl_proc);
+    gl_proc = calloc(1, sizeof(*gl_proc));
+    if (!gl_proc)
+        return 1;
     gl_proc->eglCreateImageKHR                      = NULL;
     gl_proc->glEGLImageTargetRenderbufferStorageOES = NULL;
     gl_proc->glEGLImageTargetTexture2DOES           = NULL;
@@ -700,7 +701,6 @@ init_gl_proc()
 
     return 0;
 fail:
-    if (gl_proc)
-        free(gl_proc);
+    free(gl_proc);
     return 1;
 }

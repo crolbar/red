@@ -9,10 +9,10 @@ int
 input_dispatch(struct redstate* rs);
 
 int
-xkb_init_keyboard(struct redstate* rs);
+init_xkb_keyboard(struct redstate* rs);
 
 int
-xkb_destroy(struct redstate* rs);
+destroy_xkb(struct redstate* rs);
 
 int
 input_kb_key(struct redstate* rs,

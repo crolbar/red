@@ -439,12 +439,12 @@ red_pointer_send_relative_motion(struct redstate* rs,
                                  double           udx,
                                  double           udy)
 {
-    if (rs->relative_pointers.size == 0)
+    if (rs->rel_pointers.size == 0)
         return 0;
 
     uint32_t time_hi = time_usec >> 32;
     uint32_t time_lo = time_usec & 0xffffffff;
-    dll_for_each(rs->relative_pointers, v)
+    dll_for_each(rs->rel_pointers, v)
     {
         zwp_relative_pointer_v1_send_relative_motion(v->val,
                                                      time_hi,

@@ -49,8 +49,7 @@ main(int argc, char** argv)
     int ret = -1;
 
     struct redstate* rs;
-    rs = malloc(sizeof(*rs));
-    if (!rs) {
+    if (!(rs = calloc(1, sizeof(*rs)))) {
         goto end;
     }
 
@@ -70,84 +69,84 @@ main(int argc, char** argv)
         [RFD_TICK]       = { .fd = -1, .events = POLLIN },
         [RFD_IPC]        = { .fd = -1, .events = POLLIN },
     };
-    rs->li                = NULL;
-    rs->active            = 1;
-    rs->should_quit       = 0;
-    rs->time_start        = time_get_now();
-    rs->last_frame_time   = 0;
-    rs->frame_latency     = 0;
-    rs->is_wayland_client = false;
-    if (!getenv("RED_DONT_SPAWN_CLIENT"))
-        if (getenv("WAYLAND_DISPLAY") ||
-            strcmp(getenv("XDG_SESSION_TYPE"), "wayland") == 0) {
-            rs->is_wayland_client = true;
-            ROG_INFO("Spawning as wl client");
-        }
-    rs->backend    = (rs->is_wayland_client) ? &backend_wayland : &backend_drm;
-    rs->backend->d = rs->backend->init_data();
-    rs->xkb        = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    if (!rs->xkb) {
-        goto end;
-    }
-    rs->xkb_keymap_fd      = -1;
-    rs->xkb_keymap_string  = NULL;
-    rs->xkb_keymap_size    = 0;
-    rs->xkb_mods_depressed = 0;
-    rs->xkb_mods_latched   = 0;
-    rs->xkb_mods_locked    = 0;
-    rs->xkb_group          = 0;
-    if (xkb_init_keyboard(rs)) {
-        goto end;
-    }
 
-    rs->wl_display                   = NULL;
-    rs->wl_event_loop                = NULL;
-    rs->wl_compositor                = NULL;
-    rs->xdg_wm_base                  = NULL;
-    rs->xdg_decoration_manager       = NULL;
-    rs->wl_output                    = NULL;
-    rs->wl_seat                      = NULL;
-    rs->zwp_linux_dmabuf             = NULL;
-    rs->wp_viewporter                = NULL;
-    rs->zwp_relative_pointer_manager = NULL;
-    rs->zwp_pointer_constraints      = NULL;
-    rs->zwlr_layer_shell             = NULL;
-    rs->wp_presentation              = NULL;
-    rs->wl_subcompositor             = NULL;
-    rs->wl_data_device_manager       = NULL;
-    rs->client_created               = (struct wl_listener){};
-
+    rs->active       = 1;
+    rs->should_quit  = 0;
     rs->needs_redraw = 1;
     rs->should_draw  = 0;
 
-    rs->rcs                   = (typeof(rs->rcs))dll_init();
-    rs->rts                   = (typeof(rs->rts))dll_init();
-    rs->layer_rsurfs          = (typeof(rs->layer_rsurfs))dll_init();
-    rs->focused_rt            = NULL;
-    rs->last_focused_rt       = NULL;
-    rs->pointer_focused_rsurf = NULL;
+    rs->is_wayland_client = 0;
+    if (!getenv("RED_DONT_SPAWN_CLIENT"))
+        if (getenv("WAYLAND_DISPLAY") ||
+            strcmp(getenv("XDG_SESSION_TYPE"), "wayland") == 0) {
+            rs->is_wayland_client = 1;
+            ROG_INFO("Spawning as wl client");
+        }
 
+    rs->backend = (rs->is_wayland_client) ? &backend_wayland : &backend_drm;
+
+    rs->backend->d                       = NULL;
+    rs->li                               = NULL;
+    rs->xkb                              = NULL;
+    rs->xkb_state                        = NULL;
+    rs->xkb_keymap                       = NULL;
+    rs->xkb_keymap_fd                    = -1;
+    rs->xkb_keymap_string                = NULL;
+    rs->xkb_keymap_size                  = 0;
+    rs->xkb_mods_depressed               = 0;
+    rs->xkb_mods_latched                 = 0;
+    rs->xkb_mods_locked                  = 0;
+    rs->xkb_group                        = 0;
+    rs->time_start                       = time_get_now();
+    rs->last_frame_time                  = 0;
+    rs->frame_latency                    = 0;
+    rs->wl_display                       = NULL;
+    rs->wl_event_loop                    = NULL;
+    rs->wl_compositor                    = NULL;
+    rs->xdg_wm_base                      = NULL;
+    rs->xdg_decoration_manager           = NULL;
+    rs->wl_output                        = NULL;
+    rs->wl_seat                          = NULL;
+    rs->zwp_linux_dmabuf                 = NULL;
+    rs->wp_viewporter                    = NULL;
+    rs->zwp_relative_pointer_manager     = NULL;
+    rs->zwp_pointer_constraints          = NULL;
+    rs->zwlr_layer_shell                 = NULL;
+    rs->wp_presentation                  = NULL;
+    rs->wl_subcompositor                 = NULL;
+    rs->wl_data_device_manager           = NULL;
+    rs->client_created                   = (struct wl_listener){};
+    rs->rcs                              = (typeof(rs->rcs))dll_init();
+    rs->rts                              = (typeof(rs->rts))dll_init();
+    rs->layer_rsurfs                     = (typeof(rs->layer_rsurfs))dll_init();
+    rs->rel_pointers                     = (typeof(rs->rel_pointers))dll_init();
+    rs->dds                              = (typeof(rs->dds))dll_init();
+    rs->selection_source                 = NULL;
+    rs->queued_rb                        = NULL;
+    rs->focused_rt                       = NULL;
+    rs->last_focused_rt                  = NULL;
+    rs->pointer_focused_rsurf            = NULL;
     rs->keyboard_focused_rsurf           = NULL;
     rs->keyboard_focused_rsurf_exclusive = 0;
-
-    rs->cursor_gl_program       = 0;
-    rs->cursor_gl_vao           = 0;
-    rs->cursor_x                = 0;
-    rs->cursor_y                = 0;
-    rs->using_hardware_cursor   = 1;
-    rs->cursor_last_scroll_time = 0;
-    rs->cursor_hide_timer_fd    = timerfd_create(CLOCK_REALTIME, 0);
-    rs->tick_timer_fd           = timerfd_create(CLOCK_MONOTONIC, 0);
-    rs->relative_pointers       = (typeof(rs->relative_pointers))dll_init();
-    rs->cursor_locked           = 0;
-    rs->cursor_hidden           = 0;
-
-    rs->program        = 0;
-    rs->vao            = 0;
-    rs->vbo            = 0;
-    rs->texture_loc    = 0;
-    rs->dimentions_loc = 0;
-    rs->anim_loc       = 0;
+    rs->animation_value                  = 0;
+    rs->program                          = 0;
+    rs->vao                              = 0;
+    rs->vbo                              = 0;
+    rs->texture_loc                      = 0;
+    rs->dimentions_loc                   = 0;
+    rs->anim_loc                         = 0;
+    rs->cursor_gl_program                = 0;
+    rs->cursor_gl_vao                    = 0;
+    rs->cursor_x                         = 0;
+    rs->cursor_y                         = 0;
+    rs->using_hardware_cursor            = 1;
+    rs->cursor_last_scroll_time          = 0;
+    rs->cursor_locked                    = 0;
+    rs->cursor_hidden                    = 0;
+    rs->cursor_hide_timer_fd             = timerfd_create(CLOCK_REALTIME, 0);
+    rs->tick_timer_fd                    = timerfd_create(CLOCK_MONOTONIC, 0);
+    rs->ipc_red_state_changes            = 0;
+    rs->ipc_clients                      = (typeof(rs->ipc_clients))dll_init();
 
     struct itimerspec its = {
         .it_value    = { .tv_sec = 1, 0 },
@@ -155,43 +154,49 @@ main(int argc, char** argv)
     };
     timerfd_settime(rs->tick_timer_fd, 0, &its, NULL);
 
-    rs->queued_rb = NULL;
-
-    rs->dds              = (typeof(rs->dds))dll_init();
-    rs->selection_source = NULL;
-
-    rs->ipc_red_state_changes = 0;
-    rs->ipc_clients           = (typeof(rs->ipc_clients))dll_init();
-
-    rs->animation_value = 0;
+    if (!(rs->xkb = xkb_context_new(XKB_CONTEXT_NO_FLAGS))) {
+        goto end;
+    }
+    if (init_xkb_keyboard(rs)) {
+        ROG_ERR("failed to initialize xkb");
+        goto end;
+    }
 
     if (ipc_update_pfds(rs)) {
         goto end;
     }
 
     if (init_gl_proc()) {
+        ROG_ERR("failed to initialize gl ext api");
         goto end;
     }
 
     // backend
+    if (!(rs->backend->d = rs->backend->init_data())) {
+        ROG_ERR("failed to initialize backend data");
+        goto end;
+    }
     if (rs->backend->init(rs)) {
+        ROG_ERR("failed to initialize backend");
         goto end;
     }
 
     // signals
     if ((rs->sig_fd = init_signals()) < 0) {
+        ROG_ERR("failed to initialize signals");
         goto end;
     }
 
     // VT
     if (!getenv("RED_DONT_SPAWN_CLIENT") && !rs->is_wayland_client)
         if ((rs->tty_fd = init_vt()) == -1) {
+            ROG_ERR("failed to initialize vt");
             goto end;
         }
 
     // libinput
     if (!(rs->li = init_input())) {
-        ROG_ERR("failed to init libinput");
+        ROG_ERR("failed to initialize libinput");
         goto end;
     }
 
@@ -213,7 +218,10 @@ main(int argc, char** argv)
     // render buffers initially
     rs->backend->push_init_buffer(rs);
 
-    init_compositor(rs);
+    if (init_compositor(rs)) {
+        ROG_ERR("failed to initialize wayland server");
+        goto end;
+    }
 
     if ((rs->li_fd = libinput_get_fd(rs->li)) < 0) {
         ROG_ERR("failed get libinput fd: %s", strerror(errno));
@@ -221,6 +229,7 @@ main(int argc, char** argv)
     }
 
     if ((rs->backend_fd = rs->backend->get_fd(rs->backend->d)) < 0) {
+        ROG_ERR("failed to get backend fd");
         goto end;
     }
 
@@ -372,7 +381,7 @@ end:
 
     wl_display_destroy_clients(rs->wl_display);
     wl_display_destroy(rs->wl_display);
-    xkb_destroy(rs);
+    destroy_xkb(rs);
     dll_destroy(rs->rcs);
     dll_destroy(rs->rts);
     dll_destroy(rs->layer_rsurfs);

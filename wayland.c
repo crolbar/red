@@ -2541,7 +2541,7 @@ zwp_relative_pointer_resource_destroy(struct wl_resource* resource)
     struct redstate* rs = wl_resource_get_user_data(resource);
     assert(rs);
 
-    dll_remove_val(rs->relative_pointers, resource);
+    dll_remove_val(rs->rel_pointers, resource);
 }
 
 static void
@@ -2568,7 +2568,7 @@ zwp_relative_pointer_manager_get_relative_pointer(struct wl_client*   client,
                                    wl_resource_get_user_data(resource),
                                    zwp_relative_pointer_resource_destroy);
 
-    dll_push_tail(rs->relative_pointers, zwp_relative_pointer);
+    dll_push_tail(rs->rel_pointers, zwp_relative_pointer);
 }
 
 static const struct zwp_relative_pointer_manager_v1_interface
