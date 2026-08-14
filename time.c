@@ -8,8 +8,9 @@ struct timespec*
 time_get_now()
 {
     struct timespec* tp;
-    tp = malloc(sizeof(*tp));
-    assert(tp);
+    tp = calloc(1, sizeof(*tp));
+    if (!tp)
+        return NULL;
     clock_gettime(CLOCK_MONOTONIC, tp);
     return tp;
 }

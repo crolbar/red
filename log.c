@@ -113,7 +113,7 @@ open_log_file()
     sprintf(path, fmt, home
             // , time(NULL)
     );
-    path[len + 1] = '\0';
+    path[len] = '\0';
 
     int log_fd = open(path, O_CREAT | O_RDWR | O_APPEND, 0644);
     free(path);
@@ -138,7 +138,7 @@ print_log_file()
     long size = ftell(log_file);
     rewind(log_file);
 
-    char* buffer = malloc(size + 1);
+    char* buffer = calloc(1, size + 1);
     if (!buffer) {
         printf("error: malloc in print log file\n");
         return;
@@ -152,6 +152,7 @@ print_log_file()
     buffer[size] = '\0';
 
     printf("%s\n", buffer);
+    free(buffer);
 }
 
 void

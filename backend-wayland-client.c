@@ -21,6 +21,12 @@
 void
 free_wayland(struct wayland_client* cws)
 {
+    if (cws->wl_seat)
+        wl_seat_destroy(cws->wl_seat);
+    if (cws->wl_keyboard)
+        wl_keyboard_destroy(cws->wl_keyboard);
+    if (cws->wl_pointer)
+        wl_pointer_destroy(cws->wl_pointer);
     if (cws->zwp_linux_dmabuf)
         zwp_linux_dmabuf_v1_destroy(cws->zwp_linux_dmabuf);
     if (cws->xdg_toplevel)

@@ -286,6 +286,27 @@ backend_drm_egl_display(void* d)
     return bd->egl_display;
 }
 
+void
+backend_drm_destroy(void* d)
+{
+    struct backend_drm* bd = d;
+
+    free_redbuffer(bd->rb0, bd->egl_display);
+    free_redbuffer(bd->rb1, bd->egl_display);
+    gbm_bo_destroy(bd->cursor_gbm_bo);
+
+    eglMakeCurrent(
+      bd->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglDestroyContext(bd->egl_display, bd->egl_context);
+
+    gbm_device_destroy(bd->gbm_dev);
+
+    close(bd->drm_fd);
+    eglTerminate(bd->egl_display);
+    free(bd->props);
+    free(bd);
+}
+
 struct backend backend_drm = {
     .d                  = NULL,
     .init_data          = backend_drm_init_data,
@@ -302,4 +323,5 @@ struct backend backend_drm = {
     .is_ready_for_frame = backend_drm_is_ready_for_frame,
     .get_drm_node       = backend_drm_get_drm_node,
     .get_egl_display    = backend_drm_egl_display,
+    .destroy            = backend_drm_destroy,
 };

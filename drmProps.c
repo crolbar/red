@@ -65,7 +65,7 @@ int
 init_prop_ids(struct backend_drm* bd)
 {
     struct drmprops* dp;
-    dp = malloc(sizeof(*dp));
+    dp = calloc(1, sizeof(*dp));
     if (!dp)
         return 1;
 

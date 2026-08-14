@@ -37,4 +37,6 @@ struct backend
 
     int (*get_drm_node)(void* d);
     EGLDisplay (*get_egl_display)(void* d);
+
+    void (*destroy)(void* d);
 };

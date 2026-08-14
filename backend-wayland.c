@@ -5,12 +5,11 @@
 #include "opengl.h"
 #include "red.h"
 #include "render.h"
-#include "xdg-shell-client-protocol.h"
-#include <errno.h>
+#include <errno.h> // IWYU pragma: keep
 #include <fcntl.h>
 #include <gbm.h>
-#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 void*
 backend_wayland_init_data()
@@ -20,18 +19,19 @@ backend_wayland_init_data()
     if (!bw)
         return NULL;
 
-    bw->wc           = NULL;
-    bw->egl_display  = NULL;
-    bw->egl_context  = NULL;
-    bw->gbm_dev      = NULL;
-    bw->rb0          = NULL;
-    bw->rb1          = NULL;
-    bw->scale_factor = 2;
-    bw->width        = 1500*bw->scale_factor;
-    bw->height       = 800*bw->scale_factor;
-    bw->used_rb      = 0;
-    bw->scale_factor = 1;
-    bw->drm_fd       = -1;
+    bw->wc                 = NULL;
+    bw->egl_display        = NULL;
+    bw->egl_context        = NULL;
+    bw->gbm_dev            = NULL;
+    bw->rb0                = NULL;
+    bw->rb1                = NULL;
+    bw->scale_factor       = 2;
+    bw->width              = 1500 * bw->scale_factor;
+    bw->height             = 800 * bw->scale_factor;
+    bw->used_rb            = 0;
+    bw->scale_factor       = 1;
+    bw->drm_fd             = -1;
+    bw->is_ready_for_frame = 0;
 
     return bw;
 }
@@ -224,6 +224,26 @@ backend_wayland_egl_display(void* d)
     return bw->egl_display;
 }
 
+void
+backend_wayland_destroy(void* d)
+{
+    struct backend_wayland* bw = d;
+
+    free_redbuffer(bw->rb0, bw->egl_display);
+    free_redbuffer(bw->rb1, bw->egl_display);
+
+    eglMakeCurrent(
+      bw->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglDestroyContext(bw->egl_display, bw->egl_context);
+    eglTerminate(bw->egl_display);
+
+    gbm_device_destroy(bw->gbm_dev);
+
+    close(bw->drm_fd);
+    free_wayland(bw->wc);
+    free(bw);
+}
+
 struct backend backend_wayland = {
     .d                  = NULL,
     .init_data          = backend_wayland_init_data,
@@ -240,4 +260,5 @@ struct backend backend_wayland = {
     .is_ready_for_frame = backend_wayland_is_ready_for_frame,
     .get_drm_node       = backend_wayland_get_drm_node,
     .get_egl_display    = backend_wayland_egl_display,
+    .destroy            = backend_wayland_destroy,
 };

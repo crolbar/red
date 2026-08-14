@@ -101,7 +101,6 @@ xkb_init_keyboard(struct redstate* rs)
 
         xkb_keymap_unref(keymap);
     }
-    xkb_keymap_unref(red_keymap);
 
     rs->xkb_keymap_size   = keymap_size;
     rs->xkb_keymap_string = keymap_string;
@@ -119,6 +118,8 @@ xkb_destroy(struct redstate* rs)
         close(rs->xkb_keymap_fd);
     if (rs->xkb_keymap_string)
         free(rs->xkb_keymap_string);
+    xkb_state_unref(rs->xkb_state);
+    xkb_keymap_unref(rs->xkb_keymap);
     xkb_context_unref(rs->xkb);
     return 0;
 }
@@ -160,6 +161,7 @@ init_input()
     if (!li) {
         return NULL;
     }
+    udev_unref(udev);
     if (libinput_udev_assign_seat(li, "seat0") == -1) {
         return NULL;
     }

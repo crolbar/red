@@ -14,7 +14,8 @@
 - [ ]windows like alt-tap with quickshell
 - [ ]put window in overlay plane (kind of like a float window)
 
-- [ ]run through valgrind (proper memory management)
+- [/]run through valgrind (proper memory management)
+  - [ ]fix possible losess
 - [ ]make vt recover on crash
 
 - [x]dmabuf
@@ -35,7 +36,7 @@
 - [x]state struct
 
 - [x]modifiers on fbs
-- [ ]gl error catching
+- [x]gl error catching
 
 - [ ]middle mouse button scroll
 - [ ]zoom like magnifier

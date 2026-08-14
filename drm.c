@@ -356,9 +356,10 @@ drm_get_crtc_idx(int fd, uint32_t crtc_id)
 int
 drm_get_plane(int fd, int crtc_idx, int type)
 {
+    int                out       = -1;
     drmModePlaneResPtr plane_res = drmModeGetPlaneResources(fd);
     if (!plane_res)
-        return -1;
+        goto end;
 
     for (uint32_t i = 0; i < plane_res->count_planes; i++) {
         drmModePlanePtr plane = drmModeGetPlane(fd, plane_res->planes[i]);
@@ -366,24 +367,33 @@ drm_get_plane(int fd, int crtc_idx, int type)
             continue;
 
         if (!(plane->possible_crtcs & (1 << crtc_idx))) {
+            drmModeFreePlane(plane);
             continue;
         }
 
+        uint32_t id = plane->plane_id;
+        drmModeFreePlane(plane);
+
         // checking if plane is primary
-        drmModeObjectPropertiesPtr props = drmModeObjectGetProperties(
-          fd, plane->plane_id, DRM_MODE_OBJECT_PLANE);
+        drmModeObjectPropertiesPtr props =
+          drmModeObjectGetProperties(fd, id, DRM_MODE_OBJECT_PLANE);
         if (!props)
-            return -1;
+            goto end;
 
         int v = get_prop_value(fd, props, "type");
+        drmModeFreeObjectProperties(props);
         if (v == -1)
-            return -1;
+            goto end;
 
-        if (v == type)
-            return plane->plane_id;
+        if (v == type) {
+            out = id;
+            goto end;
+        }
     }
 
-    return -1;
+end:
+    drmModeFreePlaneResources(plane_res);
+    return out;
 }
 
 drmModeConnector*

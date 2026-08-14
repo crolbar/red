@@ -420,6 +420,11 @@ wl_surface_resource_destroy(struct wl_resource* resource)
 
     dll_remove_val(rsurf->rs->layer_rsurfs, rsurf);
 
+    dll_for_each(rsurf->subsurfs, v)
+    {
+        v->val->parent = NULL;
+    }
+
     // remove wl_surf from rsurfs of redclient
     if (red_is_client_valid(rsurf->rs, rsurf->rc))
         dll_remove_val(rsurf->rc->rsurfs, rsurf);
@@ -427,6 +432,9 @@ wl_surface_resource_destroy(struct wl_resource* resource)
     wl_list_remove(&rsurf->pending_buffer_destroyed.link);
     wl_list_remove(&rsurf->current_buffer_destroyed.link);
     gl_destroy_surface_texture(rsurf);
+    dll_destroy(rsurf->subsurfs);
+    dll_destroy(rsurf->pending_frame_cbs);
+    dll_destroy(rsurf->pending_pres_cbs);
     if (rsurf)
         free(rsurf);
     rsurf = NULL;
@@ -616,7 +624,10 @@ xdg_toplevel_set_title(struct wl_client*   client,
     struct redtoplevel* rt = resource->data;
     assert(rt);
 
-    rt->title = malloc(strlen(title) + 1);
+    if (rt->title)
+        free(rt->title);
+
+    rt->title = calloc(1, strlen(title) + 1);
     assert(rt->title);
 
     strcpy(rt->title, title);
@@ -630,7 +641,10 @@ xdg_toplevel_set_app_id(struct wl_client*   client,
     struct redtoplevel* rt = resource->data;
     assert(rt);
 
-    rt->app_id = malloc(strlen(app_id) + 1);
+    if (rt->app_id)
+        free(rt->app_id);
+
+    rt->app_id = calloc(1, strlen(app_id) + 1);
     assert(rt->app_id);
 
     strcpy(rt->app_id, app_id);
@@ -1550,11 +1564,17 @@ static const struct wl_subsurface_interface wl_subsurface_implementation = {
     .set_desync   = wl_subsurface_set_desync,
 };
 
+// TODO use after free!
 static void
 wl_subsurface_resource_destroy(struct wl_resource* resource)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     assert(rsurf);
+
+    // parent destroyed nothing to do
+    if (!rsurf->parent)
+        return;
+
     dll_for_each(rsurf->parent->subsurfs, v)
     {
         if (rsurf == v->val) {
@@ -2349,6 +2369,7 @@ zwp_linux_dmabuf_get_default_feedback(struct wl_client*   client,
         entry[1].modifier = 0;
 
         memcpy(ptr, entry, size);
+        free(entry);
     }
 
     zwp_linux_dmabuf_feedback_v1_send_format_table(

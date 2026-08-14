@@ -50,7 +50,9 @@ main(int argc, char** argv)
 
     struct redstate* rs;
     rs = malloc(sizeof(*rs));
-    assert(rs);
+    if (!rs) {
+        goto end;
+    }
 
     rs->sig_fd           = -1;
     rs->tty_fd           = -1;
@@ -84,7 +86,9 @@ main(int argc, char** argv)
     rs->backend    = (rs->is_wayland_client) ? &backend_wayland : &backend_drm;
     rs->backend->d = rs->backend->init_data();
     rs->xkb        = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    assert(rs->xkb);
+    if (!rs->xkb) {
+        goto end;
+    }
     rs->xkb_keymap_fd      = -1;
     rs->xkb_keymap_string  = NULL;
     rs->xkb_keymap_size    = 0;
@@ -349,38 +353,33 @@ main(int argc, char** argv)
         }
     }
 
+    wl_display_flush_clients(rs->wl_display);
+
     ret = 0;
 end:
     ret *= -1;
     ROG_WARN("Closing..");
 
-    // if (rs->drm && rs->drm->fd != -1)
-    //     close(rs->drm->fd);
-
     if (rs->tty_fd != -1)
         vt_stop(rs->tty_fd);
-
     if (rs->sig_fd != -1)
         close(rs->sig_fd);
 
     if (rs->li)
         libinput_unref(rs->li);
 
-    if (rs->time_start)
-        free(rs->time_start);
+    free(rs->time_start);
 
-    // if (drm)
-    //     free(drm);
-    // if (rs->wl)
-    //     free(rs->wl);
-
-    if (rs->xkb)
-        xkb_destroy(rs);
-
+    wl_display_destroy_clients(rs->wl_display);
+    wl_display_destroy(rs->wl_display);
+    xkb_destroy(rs);
     dll_destroy(rs->rcs);
-
-    if (rs)
-        free(rs);
+    dll_destroy(rs->rts);
+    dll_destroy(rs->layer_rsurfs);
+    dll_destroy(rs->dds);
+    dll_destroy(rs->ipc_clients);
+    rs->backend->destroy(rs->backend->d);
+    free(rs);
 
     ROG_PRINT_CLOSE();
     return ret;
