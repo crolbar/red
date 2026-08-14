@@ -10,7 +10,7 @@
 - [x]toplevel focus switch animation
   - ~[ ]toplevel open/close animation?~
 - [x]ipc
-  - [ ]sub for updates
+  - [x]sub for updates
 - [ ]windows like alt-tap with quickshell
 - [ ]put window in overlay plane (kind of like a float window)
 

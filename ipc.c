@@ -75,10 +75,11 @@ handle_ipc_msg_fetch_toplevels(struct redstate* rs)
 }
 
 char*
-handle_ipc_msg(struct redstate* rs,
-               char**           msg,
-               size_t           msg_len,
-               int*             should_free)
+handle_ipc_msg(struct redstate*     rs,
+               struct redipcclient* ric,
+               char**               msg,
+               size_t               msg_len,
+               int*                 should_free)
 {
     assert(msg_len != 0);
 
@@ -101,6 +102,10 @@ handle_ipc_msg(struct redstate* rs,
         *should_free = 1;
         return handle_ipc_msg_fetch_toplevels(rs);
     }
+    if (strcmp(msg[0], RED_IPC_MSG_SUBSCRIBE) == 0) {
+        ric->subscribed = 1;
+        goto found;
+    }
 
     for (size_t i = 0; i < redactions_len; i++) {
         if (strcmp(msg[0], redactions[i].action_type) == 0) {
@@ -109,10 +114,52 @@ handle_ipc_msg(struct redstate* rs,
         }
     }
 
-end:
     return "incorrect msg";
 found:
     return "ok";
+}
+
+static void
+ipc_destroy_client(struct redipcclient* ric)
+{
+    if (ric->fd != -1)
+        close(ric->fd);
+    free(ric);
+}
+
+static struct redipcclient*
+_send_state_change_msg(struct redipcclient* ric, char* msg)
+{
+    int n = write(ric->fd, msg, strlen(msg));
+    if (n <= 0) {
+        return ric;
+    }
+    return NULL;
+}
+
+int
+ipc_send_state_changes(struct redstate* rs)
+{
+    dll(struct redipcclient*) clients_to_destroy = dll_init();
+
+    dll_for_each(rs->ipc_clients, v)
+    {
+        if (!v->val->subscribed)
+            continue;
+
+        if (rs->ipc_red_state_changes & RED_STATE_CHANGE_FOCUS) {
+            if (_send_state_change_msg(v->val, "window focus changed\n"))
+                dll_push_tail(clients_to_destroy, v->val);
+        }
+    }
+
+    while (clients_to_destroy.size) {
+        struct redipcclient* ric = dll_hpop(clients_to_destroy);
+        dll_remove_val(rs->ipc_clients, ric);
+        ipc_destroy_client(ric);
+        ipc_update_pfds(rs);
+    }
+    return 0;
 }
 
 int
@@ -177,19 +224,22 @@ ipc_update_pfds(struct redstate* rs)
         rs->pfds[__REDPFDS_SIZE + i].revents = 0;
     }
 
-    while (rs->ipc_client_fds.size > RED_IPC_MAX_CLIENTS) {
-        int cfd = dll_hpop(rs->ipc_client_fds);
-        if (cfd != -1)
-            close(cfd);
+    while (rs->ipc_clients.size > RED_IPC_MAX_CLIENTS) {
+        ipc_destroy_client(dll_hpop(rs->ipc_clients));
     }
 
     int i = 0;
-    dll_for_each(rs->ipc_client_fds, v)
+    dll_for_each(rs->ipc_clients, v)
     {
-        rs->pfds[__REDPFDS_SIZE + i].fd = v->val;
+        rs->pfds[__REDPFDS_SIZE + i].fd = v->val->fd;
         i++;
     }
-    return 0;
+
+#if RED_IPC_DEBUG_MSG_LOG == 1
+    ROG("clients:")
+    dll_for_each(rs->ipc_clients, v){ ROG("c: %d", v->val->fd) } ROG("")
+#endif
+      return 0;
 }
 
 int
@@ -200,7 +250,12 @@ ipc_accept_conn(struct redstate* rs)
         return 1;
     }
 
-    dll_push_tail(rs->ipc_client_fds, client_fd);
+    struct redipcclient* ric = calloc(1, sizeof(*ric));
+    if (!ric)
+        return 1;
+    ric->fd         = client_fd;
+    ric->subscribed = 0;
+    dll_push_tail(rs->ipc_clients, ric);
     ipc_update_pfds(rs);
 
     return 0;
@@ -252,6 +307,15 @@ split_msg_by_whitespaces(char* msg, size_t* len)
 int
 ipc_proccess_client_msg(struct redstate* rs, int client_fd)
 {
+    struct redipcclient* ric = NULL;
+    dll_for_each(rs->ipc_clients, v)
+    {
+        if (v->val->fd == client_fd) {
+            ric = v->val;
+            break;
+        }
+    }
+
     char buf[RED_IPC_MAX_MSG_LEN + 1];
     memset(buf, 0, sizeof(buf));
 
@@ -284,7 +348,7 @@ ipc_proccess_client_msg(struct redstate* rs, int client_fd)
     char** msg         = split_msg_by_whitespaces(buf, &len);
     char*  back_msg    = NULL;
     if (msg)
-        back_msg = handle_ipc_msg(rs, msg, len, &should_free);
+        back_msg = handle_ipc_msg(rs, ric, msg, len, &should_free);
 
     if (!msg || !back_msg)
         back_msg = "server_error";
@@ -299,7 +363,8 @@ close:
     if (client_fd != -1)
         close(client_fd);
 remove:
-    dll_remove_val(rs->ipc_client_fds, client_fd);
+    dll_remove_val(rs->ipc_clients, ric);
+    ipc_destroy_client(ric);
     ipc_update_pfds(rs);
     return 0;
 }

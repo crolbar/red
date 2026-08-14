@@ -156,7 +156,8 @@ main(int argc, char** argv)
     rs->dds              = (typeof(rs->dds))dll_init();
     rs->selection_source = NULL;
 
-    rs->ipc_client_fds = (typeof(rs->ipc_client_fds))dll_init();
+    rs->ipc_red_state_changes = 0;
+    rs->ipc_clients           = (typeof(rs->ipc_clients))dll_init();
 
     rs->animation_value = 0;
 
@@ -245,7 +246,7 @@ main(int argc, char** argv)
         wl_display_flush_clients(rs->wl_display);
         rs->backend->flush_events(rs->backend->d);
 
-        int nfds = __REDPFDS_SIZE + rs->ipc_client_fds.size;
+        int nfds = __REDPFDS_SIZE + rs->ipc_clients.size;
         int ret  = poll(rs->pfds, nfds, -1);
         if (ret == -1) {
             ROG_ERR("poll fds error");
@@ -255,7 +256,7 @@ main(int argc, char** argv)
         if (rs->pfds[RFD_BACKEND].revents & POLLIN || rs->is_wayland_client)
             rs->backend->handle_events(rs->backend->d);
 
-        for (size_t i = 0; i < rs->ipc_client_fds.size; i++) {
+        for (size_t i = 0; i < rs->ipc_clients.size; i++) {
             if (rs->pfds[__REDPFDS_SIZE + i].revents &
                 (POLLIN | POLLERR | POLLHUP)) {
                 ipc_proccess_client_msg(rs, rs->pfds[__REDPFDS_SIZE + i].fd);
@@ -340,6 +341,12 @@ main(int argc, char** argv)
                     break;
             }
         } while (revent_pfd != __REDPFDS_NONE);
+
+        if (rs->ipc_red_state_changes) {
+            if (ipc_send_state_changes(rs))
+                ROG_ERR("ipc err while sending back state changes");
+            rs->ipc_red_state_changes = 0;
+        }
     }
 
     ret = 0;

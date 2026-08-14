@@ -298,6 +298,9 @@ red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
 int
 red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
 {
+    if (rs->focused_rt == rt)
+        return 0;
+
     // send leave on keyboard, pointer and surface to old focus
     struct redtoplevel* frt = rs->focused_rt;
     if (frt && red_is_client_valid(rs, frt->rc)) {
@@ -314,6 +317,8 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
 
     rs->last_focused_rt = rs->focused_rt;
     rs->focused_rt      = rt;
+
+    rs->ipc_red_state_changes |= RED_STATE_CHANGE_FOCUS;
 
     // (re)set val to step to start animating
     if (cfg.animations) {

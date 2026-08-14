@@ -191,6 +191,18 @@ typedef struct redbind
     size_t  action_len;
 } redbind;
 
+
+enum red_state_change
+{
+    RED_STATE_CHANGE_FOCUS = 1 << 0,
+};
+
+struct redipcclient
+{
+    int fd;
+    int subscribed;
+};
+
 enum redpfds
 {
     RFD_LIBINPUT,
@@ -300,7 +312,9 @@ struct redstate
     dll(struct data_device*) dds;
     struct data_source* selection_source;
 
-    dll(int) ipc_client_fds;
+    // bitmask using `enum red_state_change`
+    uint32_t ipc_red_state_changes;
+    dll(struct redipcclient*) ipc_clients;
 
     // 0 -> no animation running
     // 1 -> animation is done should stop and reset to 0
