@@ -11,6 +11,7 @@
 #include "ipc.h"
 #include "log.h"
 #include "red.h"
+#include "utils.h"
 
 char*
 handle_ipc_msg_fetch_toplevels(struct redstate* rs)
@@ -24,15 +25,17 @@ handle_ipc_msg_fetch_toplevels(struct redstate* rs)
     int rt_idx = 0;
     dll_for_each(rs->rts, v)
     {
-        // TODO: escape quotes?
-        const char* app_id = v->val->app_id;
-        const char* title  = v->val->title;
-        const char* fmt    = "%s{"
-                             "\"idx\":\"%d\","
-                             "\"app_id\":\"%s\","
-                             "\"title\":\"%s\","
-                             "\"is_focused\":%s"
-                             "}";
+        char* app_id = NULL;
+        char* title  = NULL;
+        UTIL_STR_ESCAPE(v->val->app_id, app_id);
+        UTIL_STR_ESCAPE(v->val->title, title);
+
+        const char* fmt = "%s{"
+                          "\"idx\":\"%d\","
+                          "\"app_id\":\"%s\","
+                          "\"title\":\"%s\","
+                          "\"is_focused\":%s"
+                          "}";
 
         int   n   = snprintf(NULL,
                          0,
