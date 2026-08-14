@@ -191,7 +191,6 @@ typedef struct redbind
     size_t  action_len;
 } redbind;
 
-
 enum red_state_change
 {
     RED_STATE_CHANGE_FOCUS = 1 << 0,
@@ -213,6 +212,7 @@ enum redpfds
     RFD_REDRAWSYNC,
     RFD_TICK,
     RFD_IPC,
+    RFD_BIND_REPEATER,
     __REDPFDS_SIZE,
     __REDPFDS_NONE,
 };
@@ -319,6 +319,10 @@ struct redstate
     // 0 -> no animation running
     // 1 -> animation is done should stop and reset to 0
     double animation_value;
+
+    int    bind_repeater_fd;
+    char** repeat_action;
+    size_t repeat_action_len;
 };
 
 extern struct gl_proc* gl_proc;

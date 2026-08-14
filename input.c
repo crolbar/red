@@ -252,6 +252,34 @@ input_handle_internal(struct redstate* rs, char* key_str, int press)
     return 0;
 }
 
+inline void
+red_stop_bind_repeater(struct redstate* rs)
+{
+    if (rs->bind_repeater_fd != -1)
+        close(rs->bind_repeater_fd);
+    rs->bind_repeater_fd                = -1;
+    rs->repeat_action                   = NULL;
+    rs->repeat_action_len               = 0;
+    rs->pfds[RFD_BIND_REPEATER].fd      = -1;
+    rs->pfds[RFD_BIND_REPEATER].revents = 0;
+}
+
+inline void
+red_start_bind_repeater(struct redstate* rs)
+{
+    int32_t           delay = cfg.kb_repeat_delay;
+    int32_t           rate  = cfg.kb_repeat_rate / 2;
+    struct itimerspec its   = {
+          .it_value    = { .tv_sec  = delay / 1000,
+                           .tv_nsec = (delay % 1000) * 1000000 },
+          .it_interval = { .tv_sec = 1 / rate, .tv_nsec = (1000000000L / rate) },
+    };
+    rs->bind_repeater_fd = timerfd_create(CLOCK_MONOTONIC, 0);
+    timerfd_settime(rs->bind_repeater_fd, 0, &its, NULL);
+    rs->pfds[RFD_BIND_REPEATER].fd      = rs->bind_repeater_fd;
+    rs->pfds[RFD_BIND_REPEATER].revents = 0;
+}
+
 // return 0 on no bind pressed, 1 on pressed
 // if 1 returned the keypress should not be send to client
 int
@@ -297,11 +325,18 @@ input_handle_binds(struct redstate* rs, char* key_str, int press)
                 continue;
         }
 
-        // we don't process release event
-        if (!press)
-            return 0;
+        // only exec action on press
+        if (!press) {
+            red_stop_bind_repeater(rs);
+            return 1;
+        }
 
         exec_action(rs, bind.action, bind.action_len);
+        if (rs->bind_repeater_fd != -1)
+            close(rs->bind_repeater_fd);
+        rs->repeat_action     = bind.action;
+        rs->repeat_action_len = bind.action_len;
+        red_start_bind_repeater(rs);
         goto press;
     }
 

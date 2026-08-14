@@ -298,27 +298,25 @@ red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
 int
 red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
 {
-    if (rs->focused_rt == rt)
-        return 0;
+    if (rs->focused_rt != rt) {
+        // send leave on keyboard, pointer and surface to old focus
+        struct redtoplevel* frt = rs->focused_rt;
+        if (frt && red_is_client_valid(rs, frt->rc)) {
+            if (frt->rc->wl_keyboard)
+                red_keyboard_send_leave(frt->rsurf);
 
-    // send leave on keyboard, pointer and surface to old focus
-    struct redtoplevel* frt = rs->focused_rt;
-    if (frt && red_is_client_valid(rs, frt->rc)) {
-        if (frt->rc->wl_keyboard)
-            red_keyboard_send_leave(frt->rsurf);
+            if (frt->rsurf && frt->rsurf->xdg_toplevel)
+                red_send_toplevel_configure(frt->rsurf, 0, 0);
+        }
+        frt = NULL;
 
-        if (frt->rsurf && frt->rsurf->xdg_toplevel)
-            red_send_toplevel_configure(frt->rsurf, 0, 0);
+        // send enter + frame callback on new focus
+        red_rt_send_enter(rs, rt);
+
+        rs->ipc_red_state_changes |= RED_STATE_CHANGE_FOCUS;
     }
-    frt = NULL;
-
-    // send enter + frame callback on new focus
-    red_rt_send_enter(rs, rt);
-
     rs->last_focused_rt = rs->focused_rt;
     rs->focused_rt      = rt;
-
-    rs->ipc_red_state_changes |= RED_STATE_CHANGE_FOCUS;
 
     // (re)set val to step to start animating
     if (cfg.animations) {
@@ -326,8 +324,7 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
             rs->animation_value = red_get_animation_step(rs->frame_latency);
     }
 
-    if (!rt)
-        request_redraw(rs);
+    request_redraw(rs);
     return 0;
 }
 

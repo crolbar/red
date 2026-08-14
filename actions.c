@@ -76,6 +76,7 @@ redaction_focus_n(struct redstate* rs, char** args, size_t args_len)
             continue;
 
         red_focus_rt(rs, v->val);
+        break;
     }
 }
 

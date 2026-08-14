@@ -60,14 +60,15 @@ main(int argc, char** argv)
     rs->backend_fd       = -1;
     rs->wl_event_loop_fd = -1;
     rs->pfds = (struct pollfd[__REDPFDS_SIZE + RED_IPC_MAX_CLIENTS]){
-        [RFD_LIBINPUT]   = { .fd = -1, .events = POLLIN },
-        [RFD_SIGNALS]    = { .fd = -1, .events = POLLIN },
-        [RFD_BACKEND]    = { .fd = -1, .events = POLLIN },
-        [RFD_WAYLAND]    = { .fd = -1, .events = POLLIN },
-        [RFD_CURSOR]     = { .fd = -1, .events = POLLIN },
-        [RFD_REDRAWSYNC] = { .fd = -1, .events = POLLIN },
-        [RFD_TICK]       = { .fd = -1, .events = POLLIN },
-        [RFD_IPC]        = { .fd = -1, .events = POLLIN },
+        [RFD_LIBINPUT]      = { .fd = -1, .events = POLLIN },
+        [RFD_SIGNALS]       = { .fd = -1, .events = POLLIN },
+        [RFD_BACKEND]       = { .fd = -1, .events = POLLIN },
+        [RFD_WAYLAND]       = { .fd = -1, .events = POLLIN },
+        [RFD_CURSOR]        = { .fd = -1, .events = POLLIN },
+        [RFD_REDRAWSYNC]    = { .fd = -1, .events = POLLIN },
+        [RFD_TICK]          = { .fd = -1, .events = POLLIN },
+        [RFD_IPC]           = { .fd = -1, .events = POLLIN },
+        [RFD_BIND_REPEATER] = { .fd = -1, .events = POLLIN },
     };
 
     rs->active       = 1;
@@ -147,6 +148,9 @@ main(int argc, char** argv)
     rs->tick_timer_fd                    = timerfd_create(CLOCK_MONOTONIC, 0);
     rs->ipc_red_state_changes            = 0;
     rs->ipc_clients                      = (typeof(rs->ipc_clients))dll_init();
+    rs->bind_repeater_fd                 = -1;
+    rs->repeat_action                    = NULL;
+    rs->repeat_action_len                = 0;
 
     struct itimerspec its = {
         .it_value    = { .tv_sec = 1, 0 },
@@ -347,6 +351,22 @@ main(int argc, char** argv)
                     if (ipc_accept_conn(rs))
                         ROG_ERR("falied to accept ipc connection: %s",
                                 strerror(errno));
+                    break;
+                }
+
+                case RFD_BIND_REPEATER: {
+                    {
+                        uint64_t expirations;
+                        int      n = read(rs->bind_repeater_fd,
+                                     &expirations,
+                                     sizeof(expirations));
+                        if (n != sizeof(expirations))
+                            continue;
+                    }
+
+                    assert(rs->repeat_action);
+                    exec_action(rs, rs->repeat_action, rs->repeat_action_len);
+                    break;
                 }
 
                 case __REDPFDS_SIZE:
