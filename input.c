@@ -285,6 +285,11 @@ red_start_bind_repeater(struct redstate* rs)
 int
 input_handle_binds(struct redstate* rs, char* key_str, int press)
 {
+    // stop repeated action on next release event
+    if (!press && rs->repeat_action) {
+        red_stop_bind_repeater(rs);
+    }
+
     redbindpreset preset = cfg.bind_presets[cfg.sel_bind_preset];
     for (size_t i = 0; i < preset.binds_len; i++) {
         redbind bind = preset.binds[i];
