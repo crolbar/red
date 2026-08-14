@@ -12,8 +12,73 @@
 #include "log.h"
 #include "red.h"
 
-int
-handle_ipc_msg(struct redstate* rs, char** msg, size_t msg_len)
+char*
+handle_ipc_msg_fetch_toplevels(struct redstate* rs)
+{
+    // [,],\n
+    size_t len = 3 + 1;
+    char*  out = calloc(1, len);
+    size_t i   = 0;
+    out[i++]   = '[';
+
+    int rt_idx = 0;
+    dll_for_each(rs->rts, v)
+    {
+        // TODO: escape quotes?
+        const char* app_id = v->val->app_id;
+        const char* title  = v->val->title;
+        const char* fmt    = "%s{"
+                             "\"idx\":\"%d\","
+                             "\"app_id\":\"%s\","
+                             "\"title\":\"%s\","
+                             "\"is_focused\":%s"
+                             "}";
+
+        int   n   = snprintf(NULL,
+                         0,
+                         fmt,
+                         (rt_idx) ? "," : "",
+                         rt_idx,
+                         app_id,
+                         title,
+                         (v->val == rs->focused_rt) ? "true" : "false");
+        char* str = calloc(1, n + 1);
+        sprintf(str,
+                fmt,
+                (rt_idx) ? "," : "",
+                rt_idx,
+                app_id,
+                title,
+                (v->val == rs->focused_rt) ? "true" : "false");
+
+        char* t = realloc(out, len + n);
+        if (!t) {
+            free(str);
+            free(out);
+            return NULL;
+        }
+        out = t;
+
+        memcpy(out + i, str, n);
+        i += n;
+        len += n;
+
+        rt_idx++;
+    }
+
+    // overwrite the nullterm
+    out[i++] = ']';
+    out[i++] = '\n';
+    out[i]   = '\0';
+
+    return out;
+}
+
+char*
+handle_ipc_msg(struct redstate* rs,
+               char**           msg,
+               size_t           msg_len,
+               int*             should_free)
 {
     assert(msg_len != 0);
 
@@ -32,6 +97,11 @@ handle_ipc_msg(struct redstate* rs, char** msg, size_t msg_len)
         goto found;
     }
 
+    if (strcmp(msg[0], RED_IPC_MSG_FETCH_TOPLEVELS) == 0) {
+        *should_free = 1;
+        return handle_ipc_msg_fetch_toplevels(rs);
+    }
+
     for (size_t i = 0; i < redactions_len; i++) {
         if (strcmp(msg[0], redactions[i].action_type) == 0) {
             exec_action(rs, msg, msg_len);
@@ -39,9 +109,10 @@ handle_ipc_msg(struct redstate* rs, char** msg, size_t msg_len)
         }
     }
 
-    return 1;
+end:
+    return "incorrect msg";
 found:
-    return 0;
+    return "ok";
 }
 
 int
@@ -208,20 +279,19 @@ ipc_proccess_client_msg(struct redstate* rs, int client_fd)
     ROG("ipc read n bytes: %d, with buf: \"%s\"", n, buf);
 #endif
 
-    size_t len      = 0;
-    char** msg      = split_msg_by_whitespaces(buf, &len);
-    char*  back_msg = NULL;
-    if (msg) {
-        if (handle_ipc_msg(rs, msg, len))
-            back_msg = "incorrect msg\n";
-        else
-            back_msg = "ok\n";
-    } else {
-        back_msg = "server_error\n";
-    }
+    size_t len         = 0;
+    int    should_free = 0;
+    char** msg         = split_msg_by_whitespaces(buf, &len);
+    char*  back_msg    = NULL;
+    if (msg)
+        back_msg = handle_ipc_msg(rs, msg, len, &should_free);
 
-    if (back_msg)
-        n = write(client_fd, back_msg, strlen(back_msg));
+    if (!msg || !back_msg)
+        back_msg = "server_error";
+    n = write(client_fd, back_msg, strlen(back_msg));
+
+    if (should_free)
+        free(back_msg);
     if (n <= 0)
         goto close;
     return 0;

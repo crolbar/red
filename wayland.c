@@ -613,6 +613,13 @@ xdg_toplevel_set_title(struct wl_client*   client,
                        struct wl_resource* resource,
                        const char*         title)
 {
+    struct redtoplevel* rt = resource->data;
+    assert(rt);
+
+    rt->title = malloc(strlen(title) + 1);
+    assert(rt->title);
+
+    strcpy(rt->title, title);
 }
 
 static void

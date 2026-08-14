@@ -179,6 +179,7 @@ struct redtoplevel
     struct redclient*  rc;
     struct redsurface* rsurf;
     char*              app_id;
+    char*              title;
 };
 
 // mods is a bitmask

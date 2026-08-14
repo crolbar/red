@@ -362,6 +362,7 @@ red_destroy_rt(struct redstate* rs, struct redtoplevel* rt)
     dll_remove_val(rs->rts, rt);
 
     free(rt->app_id);
+    free(rt->title);
     free(rt);
     return 0;
 }
@@ -386,6 +387,7 @@ red_create_rt(struct redstate*   rs,
     rt->rc     = rc;
     rt->rsurf  = rsurf;
     rt->app_id = NULL;
+    rt->title  = NULL;
 
     dll_push_tail(rs->rts, rt);
 

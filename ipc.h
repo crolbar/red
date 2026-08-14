@@ -9,6 +9,8 @@
 
 #define RED_IPC_MSG_CFG_CURSOR_AUTOHIDE_TIME "cur_hide_time"
 
+#define RED_IPC_MSG_FETCH_TOPLEVELS "windows"
+
 int
 init_ipc();
 
