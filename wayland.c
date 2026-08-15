@@ -879,6 +879,10 @@ xdg_popup_resource_destroy(struct wl_resource* resource)
 {
     struct redsurface* rsurf = wl_resource_get_user_data(resource);
     assert(rsurf);
+
+    if (!rsurf->parent)
+        return;
+
     dll_for_each(rsurf->parent->subsurfs, v)
     {
         if (rsurf == v->val) {
