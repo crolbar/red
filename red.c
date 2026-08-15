@@ -114,6 +114,7 @@ main(int argc, char** argv)
     rs->zwp_relative_pointer_manager     = NULL;
     rs->zwp_pointer_constraints          = NULL;
     rs->zwlr_layer_shell                 = NULL;
+    rs->zwlr_foreign_toplevel_manager    = NULL;
     rs->wp_presentation                  = NULL;
     rs->wl_subcompositor                 = NULL;
     rs->wl_data_device_manager           = NULL;

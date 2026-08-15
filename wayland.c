@@ -2,6 +2,7 @@
 #include "config.h"
 #include "dll.h"
 #include "drm.h"
+#include "foreign-toplevel-server-protocol.h"
 #include "layer-shell-server-protocol.h"
 #include "linux-dmabuf-server-protocol.h"
 #include "log.h"
@@ -3221,6 +3222,33 @@ wl_global_bind_wl_shell(struct wl_client* client,
       wl_shell, &wl_shell_implementation, data, NULL);
 }
 
+static void
+zwlr_foreign_toplevel_manager_stop(struct wl_client*   client,
+                                   struct wl_resource* resource)
+{
+}
+static const struct zwlr_foreign_toplevel_manager_v1_interface
+  zwlr_foreign_toplevel_manager_implementation = {
+      .stop = zwlr_foreign_toplevel_manager_stop,
+  };
+
+static void
+wl_global_bind_zwlr_foreign_toplevel_manager(struct wl_client* client,
+                                             void*             data,
+                                             uint32_t          version,
+                                             uint32_t          id)
+{
+
+    struct wl_resource* zwlr_foreign_toplevel_manager = wl_resource_create(
+      client, &zwlr_foreign_toplevel_manager_v1_interface, version, id);
+    assert(zwlr_foreign_toplevel_manager);
+
+    wl_resource_set_implementation(
+      zwlr_foreign_toplevel_manager,
+      &zwlr_foreign_toplevel_manager_implementation,
+      data,
+      NULL);
+}
 void
 handle_wl_log(const char* _fmt, va_list args)
 {
@@ -3365,6 +3393,14 @@ init_compositor(struct redstate* rs)
                                             rs,
                                             wl_global_bind_zwlr_layer_shell);
     assert(rs->zwlr_layer_shell);
+
+    rs->zwlr_foreign_toplevel_manager =
+      wl_global_create(rs->wl_display,
+                       &zwlr_foreign_toplevel_manager_v1_interface,
+                       3,
+                       rs,
+                       wl_global_bind_zwlr_foreign_toplevel_manager);
+    assert(rs->zwlr_foreign_toplevel_manager);
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);

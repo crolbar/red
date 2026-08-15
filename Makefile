@@ -50,8 +50,14 @@ RELATIVE_POINTER_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/relative-pointer/relati
 POINTER_CONSTRAINTS_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml
 PRESENTATION_TIME_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/presentation-time/presentation-time.xml
 LAYER_SHELL_XML = $(WLR_PROTOCOLS_DIR)/unstable/wlr-layer-shell-unstable-v1.xml
+FOREIGN_TOPLEVEL_XML = $(WLR_PROTOCOLS_DIR)/unstable/wlr-foreign-toplevel-management-unstable-v1.xml
 
 all: $(BINS)
+
+foreign-toplevel-server-protocol.h: $(FOREIGN_TOPLEVEL_XML)
+	wayland-scanner server-header $< $@
+foreign-toplevel-protocol.c: $(FOREIGN_TOPLEVEL_XML)
+	wayland-scanner private-code $< $@
 
 layer-shell-server-protocol.h: $(LAYER_SHELL_XML)
 	wayland-scanner server-header $< $@
@@ -100,6 +106,8 @@ linux-dmabuf-protocol.c: $(LINUX_DMABUF_XML)
 PRO_SRC=linux-dmabuf-protocol.c \
 		 linux-dmabuf-client-protocol.h \
 		 linux-dmabuf-server-protocol.h \
+		 foreign-toplevel-server-protocol.h \
+		 foreign-toplevel-protocol.c \
 		 layer-shell-server-protocol.h \
 		 layer-shell-protocol.c \
 		 presentation-time-protocol.c \
