@@ -1302,6 +1302,8 @@ red_keyboard_send_enter(struct redsurface* rsurf)
     if (rsurf->rs->keyboard_focused_rsurf)
         red_keyboard_send_leave(rsurf->rs->keyboard_focused_rsurf);
 
+    rsurf->rs->keyboard_focused_rsurf = rsurf;
+
     if (!rsurf->rc->wl_keyboard)
         return 0;
 
@@ -1311,7 +1313,6 @@ red_keyboard_send_enter(struct redsurface* rsurf)
     wl_keyboard_send_enter(
       rsurf->rc->wl_keyboard, serial, rsurf->wl_surface, &keys);
     wl_array_release(&keys);
-    rsurf->rs->keyboard_focused_rsurf = rsurf;
 
     dll_for_each(rsurf->rs->dds, v)
     {
@@ -1874,8 +1875,9 @@ wl_data_device_set_selection(struct wl_client*   client,
         new_source->rs = rs;
     rs->selection_source = new_source;
 
-    red_data_device_send_selection_to_clients(
-      rs, rs->keyboard_focused_rsurf->rc->wl_client);
+    if (rs->keyboard_focused_rsurf)
+        red_data_device_send_selection_to_clients(
+          rs, rs->keyboard_focused_rsurf->rc->wl_client);
 }
 
 static void

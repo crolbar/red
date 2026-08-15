@@ -412,8 +412,10 @@ red_kb_send_keys(struct redstate* rs,
 {
     if (!rs->keyboard_focused_rsurf)
         return 0;
-    assert(rs->keyboard_focused_rsurf->rc &&
-           rs->keyboard_focused_rsurf->rc->wl_keyboard);
+    assert(rs->keyboard_focused_rsurf->rc);
+
+    if (!rs->keyboard_focused_rsurf->rc->wl_keyboard)
+        return 0;
 
     wl_keyboard_send_key(rs->keyboard_focused_rsurf->rc->wl_keyboard,
                          wl_display_next_serial(rs->wl_display),
