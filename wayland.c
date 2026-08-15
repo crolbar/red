@@ -16,6 +16,7 @@
 #include "viewporter-server-protocol.h"
 #include "wayland.h"
 #include "xdg-decoration-server-protocol.h"
+#include "xdg-output-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
 #include <assert.h>
 #include <drm/drm_fourcc.h>
@@ -3253,6 +3254,71 @@ wl_global_bind_zwlr_foreign_toplevel_manager(struct wl_client* client,
       data,
       NULL);
 }
+static void
+zxdg_output_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static const struct zxdg_output_v1_interface zxdg_output_implementation = {
+    .destroy = zxdg_output_destroy,
+};
+
+static void
+zxdg_output_manager_destroy(struct wl_client*   client,
+                            struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+static void
+zxdg_output_manager_get_xdg_output(struct wl_client*   client,
+                                   struct wl_resource* resource,
+                                   uint32_t            id,
+                                   struct wl_resource* output)
+{
+    struct redstate* rs = wl_resource_get_user_data(resource);
+
+    struct wl_resource* zxdg_output = wl_resource_create(
+      client, &zxdg_output_v1_interface, wl_resource_get_version(resource), id);
+    assert(zxdg_output);
+    wl_resource_set_implementation(
+      zxdg_output, &zxdg_output_implementation, NULL, NULL);
+
+    int      v      = wl_resource_get_version(resource);
+    uint32_t width  = rs->backend->get_width(rs->backend->d);
+    uint32_t height = rs->backend->get_height(rs->backend->d);
+
+    zxdg_output_v1_send_name(zxdg_output, "DP-1");
+    zxdg_output_v1_send_description(zxdg_output,
+                                    "Dell Inc. - DELL S2725QS - DP-1");
+    zxdg_output_v1_send_logical_size(
+      zxdg_output, width / cfg.screen_scale, height / cfg.screen_scale);
+    zxdg_output_v1_send_logical_position(zxdg_output, 0, 0);
+
+    if (v <= 3)
+        zxdg_output_v1_send_done(zxdg_output);
+}
+
+static const struct zxdg_output_manager_v1_interface
+  zxdg_output_manager_implementation = {
+      .destroy        = zxdg_output_manager_destroy,
+      .get_xdg_output = zxdg_output_manager_get_xdg_output,
+  };
+
+static void
+wl_global_bind_zxdg_output_manager(struct wl_client* client,
+                                   void*             data,
+                                   uint32_t          version,
+                                   uint32_t          id)
+{
+
+    struct wl_resource* zxdg_output_manager = wl_resource_create(
+      client, &zxdg_output_manager_v1_interface, version, id);
+    assert(zxdg_output_manager);
+    wl_resource_set_implementation(
+      zxdg_output_manager, &zxdg_output_manager_implementation, data, NULL);
+}
+
 void
 handle_wl_log(const char* _fmt, va_list args)
 {
@@ -3405,6 +3471,14 @@ init_compositor(struct redstate* rs)
                        rs,
                        wl_global_bind_zwlr_foreign_toplevel_manager);
     assert(rs->zwlr_foreign_toplevel_manager);
+
+    rs->zxdg_output_manager =
+      wl_global_create(rs->wl_display,
+                       &zxdg_output_manager_v1_interface,
+                       3,
+                       rs,
+                       wl_global_bind_zxdg_output_manager);
+    assert(rs->zxdg_output_manager);
 
     rs->client_created.notify = wl_client_created;
     wl_display_add_client_created_listener(rs->wl_display, &rs->client_created);

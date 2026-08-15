@@ -44,6 +44,7 @@ WLR_PROTOCOLS_DIR = $(shell pkg-config --variable=pkgdatadir wlr-protocols)
 
 XDG_SHELL_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/xdg-shell/xdg-shell.xml
 XDG_DECORATION_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
+XDG_OUTPUT = $(WAYLAND_PROTOCOLS_DIR)/unstable/xdg-output/xdg-output-unstable-v1.xml
 LINUX_DMABUF_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/linux-dmabuf/linux-dmabuf-v1.xml
 VIEWPORTER_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/viewporter/viewporter.xml
 RELATIVE_POINTER_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/relative-pointer/relative-pointer-unstable-v1.xml
@@ -53,6 +54,11 @@ LAYER_SHELL_XML = $(WLR_PROTOCOLS_DIR)/unstable/wlr-layer-shell-unstable-v1.xml
 FOREIGN_TOPLEVEL_XML = $(WLR_PROTOCOLS_DIR)/unstable/wlr-foreign-toplevel-management-unstable-v1.xml
 
 all: $(BINS)
+
+xdg-output-server-protocol.h: $(XDG_OUTPUT)
+	wayland-scanner server-header $< $@
+xdg-output-protocol.c: $(XDG_OUTPUT)
+	wayland-scanner private-code $< $@
 
 foreign-toplevel-server-protocol.h: $(FOREIGN_TOPLEVEL_XML)
 	wayland-scanner server-header $< $@
@@ -106,6 +112,8 @@ linux-dmabuf-protocol.c: $(LINUX_DMABUF_XML)
 PRO_SRC=linux-dmabuf-protocol.c \
 		 linux-dmabuf-client-protocol.h \
 		 linux-dmabuf-server-protocol.h \
+		 xdg-output-server-protocol.h \
+		 xdg-output-protocol.c \
 		 foreign-toplevel-server-protocol.h \
 		 foreign-toplevel-protocol.c \
 		 layer-shell-server-protocol.h \

@@ -14,6 +14,8 @@
 - [ ]windows like alt-tap with quickshell
 - [ ]put window in overlay plane (kind of like a float window)
 
+- [ ]output management (name, description, refreshrate...)
+
 - [/]run through valgrind (proper memory management)
   - [ ]fix possible losess
 - [ ]make vt recover on crash

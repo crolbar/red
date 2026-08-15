@@ -264,6 +264,7 @@ struct redstate
     struct wl_global*     wp_presentation;
     struct wl_global*     zwlr_screencopy;
     struct wl_global*     zwlr_foreign_toplevel_manager;
+    struct wl_global*     zxdg_output_manager;
     struct wl_listener    client_created;
 
     GLuint program;
