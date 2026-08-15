@@ -335,10 +335,19 @@ int
 red_destroy_rt(struct redstate* rs, struct redtoplevel* rt)
 {
 #ifdef RED_DEBUG_TRACK_CLIENT_CREATION
-    ROG("destroy rt %d(%s) %d", rt, rt->app_id, rt->rc->wl_client);
+    ROG("destroy rt %d(%s), rsurf: %d, client: %d",
+        rt,
+        rt->app_id,
+        rt->rsurf,
+        rt->rc->wl_client);
 #endif
+
+    if (rt->rsurf)
+        rt->rsurf->xdg_toplevel = NULL;
+
     if (rs->last_focused_rt == rt)
         rs->last_focused_rt = NULL;
+
     if (rs->focused_rt == rt) {
         if (!rs->keyboard_focused_rsurf_exclusive)
             rs->keyboard_focused_rsurf = NULL;
