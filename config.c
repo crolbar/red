@@ -93,10 +93,22 @@ redconfig cfg = (redconfig){
     // clang-format off
     // bind presets are a way to change your binds at runtime
     BIND_PRESETS(
-      // bind that use the shift mod, should change the
-      // key - if it is a char (a - Z) - to uppercase
+      // Binds that use the shift mod, should change the
+      // key - if it is a char (a - Z) - to uppercase.
+      //
+      // key: name of a libinput keysym
+      // mods: bitmask of ORed RED_MOD_*
+      // action & action_len: set with the `A` macro, which takes a list of RED_ACTION_*
+      // wl_client: if true bind will only work if red is spawned as a client
+      // not_repeated: set if you want bind to not be repeated when held (by default all are repeated)
       {BINDS(
           /* SERVER CONTROL */
+          {
+            .wl_client = true,
+            .key = "F4",
+            .mods = RED_MOD_NO_MODS,
+            A( RED_ACTION_QUIT )
+          },
           {
             .key = "Q",
             .mods = RED_MOD_SUPER | RED_MOD_ALT | RED_MOD_CTRL | RED_MOD_SHIFT,
@@ -149,6 +161,7 @@ redconfig cfg = (redconfig){
           {
             .key = "r",
             .mods = RED_MOD_SUPER,
+            .not_repeated = true,
             A( RED_ACTION_SPAWN, "fuzzel" )
           },
           {

@@ -294,6 +294,10 @@ input_handle_binds(struct redstate* rs, char* key_str, int press)
     for (size_t i = 0; i < preset.binds_len; i++) {
         redbind bind = preset.binds[i];
 
+        // client binds
+        if (bind.wl_client && !rs->is_wayland_client)
+            continue;
+
         // key
         if (strcmp(bind.key, key_str) != 0)
             continue;
@@ -337,11 +341,14 @@ input_handle_binds(struct redstate* rs, char* key_str, int press)
         }
 
         exec_action(rs, bind.action, bind.action_len);
-        if (rs->bind_repeater_fd != -1)
-            close(rs->bind_repeater_fd);
-        rs->repeat_action     = bind.action;
-        rs->repeat_action_len = bind.action_len;
-        red_start_bind_repeater(rs);
+
+        if (!bind.not_repeated) {
+            if (rs->bind_repeater_fd != -1)
+                close(rs->bind_repeater_fd);
+            rs->repeat_action     = bind.action;
+            rs->repeat_action_len = bind.action_len;
+            red_start_bind_repeater(rs);
+        }
         goto press;
     }
 

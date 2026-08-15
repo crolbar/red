@@ -189,6 +189,8 @@ typedef struct redbind
     char*   key;
     char**  action;
     size_t  action_len;
+    bool    wl_client;
+    bool    not_repeated;
 } redbind;
 
 enum red_state_change
@@ -260,6 +262,7 @@ struct redstate
     struct wl_global*     zwp_pointer_constraints;
     struct wl_global*     zwlr_layer_shell;
     struct wl_global*     wp_presentation;
+    struct wl_global*     zwlr_screencopy;
     struct wl_listener    client_created;
 
     GLuint program;
