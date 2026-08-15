@@ -97,6 +97,10 @@ typedef struct redconfig
 
     bool     animations;
     uint64_t animation_focus_change_duration;
+
+    bool     autoscroll;
+    double   autoscroll_scale;
+    uint32_t autoscroll_expo;
 } redconfig;
 
 extern struct redconfig cfg;

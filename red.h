@@ -213,6 +213,7 @@ enum redpfds
     RFD_TICK,
     RFD_IPC,
     RFD_BIND_REPEATER,
+    RFD_AUTOSCROLL,
     __REDPFDS_SIZE,
     __REDPFDS_NONE,
 };
@@ -323,6 +324,12 @@ struct redstate
     int    bind_repeater_fd;
     char** repeat_action;
     size_t repeat_action_len;
+
+    int      autoscroll_fd;
+    double   autoscroll_point_y;
+    int      autoscroll_direction; // 0 -> down, 1 -> up
+    int      autoscroll_delay_changed;
+    uint32_t autoscroll_delay;
 };
 
 extern struct gl_proc* gl_proc;

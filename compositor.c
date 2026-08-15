@@ -9,7 +9,9 @@
 #include "time.h"
 #include "wayland.h"
 #include <libinput.h>
+#include <linux/input.h>
 #include <sys/timerfd.h>
+#include <unistd.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <wayland-server.h>
@@ -622,5 +624,91 @@ red_on_tick(struct redstate* rs)
                 wl_buffer_send_release(v->val->pending_buffer);
         }
     }
+    return 0;
+}
+
+int
+red_autoscroll_update_timer(struct redstate* rs, uint32_t delay)
+{
+    struct timespec   ts  = { .tv_sec  = delay / 1000,
+                              .tv_nsec = (delay % 1000) * 1000 * 1000 };
+    struct itimerspec its = {
+        .it_value    = ts,
+        .it_interval = ts,
+    };
+    timerfd_settime(rs->autoscroll_fd, 0, &its, NULL);
+    return 0;
+}
+
+// the biggest delay we can have. used when the littlest mouse
+// movement happened between the start point and the current one.
+#define AUTOSCROLL_BASE_DELAY       300.0f
+#define AUTOSCROLL_NEEDED_INIT_DIST 20.0
+
+int
+red_autoscroll_handle_motion(struct redstate* rs)
+{
+    if (rs->autoscroll_fd == -1)
+        return 0;
+    assert(rs->autoscroll_point_y >= 0);
+
+    int32_t  diff     = rs->cursor_y - rs->autoscroll_point_y;
+    uint32_t abs_diff = abs(diff);
+
+    // no need to update on such small changes
+    if (abs_diff < 10)
+        return 0;
+
+    uint32_t height        = rs->backend->get_height(rs->backend->d);
+    double   display_ratio = (double)abs_diff / (double)height;
+    double   delay_scaler  = (1.0f - display_ratio);
+    uint32_t delay =
+      AUTOSCROLL_BASE_DELAY * pow(delay_scaler, cfg.autoscroll_expo);
+
+    delay *= cfg.autoscroll_scale;
+    delay = max(delay, 1);
+
+    // only update timer initially, then updates
+    // should be handled on the next timer hit
+    if (rs->autoscroll_delay == 0)
+        red_autoscroll_update_timer(rs, delay);
+    rs->autoscroll_delay_changed = 1;
+    rs->autoscroll_delay         = delay;
+    rs->autoscroll_direction     = (diff > 0) ? 0 : 1;
+
+    return 0;
+}
+
+int
+red_autoscroll_handle_click(struct redstate* rs, uint32_t button, int pressed)
+{
+    if (BTN_MIDDLE == button && !pressed && rs->autoscroll_point_y != -1) {
+        if (fabs(rs->cursor_y - rs->autoscroll_point_y) <=
+            AUTOSCROLL_NEEDED_INIT_DIST)
+            return 0;
+
+        if (rs->autoscroll_fd != -1)
+            close(rs->autoscroll_fd);
+
+        rs->autoscroll_fd                = timerfd_create(CLOCK_MONOTONIC, 0);
+        rs->pfds[RFD_AUTOSCROLL].fd      = rs->autoscroll_fd;
+        rs->pfds[RFD_AUTOSCROLL].revents = 0;
+        red_autoscroll_handle_motion(rs);
+        return 0;
+    }
+
+    if (rs->autoscroll_fd != -1) {
+        close(rs->autoscroll_fd);
+        rs->autoscroll_fd                = -1;
+        rs->autoscroll_point_y           = -1;
+        rs->autoscroll_delay             = 0;
+        rs->pfds[RFD_AUTOSCROLL].fd      = -1;
+        rs->pfds[RFD_AUTOSCROLL].revents = 0;
+        return 0;
+    }
+
+    if (button == BTN_MIDDLE && pressed)
+        rs->autoscroll_point_y = rs->cursor_y;
+
     return 0;
 }

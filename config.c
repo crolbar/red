@@ -73,6 +73,23 @@ redconfig cfg = (redconfig){
     // duration of the focus change animation in miliseconds
     .animation_focus_change_duration = 200,
 
+    // enable/disable Wind*ws *like* autoscroll.
+    // click with middle mouse button, then move pointer
+    // up and down, deppending on the distance moved - from the initial
+    // click point - the more scrolling will happen.
+    .autoscroll = true,
+
+    // scale up the delay between scroll events on autoscroll.
+    // 1 would keep it the same, 0 will make the delay 0, 2 and up will
+    // add more delay, 0.5 will half the delay.
+    // aka:
+    // closer to 0 faster scrolling, closer to 1 slower scrolling
+    .autoscroll_scale = 0.2,
+
+    // if you want the autoscroll scrolling to get faster exponentially
+    // set this to > 1.
+    .autoscroll_expo = 16,
+
     // clang-format off
     // bind presets are a way to change your binds at runtime
     BIND_PRESETS(

@@ -69,6 +69,7 @@ main(int argc, char** argv)
         [RFD_TICK]          = { .fd = -1, .events = POLLIN },
         [RFD_IPC]           = { .fd = -1, .events = POLLIN },
         [RFD_BIND_REPEATER] = { .fd = -1, .events = POLLIN },
+        [RFD_AUTOSCROLL]    = { .fd = -1, .events = POLLIN },
     };
 
     rs->active       = 1;
@@ -151,6 +152,11 @@ main(int argc, char** argv)
     rs->bind_repeater_fd                 = -1;
     rs->repeat_action                    = NULL;
     rs->repeat_action_len                = 0;
+    rs->autoscroll_fd                    = -1;
+    rs->autoscroll_point_y               = -1;
+    rs->autoscroll_direction             = 0;
+    rs->autoscroll_delay                 = 0;
+    rs->autoscroll_delay_changed         = 0;
 
     struct itimerspec its = {
         .it_value    = { .tv_sec = 1, 0 },
@@ -366,6 +372,29 @@ main(int argc, char** argv)
 
                     assert(rs->repeat_action);
                     exec_action(rs, rs->repeat_action, rs->repeat_action_len);
+                    break;
+                }
+
+                case RFD_AUTOSCROLL: {
+                    {
+                        uint64_t expirations;
+                        int      n = read(
+                          rs->autoscroll_fd, &expirations, sizeof(expirations));
+                        if (n != sizeof(expirations))
+                            continue;
+                    }
+
+                    if (rs->autoscroll_delay_changed) {
+                        red_autoscroll_update_timer(rs, rs->autoscroll_delay);
+                        rs->autoscroll_delay_changed = 0;
+                    }
+
+                    input_pointer_scroll(rs,
+                                         time_get_now_msec(),
+                                         LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL,
+                                         LIBINPUT_POINTER_AXIS_SOURCE_WHEEL,
+                                         (rs->autoscroll_direction) ? -1 : 1,
+                                         0);
                     break;
                 }
 

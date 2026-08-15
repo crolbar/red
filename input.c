@@ -386,6 +386,9 @@ input_kb_key(struct redstate* rs,
     char         key_str[64];
     xkb_keysym_get_name(key, key_str, sizeof(key_str));
 
+    if (rs->autoscroll_fd != -1)
+        red_autoscroll_handle_click(rs, 0, 1);
+
     if (input_handle_internal(rs, key_str, evdev_press))
         return 0;
 
@@ -407,6 +410,11 @@ input_pointer_button(struct redstate* rs,
                      uint32_t         button,
                      int              press)
 {
+    // start on btn middle press and end on the next press
+    if (BTN_MIDDLE == button || rs->autoscroll_fd != -1) {
+        red_autoscroll_handle_click(rs, button, press);
+    }
+
     if (red_pointer_send_button(rs, time_msec, button, press))
         return 1;
 
@@ -434,6 +442,9 @@ input_pointer_motion(struct redstate* rs,
     }
 
     if (red_pointer_send_relative_motion(rs, time_usec, dx, dy, udx, udy))
+        return 1;
+
+    if (red_autoscroll_handle_motion(rs))
         return 1;
 
     if (!rs->cursor_locked) {

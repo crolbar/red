@@ -78,3 +78,9 @@ red_on_tick(struct redstate* rs);
 int
 red_handle_animation_frame_done(struct redstate* rs);
 
+int
+red_autoscroll_handle_click(struct redstate* rs, uint32_t button, int pressed);
+int
+red_autoscroll_handle_motion(struct redstate* rs);
+int
+red_autoscroll_update_timer(struct redstate* rs, uint32_t delay);

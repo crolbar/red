@@ -38,7 +38,22 @@
 - [x]modifiers on fbs
 - [x]gl error catching
 
-- [ ]middle mouse button scroll
+- [x]middle mouse button scroll (autoscroll)
+  - [ ]horizontal
+  - [ ]send values other than 1 instead of lowering delay
 - [ ]zoom like magnifier
 - [ ]screenshots
 - [ ]screencast
+
+
+- something about making a background window recive normal frame callback rate
+  (when alt tabbing out of games they stop loading)
+
+# anims
+
+## closing ?
+mat[0] = 1 - val;
+mat[1] = 0;
+mat[2] = val;
+mat[3] = 1 - val;
+
