@@ -18,6 +18,13 @@
 int
 init_signals()
 {
+    // reap zombie children
+    struct sigaction sa;
+    sa.sa_handler = SIG_DFL;
+    sa.sa_flags   = SA_NOCLDWAIT;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGCHLD, &sa, NULL);
+
     sigset_t mask;
 
     sigemptyset(&mask);
