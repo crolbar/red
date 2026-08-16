@@ -194,6 +194,16 @@ redconfig cfg = (redconfig){
             .mods = RED_MOD_SUPER,
             A( RED_ACTION_SPAWN, "qs", "ipc", "call", "main", "toggle", "bar")
           },
+          {
+            .key = "Print",
+            .mods = RED_MOD_NO_MODS,
+            A( RED_ACTION_SPAWN, "bash", "-c", "grim -g \"$(slurp)\" - | wl-copy && wl-paste -n > ~/Screenshots/Screenshot-$(date +%F_%T).png | dunstify \"Screenshot of the region taken\" -t 1000")
+          },
+          {
+            .key = "Print",
+            .mods = RED_MOD_SHIFT,
+            A( RED_ACTION_SPAWN, "bash", "-c", "grim - | wl-copy && wl-paste -n > ~/Screenshots/Screenshot-$(date +%F_%T).png | dunstify \"Screenshot of whole screen taken\" -t 1000")
+          },
 
 
 
@@ -225,6 +235,7 @@ redconfig cfg = (redconfig){
     )
 
     AUTO_START(
+        PROG("bash", "-c", "dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_ID"),
         PROG("bash", "-c", "xwayland-satellite :67"),
         PROG("bash", "-c", "dunst"),
         PROG("bash", "-c", "foot"),

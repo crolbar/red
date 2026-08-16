@@ -145,7 +145,7 @@ init_wl_buffer(struct backend_wayland* bw)
         goto fail;
     }
 
-    if (gl_add_fb(rb->gbm_bo, rb->egl_image, &rb->fbo, &rb->rbo))
+    if (gl_add_fb(rb->egl_image, &rb->fbo, &rb->rbo))
         goto fail;
 
     if (zwp_dmabuf_add_from_gbm(rb->gbm_bo,
@@ -219,7 +219,7 @@ init_drm_buffer(struct backend_drm* bd)
     }
 
     // connect egl image to opengl
-    if (gl_add_fb(rb->gbm_bo, rb->egl_image, &rb->fbo, &rb->rbo))
+    if (gl_add_fb(rb->egl_image, &rb->fbo, &rb->rbo))
         goto fail;
 
     // connect buffer to drm

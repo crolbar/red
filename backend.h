@@ -23,6 +23,7 @@ struct backend
 
     // gives a buffer that is render ready
     struct redbuffer* (*pull_buffer)(void* d);
+    struct redbuffer* (*get_current_buffer)(void* d);
     // takes a buffer and displays it
     int (*push_buffer)(void* rs, struct redbuffer* rb);
     int (*push_init_buffer)(void* rs);

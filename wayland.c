@@ -12,12 +12,14 @@
 #include "red.h"
 #include "relative-pointer-server-protocol.h"
 #include "render.h"
+#include "screencopy-server-protocol.h"
 #include "time.h"
 #include "viewporter-server-protocol.h"
 #include "wayland.h"
 #include "xdg-decoration-server-protocol.h"
 #include "xdg-output-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
+#include <GLES3/gl3.h>
 #include <assert.h>
 #include <drm/drm_fourcc.h>
 #include <fcntl.h>
@@ -3284,7 +3286,6 @@ zxdg_output_manager_get_xdg_output(struct wl_client*   client,
     wl_resource_set_implementation(
       zxdg_output, &zxdg_output_implementation, NULL, NULL);
 
-    int      v      = wl_resource_get_version(resource);
     uint32_t width  = rs->backend->get_width(rs->backend->d);
     uint32_t height = rs->backend->get_height(rs->backend->d);
 
@@ -3295,8 +3296,8 @@ zxdg_output_manager_get_xdg_output(struct wl_client*   client,
       zxdg_output, width / cfg.screen_scale, height / cfg.screen_scale);
     zxdg_output_v1_send_logical_position(zxdg_output, 0, 0);
 
-    if (v <= 3)
-        zxdg_output_v1_send_done(zxdg_output);
+    // if (wl_resource_get_version(resource) < 3)
+    zxdg_output_v1_send_done(zxdg_output);
 }
 
 static const struct zxdg_output_manager_v1_interface
@@ -3317,6 +3318,209 @@ wl_global_bind_zxdg_output_manager(struct wl_client* client,
     assert(zxdg_output_manager);
     wl_resource_set_implementation(
       zxdg_output_manager, &zxdg_output_manager_implementation, data, NULL);
+}
+
+static void
+zwlr_screencopy_frame_copy(struct wl_client*   client,
+                           struct wl_resource* resource,
+                           struct wl_resource* buffer)
+{
+    struct redstate*  rs = wl_resource_get_user_data(resource);
+    struct redbuffer* rb = rs->backend->get_current_buffer(rs->backend->d);
+
+    struct wl_shm_buffer* shmbuf = NULL;
+    struct dmabuf*        dmabuf = NULL;
+    if ((shmbuf = wl_shm_buffer_get(buffer))) {
+        int32_t  width  = wl_shm_buffer_get_width(shmbuf);
+        int32_t  height = wl_shm_buffer_get_height(shmbuf);
+        uint8_t* dst    = wl_shm_buffer_get_data(shmbuf);
+        wl_shm_buffer_begin_access(shmbuf);
+
+        CALL(glBindFramebuffer(GL_FRAMEBUFFER, rb->fbo));
+
+        GLuint tex = 0;
+        CALL(glGenTextures(1, &tex));
+        CALL(glBindTexture(GL_TEXTURE_2D, tex));
+        CALL(
+          gl_proc->glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, rb->egl_image));
+
+        CALL(glReadPixels(
+          0, 0, width, height, GL_BGRA_EXT, GL_UNSIGNED_BYTE, dst));
+
+        CALL(glBindTexture(GL_TEXTURE_2D, 0));
+        CALL(glDeleteTextures(1, &tex));
+        CALL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+        CALL(glFinish());
+        wl_shm_buffer_end_access(shmbuf);
+        goto ready;
+    } else if ((dmabuf = red_get_dmabuf(buffer))) {
+        if (!dmabuf->egl_img)
+            if (!(dmabuf->egl_img =
+                    init_egl_image(rs->backend->get_egl_display(rs->backend->d),
+                                   dmabuf->width,
+                                   dmabuf->height,
+                                   dmabuf->format,
+                                   dmabuf->planes_count,
+                                   dmabuf->planes)))
+                goto fail;
+
+        uint32_t src_width  = rs->backend->get_width(rs->backend->d);
+        uint32_t src_height = rs->backend->get_height(rs->backend->d);
+
+        GLuint fbo = 0;
+        GLuint rbo = 0;
+        if (gl_add_fb(dmabuf->egl_img, &fbo, &rbo))
+            goto fail;
+
+        CALL(glBindFramebuffer(GL_FRAMEBUFFER, fbo));
+
+        GLuint tex = 0;
+        CALL(glGenTextures(1, &tex));
+        CALL(glBindTexture(GL_TEXTURE_2D, tex));
+        CALL(
+          gl_proc->glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, rb->egl_image));
+
+        GLuint rfbo = 0;
+        CALL(glGenFramebuffers(1, &rfbo));
+        CALL(glBindFramebuffer(GL_READ_FRAMEBUFFER, rfbo));
+        CALL(glFramebufferTexture2D(
+          GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0));
+
+        CALL(glBlitFramebuffer(0,
+                               0,
+                               src_width,
+                               src_height,
+                               0,
+                               0,
+                               dmabuf->width,
+                               dmabuf->height,
+                               GL_COLOR_BUFFER_BIT,
+                               GL_LINEAR));
+
+        CALL(glBindFramebuffer(GL_READ_FRAMEBUFFER, 0));
+        CALL(glDeleteFramebuffers(1, &rfbo));
+        CALL(glBindTexture(GL_TEXTURE_2D, 0));
+        CALL(glDeleteTextures(1, &tex));
+        CALL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+        CALL(glDeleteFramebuffers(1, &fbo));
+        CALL(glDeleteRenderbuffers(1, &rbo));
+        CALL(glFinish());
+        goto ready;
+    }
+
+    ROG_ERR("screencopy non dma or shm buffer?");
+
+ready:
+    zwlr_screencopy_frame_v1_send_flags(resource, 0);
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    zwlr_screencopy_frame_v1_send_ready(
+      resource,
+      (uint32_t)((uint64_t)now.tv_sec >> 32),
+      (uint32_t)((uint64_t)now.tv_sec & 0xffffffff),
+      (uint32_t)now.tv_nsec);
+    return;
+fail:
+    ROG_ERR("screencopy failed");
+    return;
+}
+static void
+zwlr_screencopy_frame_destroy(struct wl_client*   client,
+                              struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+static void
+zwlr_screencopy_frame_copy_with_damage(struct wl_client*   client,
+                                       struct wl_resource* resource,
+                                       struct wl_resource* buffer)
+{
+    zwlr_screencopy_frame_copy(client, resource, buffer);
+}
+
+static const struct zwlr_screencopy_frame_v1_interface
+  zwlr_screencopy_frame_v1_implementation = {
+      .copy             = zwlr_screencopy_frame_copy,
+      .destroy          = zwlr_screencopy_frame_destroy,
+      .copy_with_damage = zwlr_screencopy_frame_copy_with_damage,
+  };
+
+static void
+zwlr_screencopy_capture_output(struct wl_client*   client,
+                               struct wl_resource* resource,
+                               uint32_t            frame,
+                               int32_t             overlay_cursor,
+                               struct wl_resource* output)
+{
+    struct redstate* rs = wl_resource_get_user_data(resource);
+
+    struct wl_resource* zwlr_screencopy_frame =
+      wl_resource_create(client,
+                         &zwlr_screencopy_frame_v1_interface,
+                         wl_resource_get_version(resource),
+                         frame);
+    assert(zwlr_screencopy_frame);
+    wl_resource_set_implementation(zwlr_screencopy_frame,
+                                   &zwlr_screencopy_frame_v1_implementation,
+                                   rs,
+                                   NULL);
+
+    uint32_t width  = rs->backend->get_width(rs->backend->d);
+    uint32_t height = rs->backend->get_height(rs->backend->d);
+
+    zwlr_screencopy_frame_v1_send_buffer(
+      zwlr_screencopy_frame, WL_SHM_FORMAT_ARGB8888, width, height, width * 4);
+
+    if (wl_resource_get_version(resource) >= 3) {
+        zwlr_screencopy_frame_v1_send_linux_dmabuf(
+          zwlr_screencopy_frame, DRM_FORMAT_ARGB8888, width, height);
+
+        zwlr_screencopy_frame_v1_send_buffer_done(zwlr_screencopy_frame);
+    }
+}
+
+static void
+zwlr_screencopy_capture_output_region(struct wl_client*   client,
+                                      struct wl_resource* resource,
+                                      uint32_t            frame,
+                                      int32_t             overlay_cursor,
+                                      struct wl_resource* output,
+                                      int32_t             x,
+                                      int32_t             y,
+                                      int32_t             width,
+                                      int32_t             height)
+{
+    zwlr_screencopy_capture_output(
+      client, resource, frame, overlay_cursor, output);
+}
+
+static void
+zwlr_screencopy_destroy(struct wl_client* client, struct wl_resource* resource)
+{
+    wl_resource_destroy(resource);
+}
+
+static const struct zwlr_screencopy_manager_v1_interface
+  zwlr_screencopy_manager_v1_implementation = {
+      .capture_output        = zwlr_screencopy_capture_output,
+      .capture_output_region = zwlr_screencopy_capture_output_region,
+      .destroy               = zwlr_screencopy_destroy,
+  };
+
+static void
+wl_global_bind_zwlr_screencopy(struct wl_client* client,
+                               void*             data,
+                               uint32_t          version,
+                               uint32_t          id)
+{
+    struct wl_resource* zwlr_screencopy_manager = wl_resource_create(
+      client, &zwlr_screencopy_manager_v1_interface, version, id);
+    assert(zwlr_screencopy_manager);
+
+    wl_resource_set_implementation(zwlr_screencopy_manager,
+                                   &zwlr_screencopy_manager_v1_implementation,
+                                   data,
+                                   NULL);
 }
 
 void
@@ -3463,6 +3667,14 @@ init_compositor(struct redstate* rs)
                                             rs,
                                             wl_global_bind_zwlr_layer_shell);
     assert(rs->zwlr_layer_shell);
+
+    rs->zwlr_screencopy =
+      wl_global_create(rs->wl_display,
+                       &zwlr_screencopy_manager_v1_interface,
+                       3,
+                       rs,
+                       wl_global_bind_zwlr_screencopy);
+    assert(rs->zwlr_screencopy);
 
     rs->zwlr_foreign_toplevel_manager =
       wl_global_create(rs->wl_display,

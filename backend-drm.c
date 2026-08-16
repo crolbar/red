@@ -199,6 +199,15 @@ backend_drm_pull_buffer(void* data)
     return bd->rb0;
 }
 
+redbuffer*
+backend_drm_get_current_buffer(void* data)
+{
+    struct backend_drm* bd = data;
+    if (bd->used_rb)
+        return bd->rb1;
+    return bd->rb0;
+}
+
 int
 backend_drm_push_buffer(void* data, redbuffer* rb)
 {
@@ -314,6 +323,7 @@ struct backend backend_drm = {
     .get_height         = backend_drm_get_height,
     .get_width          = backend_drm_get_width,
     .pull_buffer        = backend_drm_pull_buffer,
+    .get_current_buffer = backend_drm_get_current_buffer,
     .push_buffer        = backend_drm_push_buffer,
     .push_init_buffer   = backend_drm_push_init_buffer,
     .resize_buffer      = backend_drm_resize_buffer,

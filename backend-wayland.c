@@ -118,6 +118,15 @@ backend_wayland_pull_buffer(void* data)
     return bw->rb0;
 }
 
+redbuffer*
+backend_wayland_get_current_buffer(void* data)
+{
+    struct backend_wayland* bw = data;
+    if (bw->used_rb)
+        return bw->rb1;
+    return bw->rb0;
+}
+
 int
 backend_wayland_push_buffer(void* data, redbuffer* rb)
 {
@@ -251,6 +260,7 @@ struct backend backend_wayland = {
     .get_height         = backend_wayland_get_height,
     .get_width          = backend_wayland_get_width,
     .pull_buffer        = backend_wayland_pull_buffer,
+    .get_current_buffer = backend_wayland_get_current_buffer,
     .push_buffer        = backend_wayland_push_buffer,
     .push_init_buffer   = backend_wayland_push_init_buffer,
     .resize_buffer      = backend_wayland_resize_buffer,

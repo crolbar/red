@@ -44,8 +44,9 @@
   - [ ]horizontal
   - [ ]send values other than 1 instead of lowering delay
 - [ ]zoom like magnifier
-- [ ]screenshots
-- [ ]screencast
+- [ ]shmooz working
+- [x]screenshots
+- [x]screencast
 
 
 - something about making a background window recive normal frame callback rate

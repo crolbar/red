@@ -40,7 +40,7 @@ init_egl(struct gbm_device* gbm_dev,
          EGLContext*        egl_context);
 
 int
-gl_add_fb(struct gbm_bo* bo, EGLImageKHR egl_image, GLuint* fbo, GLuint* rbo);
+gl_add_fb(EGLImageKHR egl_image, GLuint* fbo, GLuint* rbo);
 
 EGLImageKHR
 init_egl_image(EGLDisplay           egl_display,

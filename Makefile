@@ -52,6 +52,7 @@ POINTER_CONSTRAINTS_XML = $(WAYLAND_PROTOCOLS_DIR)/unstable/pointer-constraints/
 PRESENTATION_TIME_XML = $(WAYLAND_PROTOCOLS_DIR)/stable/presentation-time/presentation-time.xml
 LAYER_SHELL_XML = $(WLR_PROTOCOLS_DIR)/unstable/wlr-layer-shell-unstable-v1.xml
 FOREIGN_TOPLEVEL_XML = $(WLR_PROTOCOLS_DIR)/unstable/wlr-foreign-toplevel-management-unstable-v1.xml
+SCREENCOPY_XML = $(WLR_PROTOCOLS_DIR)/unstable/wlr-screencopy-unstable-v1.xml
 
 all: $(BINS)
 
@@ -63,6 +64,11 @@ xdg-output-protocol.c: $(XDG_OUTPUT)
 foreign-toplevel-server-protocol.h: $(FOREIGN_TOPLEVEL_XML)
 	wayland-scanner server-header $< $@
 foreign-toplevel-protocol.c: $(FOREIGN_TOPLEVEL_XML)
+	wayland-scanner private-code $< $@
+
+screencopy-server-protocol.h: $(SCREENCOPY_XML)
+	wayland-scanner server-header $< $@
+screencopy-protocol.c: $(SCREENCOPY_XML)
 	wayland-scanner private-code $< $@
 
 layer-shell-server-protocol.h: $(LAYER_SHELL_XML)
@@ -116,6 +122,8 @@ PRO_SRC=linux-dmabuf-protocol.c \
 		 xdg-output-protocol.c \
 		 foreign-toplevel-server-protocol.h \
 		 foreign-toplevel-protocol.c \
+		 screencopy-server-protocol.h \
+		 screencopy-protocol.c \
 		 layer-shell-server-protocol.h \
 		 layer-shell-protocol.c \
 		 presentation-time-protocol.c \

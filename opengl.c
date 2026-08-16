@@ -509,7 +509,7 @@ init_egl(struct gbm_device* gbm_dev,
 }
 
 int
-gl_add_fb(struct gbm_bo* bo, EGLImageKHR egl_image, GLuint* fbo, GLuint* rbo)
+gl_add_fb(EGLImageKHR egl_image, GLuint* fbo, GLuint* rbo)
 {
     CALL(glGenRenderbuffers(1, rbo));
     CALL(glBindRenderbuffer(GL_RENDERBUFFER, *rbo));
