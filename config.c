@@ -180,6 +180,26 @@ redconfig cfg = (redconfig){
             A( RED_ACTION_SPAWN, "brokctl", "previous")
           },
           {
+            .key = "F11",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT | RED_MOD_ALT,
+            A( RED_ACTION_SPAWN, "bash", "-c", "~/scripts/volume md")
+          },
+          {
+            .key = "F12",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT | RED_MOD_ALT,
+            A( RED_ACTION_SPAWN, "bash", "-c", "~/scripts/volume mu")
+          },
+          {
+            .key = "F9",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT | RED_MOD_ALT,
+            A( RED_ACTION_SPAWN, "bash", "-c", "~/scripts/volume bd")
+          },
+          {
+            .key = "F10",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT | RED_MOD_ALT,
+            A( RED_ACTION_SPAWN, "bash", "-c", "~/scripts/volume bu")
+          },
+          {
             .key = "X",
             .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
             A( RED_ACTION_SPAWN, "ghostty" )
@@ -235,10 +255,10 @@ redconfig cfg = (redconfig){
     )
 
     AUTO_START(
-        PROG("bash", "-c", "dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_ID"),
+        PROG("bash", "-c", "dbus-update-activation-environment --systemd DISPLAY RED_SOCKET WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_ID"),
         PROG("bash", "-c", "xwayland-satellite :67"),
         PROG("bash", "-c", "dunst"),
-        PROG("bash", "-c", "foot"),
+        PROG("bash", "-c", "systemctl start --user quickshell"),
     )
 
     ENV(
