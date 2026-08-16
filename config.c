@@ -224,6 +224,11 @@ redconfig cfg = (redconfig){
             .mods = RED_MOD_SHIFT,
             A( RED_ACTION_SPAWN, "bash", "-c", "grim - | wl-copy && wl-paste -n > ~/Screenshots/Screenshot-$(date +%F_%T).png | dunstify \"Screenshot of whole screen taken\" -t 1000")
           },
+          {
+            .key = "i",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_SPAWN, "zoomer")
+          },
 
 
 

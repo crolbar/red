@@ -44,7 +44,6 @@
   - [ ]horizontal
   - [ ]send values other than 1 instead of lowering delay
 - [ ]zoom like magnifier
-- [ ]shmooz working
 - [x]screenshots
 - [x]screencast
 
