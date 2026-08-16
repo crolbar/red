@@ -235,7 +235,7 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
     int32_t w = src_w;
     int32_t h = src_h;
 
-    if (rsurf->xdg_toplevel) {
+    if (rsurf->xdg_toplevel || rsurf->zwlr_layer_surface) {
         // removing csd that has been informed by
         // xdg_surface_set_window_geometry
         {
@@ -277,7 +277,10 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
             if (w != (int32_t)width && h != (int32_t)height) {
                 rsurf->buffer_scale     = 1;
                 rsurf->buffer_scale_set = 1;
-                red_send_toplevel_configure(rsurf, 1, 0);
+                if (rsurf->xdg_toplevel)
+                    red_send_toplevel_configure(rsurf, 1, 0);
+                else if (rsurf->zwlr_layer_surface)
+                    red_send_zwlr_layer_configure(rsurf);
             }
         }
     }
