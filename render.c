@@ -239,6 +239,7 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
     dll_for_each(rs->layer_rsurfs, v)
     {
         render_surface(rs, v->val, width, height, 0);
+        _render_subsurfs_r(v->val, width, height, 0);
     }
 
     if (!rs->using_hardware_cursor)

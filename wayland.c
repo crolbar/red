@@ -301,6 +301,9 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     if (rsurf->zwlr_layer_surface)
         goto req_redraw;
 
+    if (rsurf->parent && rsurf->parent->zwlr_layer_surface)
+        goto req_redraw;
+
     return;
 req_redraw:
 #ifdef RED_DEBUG_TRACK_SURFACE_BUFS
@@ -3072,6 +3075,12 @@ zwlr_layer_shell_get_layer_surface(struct wl_client*   client,
     struct redsurface* rsurf = red_get_rsurf_by_wl_surf(rs, surface);
     assert(rsurf);
     rsurf->zwlr_layer_surface = zwlr_layer_surface;
+
+#ifdef RED_DEBUG_TRACK_CLIENT_CREATION
+    ROG("creating layer surface with rsurf: %d, client: %d",
+        rsurf,
+        rsurf->rc->wl_client);
+#endif
 
     wl_resource_set_implementation(zwlr_layer_surface,
                                    &zwlr_layer_surface_implementation,
