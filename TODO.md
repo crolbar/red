@@ -51,12 +51,3 @@
 
 - something about making a background window recive normal frame callback rate
   (when alt tabbing out of games they stop loading)
-
-# anims
-
-## closing ?
-mat[0] = 1 - val;
-mat[1] = 0;
-mat[2] = val;
-mat[3] = 1 - val;
-

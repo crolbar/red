@@ -3296,8 +3296,10 @@ zxdg_output_manager_get_xdg_output(struct wl_client*   client,
       zxdg_output, width / cfg.screen_scale, height / cfg.screen_scale);
     zxdg_output_v1_send_logical_position(zxdg_output, 0, 0);
 
-    // if (wl_resource_get_version(resource) < 3)
-    zxdg_output_v1_send_done(zxdg_output);
+    if (wl_resource_get_version(resource) < 3)
+        zxdg_output_v1_send_done(zxdg_output);
+    else
+        wl_output_send_done(output);
 }
 
 static const struct zxdg_output_manager_v1_interface
@@ -3320,6 +3322,7 @@ wl_global_bind_zxdg_output_manager(struct wl_client* client,
       zxdg_output_manager, &zxdg_output_manager_implementation, data, NULL);
 }
 
+// TODO use fence
 static void
 zwlr_screencopy_frame_copy(struct wl_client*   client,
                            struct wl_resource* resource,
