@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=red
+Comment=A non-intelligent wayland server
+Exec=red
+DesktopNames=red
+Type=Application
