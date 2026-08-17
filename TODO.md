@@ -58,3 +58,4 @@
 ## fixes
 - [ ]refac redsurface
 - [ ]allow cursor plane to not be presend & fallback to software cursor
+- [ ]fix detection to spawn as client (first try to take master)

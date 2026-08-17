@@ -211,10 +211,11 @@ main(int argc, char** argv)
     }
 
     // libinput
-    if (!(rs->li = init_input(rs))) {
-        ROG_ERR("failed to initialize libinput");
-        goto end;
-    }
+    if (!rs->is_wayland_client)
+        if (!(rs->li = init_input(rs))) {
+            ROG_ERR("failed to initialize libinput");
+            goto end;
+        }
 
     // gl
     {
@@ -239,10 +240,11 @@ main(int argc, char** argv)
         goto end;
     }
 
-    if ((rs->li_fd = libinput_get_fd(rs->li)) < 0) {
-        ROG_ERR("failed get libinput fd: %s", strerror(errno));
-        goto end;
-    }
+    if (!rs->is_wayland_client)
+        if ((rs->li_fd = libinput_get_fd(rs->li)) < 0) {
+            ROG_ERR("failed get libinput fd: %s", strerror(errno));
+            goto end;
+        }
 
     if ((rs->backend_fd = rs->backend->get_fd(rs->backend->d)) < 0) {
         ROG_ERR("failed to get backend fd");
@@ -424,7 +426,8 @@ end:
     ret *= -1;
     ROG_WARN("Closing..");
 
-    vt_stop(rs);
+    if (!rs->is_wayland_client)
+        vt_stop(rs);
     if (rs->sig_fd != -1)
         close(rs->sig_fd);
 
