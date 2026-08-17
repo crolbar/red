@@ -74,12 +74,14 @@ backend_drm_init(void* data)
     int               cursor_plane_id  = -1;
     drmModeConnector* conn             = NULL;
 
-    char* dri_dev_path;
+    char* dri_dev_path         = NULL;
+    int   should_free_dev_path = 0;
     if (strcmp(cfg.dri_dev, "auto") == 0) {
         dri_dev_path = drm_get_first_primary_node();
         if (!dri_dev_path) {
             goto fail;
         }
+        should_free_dev_path = 1;
     } else {
         dri_dev_path = cfg.dri_dev;
     }
@@ -90,7 +92,8 @@ backend_drm_init(void* data)
         ROG_ERR("failed oppening drm device: %s", strerror(errno));
         goto fail;
     }
-    free(dri_dev_path);
+    if (should_free_dev_path)
+        free(dri_dev_path);
     drm_print_driver_version(fd);
 
     if (drm_set_client_caps(fd))

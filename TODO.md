@@ -50,3 +50,7 @@
 
 - something about making a background window recive normal frame callback rate
   (when alt tabbing out of games they stop loading)
+
+## fixes
+
+- [ ]allow cursor plane to not be presend & fallback to software cursor
