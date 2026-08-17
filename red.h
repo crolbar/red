@@ -204,6 +204,12 @@ struct redipcclient
     int subscribed;
 };
 
+struct seat_device
+{
+    int fd;
+    int dev_id;
+};
+
 enum redpfds
 {
     RFD_LIBINPUT,
@@ -237,12 +243,13 @@ struct redstate
     int wl_event_loop_fd;
 
     int is_wayland_client; // in wayland compositor spawn as a client
-    int vt_active;            // VT is active
+    int vt_active;         // VT is active
     int should_quit;       // main loop condition
     int needs_redraw;      // changes were made to the focused client
     int should_draw;       // stop rendering at all. (using 2 as draw blank)
 
     const char* seat_name;
+    dll(struct seat_device*) seat_devices;
 
     struct timespec* time_start;
 

@@ -92,6 +92,7 @@ main(int argc, char** argv)
     rs->backend->d                       = NULL;
     rs->li                               = NULL;
     rs->ls                               = NULL;
+    rs->seat_name                        = NULL;
     rs->xkb                              = NULL;
     rs->xkb_state                        = NULL;
     rs->xkb_keymap                       = NULL;
@@ -124,6 +125,7 @@ main(int argc, char** argv)
     rs->wl_subcompositor                 = NULL;
     rs->wl_data_device_manager           = NULL;
     rs->client_created                   = (struct wl_listener){};
+    rs->seat_devices                     = (typeof(rs->seat_devices))dll_init();
     rs->rcs                              = (typeof(rs->rcs))dll_init();
     rs->rts                              = (typeof(rs->rts))dll_init();
     rs->layer_rsurfs                     = (typeof(rs->layer_rsurfs))dll_init();
@@ -426,15 +428,16 @@ end:
     ret *= -1;
     ROG_WARN("Closing..");
 
-    if (!rs->is_wayland_client)
+    if (rs->li)
+        libinput_unref(rs->li);
+    if (rs->ls)
         vt_stop(rs);
     if (rs->sig_fd != -1)
         close(rs->sig_fd);
 
-    if (rs->li)
-        libinput_unref(rs->li);
-
     free(rs->time_start);
+
+    dll_for_each(rs->seat_devices, v) free(v->val);
 
     wl_display_destroy_clients(rs->wl_display);
     wl_display_destroy(rs->wl_display);
@@ -444,6 +447,7 @@ end:
     dll_destroy(rs->layer_rsurfs);
     dll_destroy(rs->dds);
     dll_destroy(rs->ipc_clients);
+    dll_destroy(rs->seat_devices);
     rs->backend->destroy(rs->backend->d);
     free(rs);
 

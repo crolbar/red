@@ -1,7 +1,3 @@
-# Requirements
-
-- user in `input` group
-
 # Building
 
 ## Manual

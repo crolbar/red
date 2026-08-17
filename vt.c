@@ -1,10 +1,10 @@
 #include "backend-drm.h"
+#include "dll.h"
 #include "log.h"
 #include "red.h"
 #include <errno.h> // IWYU pragma: keep
 #include <libseat.h>
 #include <string.h>
-#include <xf86drm.h>
 
 static void
 enable_seat(struct libseat* seat, void* data)
@@ -14,8 +14,6 @@ enable_seat(struct libseat* seat, void* data)
     rs->vt_active                = true;
 
     ROG_INFO("Acquiring drm_master and vt_display");
-    struct backend_drm* bd = rs->backend->d;
-
     if (libinput_resume(rs->li)) {
         ROG_ERR("Could not resume libinput context");
         return;
@@ -51,6 +49,36 @@ disable_seat(struct libseat* seat, void* data)
     libseat_disable_seat(rs->ls);
 }
 
+int
+open_device(struct redstate* rs, const char* path)
+{
+    int fd     = -1;
+    int dev_id = -1;
+    if ((dev_id = libseat_open_device(rs->ls, path, &fd)) == -1) {
+        ROG_ERR("libinput device open err: %s", strerror(errno));
+        return -1;
+    }
+    struct seat_device* sd = calloc(1, sizeof(*sd));
+    sd->dev_id             = dev_id;
+    sd->fd                 = fd;
+    dll_push_tail(rs->seat_devices, sd);
+    return fd;
+}
+
+int
+close_device_by_fd(struct redstate* rs, int fd)
+{
+    dll_for_each(rs->seat_devices, v)
+    {
+        if (v->val->fd != fd)
+            continue;
+
+        libseat_close_device(rs->ls, v->val->dev_id);
+        break;
+    }
+    return 0;
+}
+
 static const struct libseat_seat_listener listener = {
     .disable_seat = disable_seat,
     .enable_seat  = enable_seat,
@@ -73,6 +101,7 @@ vt_stop(struct redstate* rs)
     rs->seat_name = NULL;
     return 0;
 }
+
 static void
 log_func(enum libseat_log_level level, const char* format, va_list args)
 {

@@ -130,18 +130,14 @@ static int
 li_open_restricted(const char* path, int flags, void* user_data)
 {
     struct redstate* rs = user_data;
-    int              fd;
-    if (libseat_open_device(rs->ls, path, &fd) == -1) {
-        ROG_ERR("libinput device open err: %s", strerror(errno));
-        return -1;
-    }
-    return fd;
+    return open_device(rs, path);
 }
 
 static void
 li_close_restricted(int fd, void* user_data)
 {
-    close(fd);
+    struct redstate* rs = user_data;
+    close_device_by_fd(rs, fd);
 }
 
 static struct libinput_interface li_interface = {
