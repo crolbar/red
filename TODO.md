@@ -14,7 +14,6 @@
 - [ ]windows like alt-tap with quickshell
 - [ ]put window in overlay plane (kind of like a float window)
 
-- [ ]output management (name, description, refreshrate...)
 
 - [/]run through valgrind (proper memory management)
   - [ ]fix possible losess
@@ -43,7 +42,6 @@
 - [x]middle mouse button scroll (autoscroll)
   - [ ]horizontal
   - [ ]send values other than 1 instead of lowering delay
-- [ ]zoom like magnifier
 - [x]screenshots
 - [x]screencast
 
@@ -51,6 +49,12 @@
 - something about making a background window recive normal frame callback rate
   (when alt tabbing out of games they stop loading)
 
-## fixes
+## planned features
+- [ ]zoom like magnifier
+- [ ]output management (name, description, refreshrate...)
+  - [ ]way to choose which output connector to use
 
+
+## fixes
+- [ ]refac redsurface
 - [ ]allow cursor plane to not be presend & fallback to software cursor

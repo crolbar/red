@@ -1,15 +1,11 @@
 #pragma once
-
-#include <linux/vt.h>
-
-int
-vt_set_mode(int fd, struct vt_mode mode);
+#include "red.h"
 
 int
-vt_start(int fd);
+vt_switch(struct redstate* rs, int n);
 
 int
-vt_stop(int fd);
+vt_stop(struct redstate* rs);
 
 int
-init_vt();
+init_vt(struct redstate* rs);

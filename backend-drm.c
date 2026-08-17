@@ -8,7 +8,7 @@
 #include "render.h"
 #include "wayland.h"
 #include <errno.h> // IWYU pragma: keep
-#include <fcntl.h>
+#include <libseat.h>
 #include <string.h>
 #include <unistd.h>
 #include <xf86drm.h>
@@ -87,11 +87,11 @@ backend_drm_init(void* data)
     }
 
     ROG_INFO("Using dri device: %s", dri_dev_path);
-    fd = open(dri_dev_path, O_RDWR | O_CLOEXEC);
-    if (fd < 0) {
+    if (libseat_open_device(rs->ls, dri_dev_path, &fd) == -1) {
         ROG_ERR("failed oppening drm device: %s", strerror(errno));
         goto fail;
     }
+    assert(fd != -1);
     if (should_free_dev_path)
         free(dri_dev_path);
     drm_print_driver_version(fd);

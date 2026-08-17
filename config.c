@@ -261,13 +261,13 @@ redconfig cfg = (redconfig){
 
     AUTO_START(
         PROG("bash", "-c", "dbus-update-activation-environment --systemd DISPLAY RED_SOCKET WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_ID"),
-        PROG("bash", "-c", "xwayland-satellite :67"),
+        PROG("bash", "-c", "xwayland-satellite :68"),
         PROG("bash", "-c", "dunst"),
-        PROG("bash", "-c", "systemctl start --user quickshell"),
+        PROG("bash", "-c", "qs --config ~/qs/red_indicator"),
     )
 
     ENV(
-        {"DISPLAY", ":67"},
+        {"DISPLAY", ":68"},
         {"XDG_CURRENT_DESKTOP", "red"},
         {"XDG_SESSION_DESKTOP", "red"},
         {"XDG_SESSION_TYPE", "wayland"},

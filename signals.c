@@ -1,17 +1,9 @@
-#include <assert.h>
 #include <errno.h> // IWYU pragma: keep
-#include <fcntl.h>
-#include <libinput.h>
-#include <linux/vt.h>
 #include <signal.h>
 #include <string.h>
-#include <sys/ioctl.h>
 #include <sys/signalfd.h>
-#include <sys/stat.h>
 #include <unistd.h>
-#include <xf86drm.h>
 
-#include "backend-drm.h"
 #include "log.h"
 #include "red.h"
 
@@ -29,8 +21,6 @@ init_signals()
 
     sigemptyset(&mask);
 
-    sigaddset(&mask, SIGUSR1);
-    sigaddset(&mask, SIGUSR2);
     sigaddset(&mask, SIGINT);
     sigaddset(&mask, SIGPIPE);
     sigaddset(&mask, SIGTERM);
@@ -61,59 +51,6 @@ handle_signal(struct redstate* rs)
     }
 
     switch (si.ssi_signo) {
-        case SIGUSR1:
-            assert(!rs->is_wayland_client);
-
-            ROG_INFO("Releasing drm_master and vt_display");
-            struct backend_drm* bd = rs->backend->d;
-            rs->active             = 0;
-
-            while (!bd->page_flip_ready) {
-                rs->backend->handle_events(bd);
-            }
-
-            if (drmDropMaster(bd->drm_fd) == -1) {
-                ROG_ERR("Could not drop master: %s", strerror(errno));
-                return -1;
-            }
-
-            if (ioctl(rs->tty_fd, VT_RELDISP, 1) == -1) {
-                ROG_ERR("Could not ack VT release: %s", strerror(errno));
-                return -1;
-            }
-
-            // after resume we should get only device_add events
-            struct libinput_event* ev;
-            while ((ev = libinput_get_event(rs->li))) {
-                libinput_event_destroy(ev);
-            }
-            libinput_suspend(rs->li);
-            break;
-
-        case SIGUSR2:
-            assert(!rs->is_wayland_client);
-
-            ROG_INFO("Acquiring drm_master and vt_display");
-            bd = rs->backend->d;
-
-            if (drmSetMaster(bd->drm_fd) == -1) {
-                ROG_ERR("Could not set master: %s", strerror(errno));
-                return -1;
-            }
-
-            if (ioctl(rs->tty_fd, VT_RELDISP, VT_ACKACQ) == -1) {
-                ROG_ERR("Could not ack VT acquire: %s", strerror(errno));
-                return -1;
-            }
-
-            if (libinput_resume(rs->li)) {
-                ROG_ERR("Could not resume libinput context");
-                return -1;
-            }
-
-            rs->active = 1;
-            break;
-
         case SIGINT:
             ROG_INFO("recived int");
             break;

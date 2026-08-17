@@ -20,6 +20,7 @@
       libglvnd
       libgbm
       libdrm
+      seatd
       libinput
       libxkbcommon
 

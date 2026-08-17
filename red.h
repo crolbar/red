@@ -207,6 +207,7 @@ struct redipcclient
 enum redpfds
 {
     RFD_LIBINPUT,
+    RFD_LIBSEAT,
     RFD_SIGNALS,
     RFD_BACKEND,
     RFD_WAYLAND,
@@ -226,19 +227,22 @@ struct redstate
     struct libinput*    li;
     struct xkb_context* xkb;
     struct pollfd*      pfds;
+    struct libseat*     ls;
 
-    int tty_fd;
     int sig_fd;
     int ipc_fd;
     int li_fd;
+    int ls_fd;
     int backend_fd;
     int wl_event_loop_fd;
 
     int is_wayland_client; // in wayland compositor spawn as a client
-    int active;            // VT is active
+    int vt_active;            // VT is active
     int should_quit;       // main loop condition
     int needs_redraw;      // changes were made to the focused client
     int should_draw;       // stop rendering at all. (using 2 as draw blank)
+
+    const char* seat_name;
 
     struct timespec* time_start;
 

@@ -3,9 +3,11 @@
 #include "config.h"
 #include "log.h"
 #include "red.h"
+#include "vt.h"
 #include <errno.h> // IWYU pragma: keep
 #include <fcntl.h>
 #include <libinput.h>
+#include <libseat.h>
 #include <linux/input.h>
 #include <linux/vt.h>
 #include <string.h>
@@ -127,9 +129,10 @@ destroy_xkb(struct redstate* rs)
 static int
 li_open_restricted(const char* path, int flags, void* user_data)
 {
-    int fd = open(path, flags);
-    if (fd < 0) {
-        ROG_ERR("open err: %s", strerror(errno));
+    struct redstate* rs = user_data;
+    int              fd;
+    if (libseat_open_device(rs->ls, path, &fd) == -1) {
+        ROG_ERR("libinput device open err: %s", strerror(errno));
         return -1;
     }
     return fd;
@@ -147,7 +150,7 @@ static struct libinput_interface li_interface = {
 };
 
 struct libinput*
-init_input()
+init_input(struct redstate* rs)
 {
     struct libinput* li;
     struct udev*     udev;
@@ -157,7 +160,7 @@ init_input()
         ROG_ERR("failed to create udev");
         return NULL;
     }
-    li = libinput_udev_create_context(&li_interface, NULL, udev);
+    li = libinput_udev_create_context(&li_interface, rs, udev);
     if (!li) {
         return NULL;
     }
@@ -181,69 +184,66 @@ input_handle_internal(struct redstate* rs, char* key_str, int press)
         return 0;
 
     // currently only vt switching is handled here
-
-    int tty_fd = rs->tty_fd;
     if (strcmp(key_str, "XF86Switch_VT_1") == 0) {
-        // only on release
         if (press)
             return 1;
-        if (ioctl(tty_fd, VT_ACTIVATE, 1) == -1) {
+        if (vt_switch(rs, 1)) {
             return -1;
         }
         return 1;
     } else if (strcmp(key_str, "XF86Switch_VT_2") == 0) {
         if (press)
             return 1;
-        if (ioctl(tty_fd, VT_ACTIVATE, 2) == -1) {
+        if (vt_switch(rs, 2)) {
             return -1;
         }
         return 1;
     } else if (strcmp(key_str, "XF86Switch_VT_3") == 0) {
         if (press)
             return 1;
-        if (ioctl(tty_fd, VT_ACTIVATE, 3) == -1) {
+        if (vt_switch(rs, 3)) {
             return -1;
         }
         return 1;
     } else if (strcmp(key_str, "XF86Switch_VT_4") == 0) {
         if (press)
             return 1;
-        if (ioctl(tty_fd, VT_ACTIVATE, 4) == -1) {
+        if (vt_switch(rs, 4)) {
             return -1;
         }
         return 1;
     } else if (strcmp(key_str, "XF86Switch_VT_5") == 0) {
         if (press)
             return 1;
-        if (ioctl(tty_fd, VT_ACTIVATE, 5) == -1) {
+        if (vt_switch(rs, 5)) {
             return -1;
         }
         return 1;
     } else if (strcmp(key_str, "XF86Switch_VT_6") == 0) {
         if (press)
             return 1;
-        if (ioctl(tty_fd, VT_ACTIVATE, 6) == -1) {
+        if (vt_switch(rs, 6)) {
             return -1;
         }
         return 1;
     } else if (strcmp(key_str, "XF86Switch_VT_7") == 0) {
         if (press)
             return 1;
-        if (ioctl(tty_fd, VT_ACTIVATE, 7) == -1) {
+        if (vt_switch(rs, 7)) {
             return -1;
         }
         return 1;
     } else if (strcmp(key_str, "XF86Switch_VT_8") == 0) {
         if (press)
             return 1;
-        if (ioctl(tty_fd, VT_ACTIVATE, 8) == -1) {
+        if (vt_switch(rs, 8)) {
             return -1;
         }
         return 1;
     } else if (strcmp(key_str, "XF86Switch_VT_9") == 0) {
         if (press)
             return 1;
-        if (ioctl(tty_fd, VT_ACTIVATE, 9) == -1) {
+        if (vt_switch(rs, 9)) {
             return -1;
         }
         return 1;

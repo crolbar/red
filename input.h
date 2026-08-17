@@ -3,7 +3,7 @@
 #include "red.h"
 
 struct libinput*
-init_input();
+init_input(struct redstate* rs);
 
 int
 input_dispatch(struct redstate* rs);

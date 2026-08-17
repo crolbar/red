@@ -315,7 +315,7 @@ request_redraw(struct redstate* rs)
     rs->needs_redraw = 1;
 
     // if our vt is not focused we don't handle rendering
-    if (!rs->active)
+    if (!rs->vt_active)
         return;
 
     // we already have queued up a redraw and its not done.

@@ -102,7 +102,7 @@ drm_set_crct(struct backend_drm* bd, uint32_t buf_id)
 int
 drm_add_cursor_plane_props(struct redstate* rs, drmModeAtomicReqPtr req)
 {
-    if (!rs->active)
+    if (!rs->vt_active)
         return 0;
     struct backend_drm* bd = rs->backend->d;
     int                 x  = rs->cursor_x;
@@ -119,7 +119,7 @@ drm_add_cursor_plane_props(struct redstate* rs, drmModeAtomicReqPtr req)
 int
 drm_commit(struct redstate* rs)
 {
-    if (!rs->active)
+    if (!rs->vt_active)
         return 0;
     struct backend_drm* bd = rs->backend->d;
 
@@ -192,7 +192,7 @@ drm_update_primary_plane(struct redstate* rs, uint32_t buf_id)
 int
 drm_hide_cursor(struct redstate* rs)
 {
-    if (!rs->active)
+    if (!rs->vt_active)
         return 0;
     struct backend_drm* bd = rs->backend->d;
     if (drmModeMoveCursor(

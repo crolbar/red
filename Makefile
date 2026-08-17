@@ -25,6 +25,7 @@ DEPS = wayland-server \
 		libudev \
 		libinput \
 		xkbcommon \
+		libseat \
 		gbm \
 		egl \
 		glesv2

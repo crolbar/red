@@ -1,4 +1,5 @@
 #include <errno.h> // IWYU pragma: keep
+#include <libseat.h>
 #include <string.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
@@ -54,13 +55,14 @@ main(int argc, char** argv)
     }
 
     rs->sig_fd           = -1;
-    rs->tty_fd           = -1;
+    rs->ls_fd            = -1;
     rs->ipc_fd           = -1;
     rs->li_fd            = -1;
     rs->backend_fd       = -1;
     rs->wl_event_loop_fd = -1;
     rs->pfds = (struct pollfd[__REDPFDS_SIZE + RED_IPC_MAX_CLIENTS]){
         [RFD_LIBINPUT]      = { .fd = -1, .events = POLLIN },
+        [RFD_LIBSEAT]       = { .fd = -1, .events = POLLIN },
         [RFD_SIGNALS]       = { .fd = -1, .events = POLLIN },
         [RFD_BACKEND]       = { .fd = -1, .events = POLLIN },
         [RFD_WAYLAND]       = { .fd = -1, .events = POLLIN },
@@ -72,7 +74,7 @@ main(int argc, char** argv)
         [RFD_AUTOSCROLL]    = { .fd = -1, .events = POLLIN },
     };
 
-    rs->active       = 1;
+    rs->vt_active    = 1;
     rs->should_quit  = 0;
     rs->needs_redraw = 1;
     rs->should_draw  = 0;
@@ -89,6 +91,7 @@ main(int argc, char** argv)
 
     rs->backend->d                       = NULL;
     rs->li                               = NULL;
+    rs->ls                               = NULL;
     rs->xkb                              = NULL;
     rs->xkb_state                        = NULL;
     rs->xkb_keymap                       = NULL;
@@ -184,6 +187,13 @@ main(int argc, char** argv)
         goto end;
     }
 
+    // vt
+    if (!getenv("RED_DONT_SPAWN_CLIENT") && !rs->is_wayland_client)
+        if (init_vt(rs)) {
+            ROG_ERR("failed to initialize vt");
+            goto end;
+        }
+
     // backend
     if (!(rs->backend->d = rs->backend->init_data())) {
         ROG_ERR("failed to initialize backend data");
@@ -200,15 +210,8 @@ main(int argc, char** argv)
         goto end;
     }
 
-    // VT
-    if (!getenv("RED_DONT_SPAWN_CLIENT") && !rs->is_wayland_client)
-        if ((rs->tty_fd = init_vt()) == -1) {
-            ROG_ERR("failed to initialize vt");
-            goto end;
-        }
-
     // libinput
-    if (!(rs->li = init_input())) {
+    if (!(rs->li = init_input(rs))) {
         ROG_ERR("failed to initialize libinput");
         goto end;
     }
@@ -257,6 +260,7 @@ main(int argc, char** argv)
     }
 
     rs->pfds[RFD_LIBINPUT].fd = rs->li_fd;
+    rs->pfds[RFD_LIBSEAT].fd  = rs->ls_fd;
     rs->pfds[RFD_SIGNALS].fd  = rs->sig_fd;
     rs->pfds[RFD_BACKEND].fd  = rs->backend_fd;
     rs->pfds[RFD_WAYLAND].fd  = rs->wl_event_loop_fd;
@@ -305,18 +309,17 @@ main(int argc, char** argv)
                     if (input_dispatch(rs))
                         goto end;
                     break;
+                case RFD_LIBSEAT: {
+                    if (libseat_dispatch(rs->ls, 0) == -1) {
+                        ROG_ERR("failed to dispatch libseat: %s",
+                                strerror(errno));
+                    }
+                    break;
+                }
 
                 case RFD_SIGNALS: {
-                    int prev_active = rs->active;
-
-                    if (handle_signal(rs) == -1) {
+                    if (handle_signal(rs) == -1)
                         goto end;
-                    }
-
-                    // redraw on aquire
-                    if (rs->active && prev_active != rs->active) {
-                        rs->backend->push_init_buffer(rs);
-                    }
                     break;
                 }
 
@@ -421,8 +424,7 @@ end:
     ret *= -1;
     ROG_WARN("Closing..");
 
-    if (rs->tty_fd != -1)
-        vt_stop(rs->tty_fd);
+    vt_stop(rs);
     if (rs->sig_fd != -1)
         close(rs->sig_fd);
 
