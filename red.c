@@ -80,12 +80,13 @@ main(int argc, char** argv)
     rs->should_draw  = 0;
 
     rs->is_wayland_client = 0;
-    if (!getenv("RED_DONT_SPAWN_CLIENT"))
-        if (getenv("WAYLAND_DISPLAY") ||
-            strcmp(getenv("XDG_SESSION_TYPE"), "wayland") == 0) {
-            rs->is_wayland_client = 1;
-            ROG_INFO("Spawning as wl client");
-        }
+    // TODO
+    // if (!getenv("RED_DONT_SPAWN_CLIENT"))
+    //     if (getenv("WAYLAND_DISPLAY") ||
+    //         strcmp(getenv("XDG_SESSION_TYPE"), "wayland") == 0) {
+    //         rs->is_wayland_client = 1;
+    //         ROG_INFO("Spawning as wl client");
+    //     }
 
     rs->backend = (rs->is_wayland_client) ? &backend_wayland : &backend_drm;
 
