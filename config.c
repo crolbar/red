@@ -151,6 +151,11 @@ redconfig cfg = (redconfig){
           { .key = "8", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "7" ) },
           { .key = "9", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "8" ) },
           { .key = "0", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "9" ) },
+          {
+            .key = "semicolon",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_OVERLAY_SURFACE )
+          },
 
           /* SPAWNERS */
           {

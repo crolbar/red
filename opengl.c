@@ -156,7 +156,7 @@ gl_surface_texture_map_shm_image(struct redsurface*    rsurf,
 
     wl_shm_buffer_begin_access(shmbuf);
 
-    if (rsurf->w != w || rsurf->h != h) {
+    if (rsurf->shm_w != w || rsurf->shm_h != h) {
         CALL(glTexImage2D(
           GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, gl_fmt, GL_UNSIGNED_BYTE, data));
     }
@@ -270,6 +270,20 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
         // set buffer scale back to 1 if recived buffer's
         // width and height are not fitting the full screen
         {
+            // skip fix if rsurf is the overlay or
+            // if its dimentions match the overlay's
+            if (rsurf->xdg_toplevel) {
+                if (rsurf->rs->overlay_rt && rsurf->rs->overlay_rt->rsurf)
+                    if (rsurf->rs->overlay_rt->rsurf == rsurf) {
+                        goto after_scale_set;
+                    }
+                // if (rsurf->rs->overlay_rt)
+                if (rsurf->w == rsurf->rs->overlay_rt_w &&
+                    rsurf->h == rsurf->rs->overlay_rt_h) {
+                    goto after_scale_set;
+                }
+            }
+
             uint32_t width =
               rsurf->rs->backend->get_width(rsurf->rs->backend->d);
             uint32_t height =
@@ -284,15 +298,17 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
             }
         }
     }
+after_scale_set:
 
     if (shmbuf)
         gl_surface_texture_map_shm_image(rsurf, shmbuf, x, y, w, h);
     if (dmabuf)
         gl_surface_texture_map_egl_image(rsurf, dmabuf, x, y, w, h);
 
-    // using the old rsurf->w/h values in the shm tex image, so set these after
-    rsurf->w = w;
-    rsurf->h = h;
+    rsurf->w     = w;
+    rsurf->h     = h;
+    rsurf->shm_w = w;
+    rsurf->shm_h = h;
 
     return 0;
 fail:

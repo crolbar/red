@@ -242,6 +242,10 @@ render_frame(struct redstate* rs, struct redbuffer* rb)
         _render_subsurfs_r(v->val, width, height, 0);
     }
 
+    // TODO: TMP
+    if (rs->overlay_rt && rs->overlay_rt != rs->focused_rt)
+        render_toplevel(rs->overlay_rt, width, height, 0);
+
     if (!rs->using_hardware_cursor)
     // render software cursor
     {

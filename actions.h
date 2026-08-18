@@ -17,6 +17,8 @@
 #define RED_ACTION_FOCUS_LAST "focus_last"
 // focus the nth toplevel. start from 0 using the number as an index in a list
 #define RED_ACTION_FOCUS_N "focus_n"
+// makes the currently focused toplevel as a overlay (it will be showned when the focus moves to another toplevel)
+#define RED_ACTION_OVERLAY_SURFACE "overlay_surface"
 
 // draw blank frame & stop rendering until action is send again
 #define RED_ACTION_STOP_RENDERER "stop_renderer"

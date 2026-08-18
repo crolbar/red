@@ -229,7 +229,8 @@ red_is_rsurf_focused(struct redstate* rs, struct redsurface* rsurf)
     if (rsurf->parent)
         return red_is_rsurf_focused(rs, rsurf->parent);
 
-    return rs->focused_rt->rsurf == rsurf;
+    return rs->focused_rt->rsurf == rsurf ||
+           (rs->overlay_rt && rsurf == rs->overlay_rt->rsurf);
 }
 
 // check if rc is not freed.
@@ -300,6 +301,7 @@ red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
 int
 red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
 {
+    // did focus change
     if (rs->focused_rt != rt) {
         // send leave on keyboard, pointer and surface to old focus
         struct redtoplevel* frt = rs->focused_rt;
@@ -311,6 +313,26 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
                 red_send_toplevel_configure(frt->rsurf, 0, 0);
         }
         frt = NULL;
+
+        if (rs->overlay_rt && rs->overlay_rt->rsurf) {
+            // send resize configure to overlay
+            if (rs->overlay_rt != rt) {
+                rs->overlay_rt->rsurf->x = rs->overlay_rt_x;
+                rs->overlay_rt->rsurf->y = rs->overlay_rt_y;
+                rs->overlay_rt->rsurf->w = rs->overlay_rt_w;
+                rs->overlay_rt->rsurf->h = rs->overlay_rt_h;
+                red_send_toplevel_configure(rs->overlay_rt->rsurf, 0, 1);
+            } else
+            // if we are the overlay keep size normal
+            {
+                uint32_t w = rs->backend->get_width(rs->backend->d);
+                uint32_t h = rs->backend->get_height(rs->backend->d);
+                rs->overlay_rt->rsurf->x = 0;
+                rs->overlay_rt->rsurf->y = 0;
+                rs->overlay_rt->rsurf->w = w;
+                rs->overlay_rt->rsurf->h = h;
+            }
+        }
 
         // send enter + frame callback on new focus
         red_rt_send_enter(rs, rt);
@@ -344,6 +366,9 @@ red_destroy_rt(struct redstate* rs, struct redtoplevel* rt)
 
     if (rt->rsurf)
         rt->rsurf->xdg_toplevel = NULL;
+
+    if (rs->overlay_rt && rs->overlay_rt == rt)
+        rs->overlay_rt = NULL;
 
     if (rs->last_focused_rt == rt)
         rs->last_focused_rt = NULL;
@@ -395,14 +420,18 @@ red_create_rt(struct redstate*   rs,
     rt = calloc(1, sizeof(*rt));
     assert(rt);
 
+    uint32_t          w  = rs->backend->get_width(rs->backend->d);
+    uint32_t          h  = rs->backend->get_height(rs->backend->d);
     struct redclient* rc = red_get_client(rs, wl_client);
     assert(rc);
 
-    rt->rs     = rs;
-    rt->rc     = rc;
-    rt->rsurf  = rsurf;
-    rt->app_id = NULL;
-    rt->title  = NULL;
+    rt->rs       = rs;
+    rt->rc       = rc;
+    rt->rsurf    = rsurf;
+    rt->app_id   = NULL;
+    rt->title    = NULL;
+    rt->rsurf->w = w;
+    rt->rsurf->h = h;
 
     dll_push_tail(rs->rts, rt);
 

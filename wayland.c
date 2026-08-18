@@ -101,6 +101,9 @@ red_on_frame_done(struct redstate* rs, uint32_t time_msec)
 
         dll_for_each(rs->layer_rsurfs, v)
           red_handle_send_callbacks(v->val, time_msec);
+
+        if (rs->overlay_rt)
+            red_handle_send_callbacks(rs->overlay_rt->rsurf, time_msec);
     }
 
     if (red_handle_animation_frame_done(rs)) {
@@ -267,6 +270,7 @@ wl_surface_commit(struct wl_client* client, struct wl_resource* resource)
     struct redstate*   rs    = rsurf->rs;
     assert(rsurf);
     assert(rs);
+    // also true if rsurf is overlay
     int rsurf_is_focused = red_is_rsurf_focused(rs, rsurf);
 
 #ifdef RED_DEBUG_TRACK_SURFACE_BUFS
@@ -411,6 +415,9 @@ wl_surface_resource_destroy(struct wl_resource* resource)
         rsurf->rs->last_focused_rt->rsurf == rsurf)
         rsurf->rs->last_focused_rt = NULL;
 
+    if (rsurf->rs->overlay_rt && rsurf->rs->overlay_rt->rsurf == rsurf)
+        rsurf->rs->overlay_rt = NULL;
+
     if (rsurf->rs->keyboard_focused_rsurf == rsurf) {
         rsurf->rs->keyboard_focused_rsurf           = NULL;
         rsurf->rs->keyboard_focused_rsurf_exclusive = 0;
@@ -461,6 +468,8 @@ init_redsurface()
     rsurf->y                     = 0;
     rsurf->w                     = 0;
     rsurf->h                     = 0;
+    rsurf->shm_w                 = 0;
+    rsurf->shm_h                 = 0;
     rsurf->configured            = 0;
     rsurf->pending_buffer        = NULL;
     rsurf->current_buffer        = NULL;
@@ -790,16 +799,6 @@ red_send_toplevel_configure(struct redsurface* rsurf,
     ROG(
       "sendig tl configure. client: %d, rsurf: %d", rsurf->rc->wl_client, rsurf)
 #endif
-    // rsurf->configured = 0;
-
-    uint32_t width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
-    uint32_t height = rsurf->rs->backend->get_height(rsurf->rs->backend->d);
-
-    // making the surface cover the whole screen
-    uint32_t scale = red_get_scale(rsurf);
-    width /= scale;
-    height /= scale;
-
     struct wl_array states;
     wl_array_init(&states);
     // setting maximized state as it basicly tells the client to not render csd
@@ -824,6 +823,13 @@ red_send_toplevel_configure(struct redsurface* rsurf,
         xdg_toplevel_send_wm_capabilities(rsurf->xdg_toplevel, &a);
         wl_array_release(&a);
     }
+
+    int32_t width  = rsurf->w;
+    int32_t height = rsurf->h;
+    // making the surface cover the whole screen
+    uint32_t scale = red_get_scale(rsurf);
+    width /= scale;
+    height /= scale;
 
     if (wl_resource_get_version(rsurf->xdg_toplevel) > 3)
         xdg_toplevel_send_configure_bounds(rsurf->xdg_toplevel, width, height);

@@ -122,9 +122,13 @@ struct redsurface
     int32_t x;
     int32_t y;
 
-    // currently set when binding gl texture
+    // dimentions of the buffer, not logical size
+    // update's when buffer dimentions changes
     int32_t w;
     int32_t h;
+
+    int shm_w;
+    int shm_h;
 
     // gl texture
     GLuint gl_tex;
@@ -346,6 +350,12 @@ struct redstate
     int      autoscroll_direction; // 0 -> down, 1 -> up
     int      autoscroll_delay_changed;
     uint32_t autoscroll_delay;
+
+    struct redtoplevel* overlay_rt;
+    int32_t             overlay_rt_x;
+    int32_t             overlay_rt_y;
+    int32_t             overlay_rt_w;
+    int32_t             overlay_rt_h;
 };
 
 extern struct gl_proc* gl_proc;

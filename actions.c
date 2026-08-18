@@ -6,6 +6,7 @@
 #include "log.h"
 #include "red.h"
 #include "render.h"
+#include "wayland.h"
 #include "xdg-shell-server-protocol.h"
 #include <errno.h> // IWYU pragma: keep
 #include <fcntl.h>
@@ -127,6 +128,37 @@ redaction_stop_renderer(struct redstate* rs, char** args, size_t args_len)
     }
 }
 
+void
+redaction_overlay_surface(struct redstate* rs, char** args, size_t args_len)
+{
+    uint32_t w = rs->backend->get_width(rs->backend->d);
+    uint32_t h = rs->backend->get_height(rs->backend->d);
+
+    // initial values of the overlay surface
+    if (rs->overlay_rt_h == 0 && rs->overlay_rt_w == 0) {
+        rs->overlay_rt_x = 150;
+        rs->overlay_rt_y = 150;
+        rs->overlay_rt_w = w / 3;
+        rs->overlay_rt_h = h / 3;
+    }
+
+    // set old overlay_rt to normal dimentions
+    if (rs->overlay_rt && rs->overlay_rt->rsurf) {
+        rs->overlay_rt->rsurf->x = 0;
+        rs->overlay_rt->rsurf->y = 0;
+        rs->overlay_rt->rsurf->w = w;
+        rs->overlay_rt->rsurf->h = h;
+        red_send_toplevel_configure(rs->overlay_rt->rsurf, 0, 1);
+    }
+
+    if (rs->overlay_rt == rs->focused_rt) {
+        rs->overlay_rt = NULL;
+        return;
+    }
+
+    rs->overlay_rt = rs->focused_rt;
+}
+
 int
 spawn_program(char** args, size_t args_len)
 {
@@ -190,6 +222,8 @@ ACTIONS(
     { .action_type = RED_ACTION_FOCUS_LAST, redaction_focus_last },
     { .action_type = RED_ACTION_FOCUS_N, redaction_focus_n },
     { .action_type = RED_ACTION_SELECT_BIND_PRESET, redaction_select_bind_preset},
+    { .action_type = RED_ACTION_OVERLAY_SURFACE, redaction_overlay_surface},
+
 )
 // clang-format on
 

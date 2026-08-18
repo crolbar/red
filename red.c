@@ -161,6 +161,11 @@ main(int argc, char** argv)
     rs->autoscroll_direction             = 0;
     rs->autoscroll_delay                 = 0;
     rs->autoscroll_delay_changed         = 0;
+    rs->overlay_rt                       = NULL;
+    rs->overlay_rt_x                     = 0;
+    rs->overlay_rt_y                     = 0;
+    rs->overlay_rt_w                     = 0;
+    rs->overlay_rt_h                     = 0;
 
     struct itimerspec its = {
         .it_value    = { .tv_sec = 1, 0 },
