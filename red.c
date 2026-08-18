@@ -325,6 +325,9 @@ main(int argc, char** argv)
                 case RFD_SIGNALS: {
                     if (handle_signal(rs) == -1)
                         goto end;
+                    // instantly check to prevent looping
+                    if (rs->should_quit == 1)
+                        goto quit;
                     break;
                 }
 
@@ -424,6 +427,7 @@ main(int argc, char** argv)
 
     wl_display_flush_clients(rs->wl_display);
 
+quit:
     ret = 0;
 end:
     ret *= -1;
