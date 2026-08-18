@@ -13,11 +13,11 @@
 #include <unistd.h>
 #include <xf86drm.h>
 
-void*
+struct backend_drm*
 backend_drm_init_data()
 {
     struct backend_drm* bd = NULL;
-    bd                     = malloc(sizeof(*bd));
+    bd                     = calloc(1, sizeof(*bd));
     if (!bd)
         return NULL;
 
@@ -47,26 +47,9 @@ backend_drm_init_data()
     return bd;
 }
 
-uint32_t
-backend_drm_get_width(void* data)
-{
-    struct backend_drm* bd = data;
-    return bd->width;
-}
-
-uint32_t
-backend_drm_get_height(void* data)
-{
-    struct backend_drm* bd = data;
-    return bd->height;
-}
-
 int
-backend_drm_init(void* data)
+backend_drm_init(struct redstate* rs, struct backend_drm* bd)
 {
-    struct redstate*    rs = data;
-    struct backend_drm* bd = rs->backend->d;
-
     int               fd               = -1;
     int               crtc_idx         = -1;
     int               crtc_id          = -1;
@@ -189,6 +172,20 @@ fail:
     if (conn)
         drmModeFreeConnector(conn);
     return 1;
+}
+
+uint32_t
+backend_drm_get_width(void* data)
+{
+    struct backend_drm* bd = data;
+    return bd->width;
+}
+
+uint32_t
+backend_drm_get_height(void* data)
+{
+    struct backend_drm* bd = data;
+    return bd->height;
 }
 
 redbuffer*
@@ -321,8 +318,6 @@ backend_drm_destroy(void* d)
 
 struct backend backend_drm = {
     .d                  = NULL,
-    .init_data          = backend_drm_init_data,
-    .init               = backend_drm_init,
     .get_height         = backend_drm_get_height,
     .get_width          = backend_drm_get_width,
     .pull_buffer        = backend_drm_pull_buffer,

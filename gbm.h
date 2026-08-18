@@ -2,6 +2,7 @@
 
 #include "backend-drm.h"
 #include "backend-wayland.h"
+#include <EGL/eglext.h>
 
 struct gbm_device*
 init_gbm(int drm_fd);

@@ -19,4 +19,10 @@ struct backend_wayland
     int                    is_ready_for_frame;
 };
 
+struct backend_wayland*
+backend_wayland_init_data();
+
+int
+backend_wayland_init(struct redstate* rs, struct backend_wayland* bw);
+
 extern struct backend backend_wayland;

@@ -148,6 +148,8 @@ static struct libinput_interface li_interface = {
 struct libinput*
 init_input(struct redstate* rs)
 {
+    assert(rs->ls && rs->seat_name);
+
     struct libinput* li;
     struct udev*     udev;
 
@@ -155,17 +157,18 @@ init_input(struct redstate* rs)
     if (!udev) {
         ROG_ERR("failed to create udev");
         return NULL;
-    }
-    li = libinput_udev_create_context(&li_interface, rs, udev);
-    if (!li) {
+    };
+    if (!(li = libinput_udev_create_context(&li_interface, rs, udev))) {
+        ROG_ERR("libinput failed create context");
         return NULL;
     }
     udev_unref(udev);
-    if (libinput_udev_assign_seat(li, "seat0") == -1) {
+    if (libinput_udev_assign_seat(li, rs->seat_name) == -1) {
+        ROG_ERR("libinput failed to assign a seat");
         return NULL;
     }
     if (libinput_dispatch(li)) {
-        ROG_ERR("%s", strerror(errno));
+        ROG_ERR("libinput dispatch error: %s", strerror(errno));
         return NULL;
     }
 

@@ -11,11 +11,11 @@
 #include <string.h>
 #include <unistd.h>
 
-void*
+struct backend_wayland*
 backend_wayland_init_data()
 {
     struct backend_wayland* bw = NULL;
-    bw                         = malloc(sizeof(*bw));
+    bw                         = calloc(1, sizeof(*bw));
     if (!bw)
         return NULL;
 
@@ -36,26 +36,9 @@ backend_wayland_init_data()
     return bw;
 }
 
-uint32_t
-backend_wayland_get_width(void* data)
-{
-    struct backend_wayland* bw = data;
-    return bw->width;
-}
-
-uint32_t
-backend_wayland_get_height(void* data)
-{
-    struct backend_wayland* bw = data;
-    return bw->height;
-}
-
 int
-backend_wayland_init(void* data)
+backend_wayland_init(struct redstate* rs, struct backend_wayland* bw)
 {
-    struct redstate*        rs = data;
-    struct backend_wayland* bw = rs->backend->d;
-
     bw->wc = init_wayland();
     if (!bw->wc)
         goto fail;
@@ -105,6 +88,20 @@ fail:
     if (bw->gbm_dev)
         gbm_device_destroy(bw->gbm_dev);
     return 1;
+}
+
+uint32_t
+backend_wayland_get_width(void* data)
+{
+    struct backend_wayland* bw = data;
+    return bw->width;
+}
+
+uint32_t
+backend_wayland_get_height(void* data)
+{
+    struct backend_wayland* bw = data;
+    return bw->height;
 }
 
 redbuffer*
@@ -255,8 +252,6 @@ backend_wayland_destroy(void* d)
 
 struct backend backend_wayland = {
     .d                  = NULL,
-    .init_data          = backend_wayland_init_data,
-    .init               = backend_wayland_init,
     .get_height         = backend_wayland_get_height,
     .get_width          = backend_wayland_get_width,
     .pull_buffer        = backend_wayland_pull_buffer,

@@ -45,4 +45,10 @@ struct backend_drm
     uint32_t pending_buf_id;
 };
 
+struct backend_drm*
+backend_drm_init_data();
+
+int
+backend_drm_init(struct redstate* rs, struct backend_drm* bd);
+
 extern struct backend backend_drm;

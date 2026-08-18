@@ -22,7 +22,6 @@ enable_seat(struct libseat* seat, void* data)
     // redraw on aquire
     if (rs->vt_active && prev_active != rs->vt_active) {
         rs->backend->push_init_buffer(rs);
-        ROG("redraw on quire")
     }
 }
 
@@ -31,7 +30,7 @@ disable_seat(struct libseat* seat, void* data)
 {
     struct redstate* rs = data;
     rs->vt_active       = false;
-    ROG_INFO("Releasing drm_master and vt_display!!!!");
+    ROG_INFO("Releasing drm_master and vt_display");
 
     struct backend_drm* bd = rs->backend->d;
     rs->vt_active          = 0;
@@ -122,6 +121,7 @@ init_vt(struct redstate* rs)
     }
 
     rs->seat_name = libseat_seat_name(rs->ls);
+    ROG_INFO("Opened on seat: %s", rs->seat_name);
 
     libseat_set_log_handler(log_func);
     return 0;

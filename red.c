@@ -5,8 +5,6 @@
 #include <unistd.h>
 
 #include "actions.h"
-#include "backend-drm.h"
-#include "backend-wayland.h"
 #include "compositor.h"
 #include "config.h"
 #include "dll.h"
@@ -54,7 +52,15 @@ main(int argc, char** argv)
         goto end;
     }
 
-    rs->sig_fd           = -1;
+    if (getenv("XDG_RUNTIME_DIR") == NULL) {
+        ROG_ERR("XDG_RUNTIME_DIR not set!");
+        goto end;
+    }
+
+    if ((rs->sig_fd = init_signals()) < 0) {
+        ROG_ERR("failed to initialize signals");
+        goto end;
+    }
     rs->ls_fd            = -1;
     rs->ipc_fd           = -1;
     rs->li_fd            = -1;
@@ -74,23 +80,12 @@ main(int argc, char** argv)
         [RFD_AUTOSCROLL]    = { .fd = -1, .events = POLLIN },
     };
 
-    rs->vt_active    = 1;
-    rs->should_quit  = 0;
-    rs->needs_redraw = 1;
-    rs->should_draw  = 0;
-
-    rs->is_wayland_client = 0;
-    // TODO
-    // if (!getenv("RED_DONT_SPAWN_CLIENT"))
-    //     if (getenv("WAYLAND_DISPLAY") ||
-    //         strcmp(getenv("XDG_SESSION_TYPE"), "wayland") == 0) {
-    //         rs->is_wayland_client = 1;
-    //         ROG_INFO("Spawning as wl client");
-    //     }
-
-    rs->backend = (rs->is_wayland_client) ? &backend_wayland : &backend_drm;
-
-    rs->backend->d                       = NULL;
+    rs->vt_active                        = 1;
+    rs->should_quit                      = 0;
+    rs->needs_redraw                     = 1;
+    rs->should_draw                      = 0;
+    rs->is_wayland_client                = 0;
+    rs->backend                          = NULL;
     rs->li                               = NULL;
     rs->ls                               = NULL;
     rs->seat_name                        = NULL;
@@ -173,14 +168,6 @@ main(int argc, char** argv)
     };
     timerfd_settime(rs->tick_timer_fd, 0, &its, NULL);
 
-    if (!(rs->xkb = xkb_context_new(XKB_CONTEXT_NO_FLAGS))) {
-        goto end;
-    }
-    if (init_xkb_keyboard(rs)) {
-        ROG_ERR("failed to initialize xkb");
-        goto end;
-    }
-
     if (ipc_update_pfds(rs)) {
         goto end;
     }
@@ -190,35 +177,20 @@ main(int argc, char** argv)
         goto end;
     }
 
-    // vt
-    if (!getenv("RED_DONT_SPAWN_CLIENT") && !rs->is_wayland_client)
-        if (init_vt(rs)) {
-            ROG_ERR("failed to initialize vt");
-            goto end;
-        }
-
-    // backend
-    if (!(rs->backend->d = rs->backend->init_data())) {
-        ROG_ERR("failed to initialize backend data");
+    if (!(rs->xkb = xkb_context_new(XKB_CONTEXT_NO_FLAGS))) {
         goto end;
     }
-    if (rs->backend->init(rs)) {
+    if (init_xkb_keyboard(rs)) {
+        ROG_ERR("failed to initialize xkb");
+        goto end;
+    }
+
+    // backend
+    // NOTE: rs->is_wayland_client is set here, USE IT ONLY BELOW
+    if (init_backend(rs)) {
         ROG_ERR("failed to initialize backend");
         goto end;
     }
-
-    // signals
-    if ((rs->sig_fd = init_signals()) < 0) {
-        ROG_ERR("failed to initialize signals");
-        goto end;
-    }
-
-    // libinput
-    if (!rs->is_wayland_client)
-        if (!(rs->li = init_input(rs))) {
-            ROG_ERR("failed to initialize libinput");
-            goto end;
-        }
 
     // gl
     {

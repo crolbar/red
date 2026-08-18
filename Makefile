@@ -3,6 +3,7 @@ SRC = red.c \
 		compositor.c \
 		actions.c \
 		drm.c \
+		backend.c \
 		backend-drm.c \
 		backend-wayland.c \
 		backend-wayland-client.c \

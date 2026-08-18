@@ -1,21 +1,23 @@
 #pragma once
 
-#include "red.h"
 #include <EGL/egl.h>
 #include <stdint.h>
+
+typedef struct redstate redstate;
+
+// initializes:
+//   rs->backend
+//   rs->backend->d
+//   rs->is_wayland_client
+//   other data assosiated with the backend like (libinput and libseat for drm backend)
+int
+init_backend(struct redstate* rs);
 
 // current backends: drm and wayland
 struct backend
 {
     // data structure of the current backend
     void* d;
-    // initializing the data structure and returning it
-    void* (*init_data)();
-
-    /*
-     starts up the backend, up to the point of frame buffers
-    */
-    int (*init)(void* rs);
 
     // in resolution, not logical size
     uint32_t (*get_width)(void* d);
