@@ -13,14 +13,15 @@ make release
 - `make`
 - `gcc`
 - `pkg-config`
-- `wayland`
 - `wayland-protocols`
 - `wlr-protocols`
+- `wayland`
 - `libdrm`
 - `libgdm`
 - `libglvnd`
 - `libinput`
 - `libxkbcommon`
+- `seatd`
 
 # Resources
 

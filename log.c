@@ -77,6 +77,20 @@ create_state_dir()
     }
     sprintf(path, fmt, home, time(NULL));
 
+    {
+        char buf[256];
+        memset(buf, 0, 256);
+        strcpy(buf, path);
+        *strrchr(buf, '/') = '\0';
+        char* tmp          = strrchr(buf, '/');
+        *tmp               = '\0';
+        // ~/.local
+        mkdir(buf, 0755);
+        *tmp = '/';
+        // ~/.local/state
+        mkdir(buf, 0755);
+    }
+
     struct stat sb;
     if (stat(path, &sb)) {
         mkdir(path, 0755);

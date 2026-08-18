@@ -6,14 +6,13 @@
 - [x]wlr layers
   - [x]layer keyboard input
   - [x]layer pointer input
-  - ~[ ]layer in overlay plane?~
+  - ~~[ ]layer in overlay plane?~~
 - [x]toplevel focus switch animation
-  - ~[ ]toplevel open/close animation?~
+  - ~~[ ]toplevel open/close animation?~~
 - [x]ipc
   - [x]sub for updates
 - [ ]windows like alt-tap with quickshell
 - [ ]put window in overlay plane (kind of like a float window)
-
 
 - [/]run through valgrind (proper memory management)
   - [ ]fix possible losess
@@ -45,16 +44,16 @@
 - [x]screenshots
 - [x]screencast
 
-
 - something about making a background window recive normal frame callback rate
   (when alt tabbing out of games they stop loading)
 
 ## planned features
+
 - [ ]zoom like magnifier
 - [ ]output management (name, description, refreshrate...)
   - [ ]way to choose which output connector to use
 
-
 ## fixes
+
 - [ ]refac redsurface
 - [ ]allow cursor plane to not be presend & fallback to software cursor
