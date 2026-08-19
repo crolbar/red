@@ -136,8 +136,8 @@ red_get_rsurf_by_wl_surf(struct redstate* rs, struct wl_resource* wl_surface)
 struct redsurface*
 red_hit_test(struct redsurface* rsurf, double x, double y, uint32_t scale)
 {
-    double sx = rsurf->x * scale;
-    double sy = rsurf->y * scale;
+    double sx = rsurf->x * (int32_t)scale;
+    double sy = rsurf->y * (int32_t)scale;
     double sw = rsurf->w;
     double sh = rsurf->h;
 
@@ -212,6 +212,114 @@ red_update_pointer_focused_rsurf(struct redstate* rs)
     red_pointer_send_enter(ht_rsurf->rc, ht_rsurf->wl_surface);
 
     rs->pointer_focused_rsurf = ht_rsurf;
+
+    return 0;
+}
+
+int
+red_is_click_on_overlay(struct redstate* rs)
+{
+    if (!rs->overlay_rt)
+        return 0;
+    if (!rs->overlay_rt->rsurf)
+        return 0;
+
+    return red_hit_test(rs->overlay_rt->rsurf,
+                        rs->cursor_x,
+                        rs->cursor_y,
+                        red_get_scale(rs->overlay_rt->rsurf)) != NULL;
+}
+
+// return: 0 -> nothing happened, 1 -> should skip sending event
+int
+red_update_overlay_on_button(struct redstate* rs, uint32_t button, int state)
+{
+    if (!state) {
+        // on release when in move mode exit mode
+        if (rs->overlay_move_mode) {
+            rs->overlay_move_mode = 0;
+            return 1;
+        }
+        return 0;
+    }
+
+    if (!red_is_click_on_overlay(rs))
+        return 0;
+
+    // we have click on the overlay
+
+    // on click on overlay enter move mode
+    if (button == BTN_LEFT)
+        rs->overlay_move_mode = 1;
+    else if (button == BTN_RIGHT)
+        rs->overlay_move_mode = 2;
+    else
+        return 0;
+
+    if (!rs->overlay_rt || !rs->overlay_rt->rsurf)
+        return 1;
+
+    // move
+    if (rs->overlay_move_mode == 1) {
+        rs->overlay_move_mode_diff_x =
+          (rs->cursor_x / cfg.screen_scale) - rs->overlay_rt->rsurf->x;
+
+        rs->overlay_move_mode_diff_y =
+          (rs->cursor_y / cfg.screen_scale) - rs->overlay_rt->rsurf->y;
+    }
+
+    // TODO: fucked up when surf x or y is < 0
+    // resize
+    else if (rs->overlay_move_mode == 2) {
+        rs->overlay_move_mode_diff_x =
+          rs->overlay_rt->rsurf->w -
+          (rs->cursor_x - rs->overlay_rt->rsurf->x * cfg.screen_scale);
+
+        rs->overlay_move_mode_diff_y =
+          rs->overlay_rt->rsurf->h -
+          (rs->cursor_y - rs->overlay_rt->rsurf->y * cfg.screen_scale);
+    }
+
+    return 0;
+}
+
+int
+red_update_overlay_on_motion(struct redstate* rs)
+{
+    // move
+    if (rs->overlay_move_mode == 1) {
+        rs->overlay_rt_x =
+          (rs->cursor_x / cfg.screen_scale) - rs->overlay_move_mode_diff_x;
+
+        rs->overlay_rt_y =
+          (rs->cursor_y / cfg.screen_scale) - rs->overlay_move_mode_diff_y;
+
+        if (rs->overlay_rt->rsurf) {
+            rs->overlay_rt->rsurf->x = rs->overlay_rt_x;
+            rs->overlay_rt->rsurf->y = rs->overlay_rt_y;
+        }
+
+        request_redraw(rs);
+    }
+
+    // resize
+    else if (rs->overlay_move_mode == 2) {
+        rs->overlay_rt_w =
+          (rs->cursor_x - rs->overlay_rt_x * cfg.screen_scale) +
+          rs->overlay_move_mode_diff_x;
+        rs->overlay_rt_w = max(rs->overlay_rt_w, 0);
+
+        rs->overlay_rt_h =
+          (rs->cursor_y - rs->overlay_rt_y * cfg.screen_scale) +
+          rs->overlay_move_mode_diff_y;
+        rs->overlay_rt_h = max(rs->overlay_rt_h, 0);
+
+        if (rs->overlay_rt->rsurf) {
+            rs->overlay_rt->rsurf->w = rs->overlay_rt_w;
+            rs->overlay_rt->rsurf->h = rs->overlay_rt_h;
+            red_send_toplevel_configure(rs->overlay_rt->rsurf, 0, 1);
+        }
+    }
 
     return 0;
 }
@@ -528,6 +636,11 @@ red_pointer_send_motion(struct redstate* rs, uint32_t time_msec)
         if (red_pointer_update_visibility(rs))
             return 1;
 
+    if (rs->overlay_move_mode) {
+        red_update_overlay_on_motion(rs);
+        return 0;
+    }
+
     // give some time between scroll and motion events to stop starvation
     if (time_msec - rs->cursor_last_scroll_time < 30)
         return 0;
@@ -551,6 +664,9 @@ red_pointer_send_button(struct redstate* rs,
                         uint32_t         button,
                         int              state)
 {
+    if (red_update_overlay_on_button(rs, button, state))
+        return 0;
+
     if (!rs->pointer_focused_rsurf)
         return 0;
 

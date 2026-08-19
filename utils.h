@@ -27,3 +27,29 @@
         *p    = '\0';                                                          \
         (esc) = out;                                                           \
     } while (0);
+
+// takes char* `str` that should represent an integer that fits into `int`
+// + and - are allowed at the start of str
+// variable _err is set to 1 on error
+// output is stored in `n`
+#define UTIL_PARSE_INT(in_str, n)                                              \
+    _Bool _err = 0;                                                            \
+    do {                                                                       \
+        char* str = (in_str);                                                  \
+        if ((str) == NULL)                                                     \
+            goto _err;                                                         \
+        int out    = 0;                                                        \
+        int is_neg = *(str) == '-';                                            \
+        if (*(str) == '-' || *(str) == '+')                                    \
+            (str)++;                                                           \
+        for (char* p = (str); *p != '\0'; p++) {                               \
+            if (*p < '0' || *p > '9')                                          \
+                goto _err;                                                     \
+            out *= 10;                                                         \
+            out += *p - '0';                                                   \
+        }                                                                      \
+        (n) = ((is_neg) ? -1 : 1) * out;                                       \
+        break;                                                                 \
+    _err:                                                                      \
+        _err = 1;                                                              \
+    } while (0)

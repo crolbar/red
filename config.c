@@ -156,6 +156,14 @@ redconfig cfg = (redconfig){
             .mods = RED_MOD_SUPER,
             A( RED_ACTION_OVERLAY_SURFACE )
           },
+          { .key = "L", .mods = RED_MOD_SUPER | RED_MOD_CTRL | RED_MOD_SHIFT, A( RED_ACTION_OVERLAY_SET_WIDTH, "+150" ) },
+          { .key = "H", .mods = RED_MOD_SUPER | RED_MOD_CTRL | RED_MOD_SHIFT, A( RED_ACTION_OVERLAY_SET_WIDTH, "-150" ) },
+          { .key = "J", .mods = RED_MOD_SUPER | RED_MOD_CTRL | RED_MOD_SHIFT, A( RED_ACTION_OVERLAY_SET_HEIGHT, "+150" ) },
+          { .key = "K", .mods = RED_MOD_SUPER | RED_MOD_CTRL | RED_MOD_SHIFT, A( RED_ACTION_OVERLAY_SET_HEIGHT, "-150" ) },
+          { .key = "l", .mods = RED_MOD_SUPER | RED_MOD_CTRL, A( RED_ACTION_OVERLAY_SET_X, "+50" ) },
+          { .key = "h", .mods = RED_MOD_SUPER | RED_MOD_CTRL, A( RED_ACTION_OVERLAY_SET_X, "-50" ) },
+          { .key = "j", .mods = RED_MOD_SUPER | RED_MOD_CTRL, A( RED_ACTION_OVERLAY_SET_Y, "+50" ) },
+          { .key = "k", .mods = RED_MOD_SUPER | RED_MOD_CTRL, A( RED_ACTION_OVERLAY_SET_Y, "-50" ) },
 
           /* SPAWNERS */
           {

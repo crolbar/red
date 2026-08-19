@@ -166,6 +166,9 @@ main(int argc, char** argv)
     rs->overlay_rt_y                     = 0;
     rs->overlay_rt_w                     = 0;
     rs->overlay_rt_h                     = 0;
+    rs->overlay_move_mode                = 0;
+    rs->overlay_move_mode_diff_x         = 0;
+    rs->overlay_move_mode_diff_y         = 0;
 
     struct itimerspec its = {
         .it_value    = { .tv_sec = 1, 0 },

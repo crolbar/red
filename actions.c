@@ -6,6 +6,7 @@
 #include "log.h"
 #include "red.h"
 #include "render.h"
+#include "utils.h"
 #include "wayland.h"
 #include "xdg-shell-server-protocol.h"
 #include <errno.h> // IWYU pragma: keep
@@ -159,6 +160,100 @@ redaction_overlay_surface(struct redstate* rs, char** args, size_t args_len)
     rs->overlay_rt = rs->focused_rt;
 }
 
+void
+redaction_overlay_set_width(struct redstate* rs, char** args, size_t args_len)
+{
+    if (args_len < 1) {
+        ROG_ERR("action: no argument provided to overlay_set_width");
+        return;
+    }
+
+    int n = 0;
+    UTIL_PARSE_INT(args[0], n);
+    if (_err) {
+        ROG_ERR("action: invalid argument provided to overlay_set_width: %s",
+                args[0]);
+        return;
+    }
+
+    rs->overlay_rt_w += n;
+    rs->overlay_rt_w = max(rs->overlay_rt_w, 0);
+    if (rs->overlay_rt && rs->overlay_rt->rsurf) {
+        rs->overlay_rt->rsurf->w = rs->overlay_rt_w;
+        red_send_toplevel_configure(rs->overlay_rt->rsurf, 0, 1);
+    }
+}
+void
+redaction_overlay_set_height(struct redstate* rs, char** args, size_t args_len)
+{
+
+    if (args_len < 1) {
+        ROG_ERR("action: no argument provided to overlay_set_height");
+        return;
+    }
+
+    int n = 0;
+    UTIL_PARSE_INT(args[0], n);
+    if (_err) {
+        ROG_ERR("action: invalid argument provided to overlay_set_height: %s",
+                args[0]);
+        return;
+    }
+
+    rs->overlay_rt_h += n;
+    rs->overlay_rt_h = max(rs->overlay_rt_h, 0);
+    if (rs->overlay_rt && rs->overlay_rt->rsurf) {
+        rs->overlay_rt->rsurf->h = rs->overlay_rt_h;
+        red_send_toplevel_configure(rs->overlay_rt->rsurf, 0, 1);
+    }
+}
+void
+redaction_overlay_set_x(struct redstate* rs, char** args, size_t args_len)
+{
+    if (args_len < 1) {
+        ROG_ERR("action: no argument provided to overlay_set_x");
+        return;
+    }
+
+    int n = 0;
+    UTIL_PARSE_INT(args[0], n);
+    if (_err) {
+        ROG_ERR("action: invalid argument provided to overlay_set_x: %s",
+                args[0]);
+        return;
+    }
+
+    rs->overlay_rt_x += n;
+    rs->overlay_rt_x = max(rs->overlay_rt_x, 0);
+    if (rs->overlay_rt && rs->overlay_rt->rsurf) {
+        rs->overlay_rt->rsurf->x = rs->overlay_rt_x;
+        request_redraw(rs);
+    }
+}
+void
+redaction_overlay_set_y(struct redstate* rs, char** args, size_t args_len)
+{
+    if (args_len < 1) {
+        ROG_ERR("action: no argument provided to overlay_set_y");
+        return;
+    }
+
+    int n = 0;
+    UTIL_PARSE_INT(args[0], n);
+    if (_err) {
+        ROG_ERR("action: invalid argument provided to overlay_set_y: %s",
+                args[0]);
+        return;
+    }
+
+    rs->overlay_rt_y += n;
+    rs->overlay_rt_y = max(rs->overlay_rt_y, 0);
+    if (rs->overlay_rt && rs->overlay_rt->rsurf) {
+        rs->overlay_rt->rsurf->y = rs->overlay_rt_y;
+        request_redraw(rs);
+    }
+}
+
 int
 spawn_program(char** args, size_t args_len)
 {
@@ -223,6 +318,10 @@ ACTIONS(
     { .action_type = RED_ACTION_FOCUS_N, redaction_focus_n },
     { .action_type = RED_ACTION_SELECT_BIND_PRESET, redaction_select_bind_preset},
     { .action_type = RED_ACTION_OVERLAY_SURFACE, redaction_overlay_surface},
+    { .action_type = RED_ACTION_OVERLAY_SET_WIDTH, redaction_overlay_set_width},
+    { .action_type = RED_ACTION_OVERLAY_SET_HEIGHT, redaction_overlay_set_height},
+    { .action_type = RED_ACTION_OVERLAY_SET_X, redaction_overlay_set_x},
+    { .action_type = RED_ACTION_OVERLAY_SET_Y, redaction_overlay_set_y},
 
 )
 // clang-format on

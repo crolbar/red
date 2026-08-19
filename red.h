@@ -356,6 +356,9 @@ struct redstate
     int32_t             overlay_rt_y;
     int32_t             overlay_rt_w;
     int32_t             overlay_rt_h;
+    int                 overlay_move_mode;
+    int                 overlay_move_mode_diff_x;
+    int                 overlay_move_mode_diff_y;
 };
 
 extern struct gl_proc* gl_proc;
