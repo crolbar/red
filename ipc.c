@@ -140,6 +140,10 @@ _send_state_change_msg(struct redipcclient* ric, char* msg)
     return NULL;
 }
 
+#define SEND_MSG(msg)                                                          \
+    if (_send_state_change_msg(v->val, (msg)))                                 \
+        dll_push_tail(clients_to_destroy, v->val);
+
 int
 ipc_send_state_changes(struct redstate* rs)
 {
@@ -150,9 +154,14 @@ ipc_send_state_changes(struct redstate* rs)
         if (!v->val->subscribed)
             continue;
 
-        if (rs->ipc_red_state_changes & RED_STATE_CHANGE_FOCUS) {
-            if (_send_state_change_msg(v->val, "window focus changed\n"))
-                dll_push_tail(clients_to_destroy, v->val);
+        if (rs->ipc_red_state_changes & RED_STATE_RT_CREATE) {
+            SEND_MSG("new window created\n");
+        }
+        if (rs->ipc_red_state_changes & RED_STATE_RT_CHANGE_FOCUS) {
+            SEND_MSG("window focus changed\n");
+        }
+        if (rs->ipc_red_state_changes & RED_STATE_RT_DESTROY) {
+            SEND_MSG("window closed\n");
         }
     }
 

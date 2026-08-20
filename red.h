@@ -199,7 +199,9 @@ typedef struct redbind
 
 enum red_state_change
 {
-    RED_STATE_CHANGE_FOCUS = 1 << 0,
+    RED_STATE_RT_CHANGE_FOCUS = 1 << 0,
+    RED_STATE_RT_CREATE       = 1 << 1,
+    RED_STATE_RT_DESTROY      = 1 << 2,
 };
 
 struct redipcclient

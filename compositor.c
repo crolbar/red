@@ -449,7 +449,7 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
         // send enter + frame callback on new focus
         red_rt_send_enter(rs, rt);
 
-        rs->ipc_red_state_changes |= RED_STATE_CHANGE_FOCUS;
+        rs->ipc_red_state_changes |= RED_STATE_RT_CHANGE_FOCUS;
     }
     rs->last_focused_rt = rs->focused_rt;
     rs->focused_rt      = rt;
@@ -512,6 +512,7 @@ red_destroy_rt(struct redstate* rs, struct redtoplevel* rt)
     }
 
     dll_remove_val(rs->rts, rt);
+    rs->ipc_red_state_changes |= RED_STATE_RT_DESTROY;
 
     free(rt->app_id);
     free(rt->title);
@@ -546,6 +547,7 @@ red_create_rt(struct redstate*   rs,
     rt->rsurf->h = h;
 
     dll_push_tail(rs->rts, rt);
+    rs->ipc_red_state_changes |= RED_STATE_RT_CREATE;
 
     // instantly focusing new toplevel
     red_focus_rt(rs, rt);
@@ -883,10 +885,10 @@ red_write_rgba_buf_to_ppm(char* path, uint8_t* buf, uint32_t w, uint32_t h)
         return 1;
 
     fprintf(f, "P6\n%d %d\n255\n", w, h);
-    for (int i = 0; i < h; i++) {
+    for (uint32_t i = 0; i < h; i++) {
         uint8_t out_buf[w * 3];
         int     out_j = 0;
-        for (int j = 0; j < stride; j += 4) {
+        for (uint32_t j = 0; j < stride; j += 4) {
             out_buf[out_j++] = buf[i * stride + j + 0];
             out_buf[out_j++] = buf[i * stride + j + 1];
             out_buf[out_j++] = buf[i * stride + j + 2];
