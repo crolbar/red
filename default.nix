@@ -42,6 +42,7 @@ stdenv.mkDerivation rec {
 
   postInstall = ''
     install -Dm644 red.desktop -t $out/share/wayland-sessions
+    install -Dm644 rt_switcher.qml "$out/etc/xdg/quickshell/rt_switcher/shell.qml"
   '';
 
   passthru.providedSessions = [pname];

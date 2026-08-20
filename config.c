@@ -242,6 +242,11 @@ redconfig cfg = (redconfig){
             .mods = RED_MOD_SUPER,
             A( RED_ACTION_SPAWN, "zoomer")
           },
+          {
+            .key = "grave",
+            .mods = RED_MOD_SUPER,
+            A( RED_ACTION_SPAWN, "bash", "-c", "qs -c rt_switcher ipc call main toggle")
+          },
 
 
 
@@ -281,6 +286,7 @@ redconfig cfg = (redconfig){
         PROG("bash", "-c", "dbus-update-activation-environment --systemd DISPLAY RED_SOCKET WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_ID"),
         PROG("bash", "-c", "xwayland-satellite :1"),
         PROG("bash", "-c", "uwsm finalize"),
+        PROG("bash", "-c", "qs -c rt_switcher"),
     )
 
     ENV(
