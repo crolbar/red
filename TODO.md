@@ -12,7 +12,7 @@
 - [x]ipc
   - [x]sub for updates
 - [ ]windows like alt-tap with quickshell
-- [ ]put window in overlay plane (kind of like a float window)
+- ~~[ ]put window in overlay plane (kind of like a float window)~~
 
 - [/]run through valgrind (proper memory management)
   - [ ]fix possible losess

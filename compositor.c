@@ -243,6 +243,9 @@ red_update_overlay_on_button(struct redstate* rs, uint32_t button, int state)
         return 0;
     }
 
+    if (rs->overlay_rt == rs->focused_rt)
+        return 0;
+
     if (!red_is_click_on_overlay(rs))
         return 0;
 
@@ -280,7 +283,7 @@ red_update_overlay_on_button(struct redstate* rs, uint32_t button, int state)
           (rs->cursor_y - rs->overlay_rt->rsurf->y * cfg.screen_scale);
     }
 
-    return 0;
+    return 1;
 }
 
 int
