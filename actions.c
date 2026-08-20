@@ -11,6 +11,8 @@
 #include "xdg-shell-server-protocol.h"
 #include <errno.h> // IWYU pragma: keep
 #include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -253,11 +255,48 @@ redaction_overlay_set_y(struct redstate* rs, char** args, size_t args_len)
         request_redraw(rs);
     }
 }
+
 void
 redaction_capture_focus(struct redstate* rs, char** args, size_t args_len)
 {
     if (red_capture_focused_toplevel(rs))
         ROG_ERR("error while trying to capture focused toplevel");
+}
+
+void
+redaction_rt_fi_update(struct redstate* rs, char** args, size_t args_len)
+{
+    char* fmt    = "/tmp/red-%s-%d.ppm";
+    int   rt_idx = 0;
+    dll_for_each(rs->rts, v)
+    {
+        if (!v->val->rsurf)
+            continue;
+
+        struct redtoplevel* rt     = v->val;
+        char*               app_id = rt->app_id;
+
+        if (rt->fi_path)
+            free(rt->fi_path);
+
+        int   l       = snprintf(NULL, 0, fmt, app_id, rt_idx);
+        char* fi_path = calloc(1, l + 1);
+        if (!fi_path)
+            goto loop_end;
+        sprintf(fi_path, fmt, app_id, rt_idx);
+        fi_path[l] = '\0';
+
+        if (red_capture_rsurf_to(rt->rsurf, fi_path)) {
+            ROG_ERR("failed to capture rt: %s", app_id);
+            goto loop_end;
+        }
+
+        rt->fi_path = fi_path;
+
+    loop_end:
+        rt_idx++;
+    }
+    rs->ipc_red_state_changes |= RED_STATE_RT_FI;
 }
 
 int
@@ -322,13 +361,14 @@ ACTIONS(
     { .action_type = RED_ACTION_STOP_RENDERER, redaction_stop_renderer },
     { .action_type = RED_ACTION_FOCUS_LAST, redaction_focus_last },
     { .action_type = RED_ACTION_FOCUS_N, redaction_focus_n },
-    { .action_type = RED_ACTION_SELECT_BIND_PRESET, redaction_select_bind_preset},
-    { .action_type = RED_ACTION_OVERLAY_SURFACE, redaction_overlay_surface},
-    { .action_type = RED_ACTION_OVERLAY_SET_WIDTH, redaction_overlay_set_width},
-    { .action_type = RED_ACTION_OVERLAY_SET_HEIGHT, redaction_overlay_set_height},
-    { .action_type = RED_ACTION_OVERLAY_SET_X, redaction_overlay_set_x},
-    { .action_type = RED_ACTION_OVERLAY_SET_Y, redaction_overlay_set_y},
-    { .action_type = RED_ACTION_CAPTURE_FOCUS, redaction_capture_focus},
+    { .action_type = RED_ACTION_SELECT_BIND_PRESET, redaction_select_bind_preset },
+    { .action_type = RED_ACTION_OVERLAY_SURFACE, redaction_overlay_surface },
+    { .action_type = RED_ACTION_OVERLAY_SET_WIDTH, redaction_overlay_set_width },
+    { .action_type = RED_ACTION_OVERLAY_SET_HEIGHT, redaction_overlay_set_height },
+    { .action_type = RED_ACTION_OVERLAY_SET_X, redaction_overlay_set_x },
+    { .action_type = RED_ACTION_OVERLAY_SET_Y, redaction_overlay_set_y },
+    { .action_type = RED_ACTION_CAPTURE_FOCUS, redaction_capture_focus },
+    { .action_type = RED_ACTION_RT_FI_UPDATE, redaction_rt_fi_update },
 )
 // clang-format on
 

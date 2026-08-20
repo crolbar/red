@@ -12,6 +12,7 @@
 - [x]ipc
   - [x]sub for updates
 - [ ]windows like alt-tap with quickshell
+  - [ ]optimize size & when to updatef FIs
 - ~~[ ]put window in overlay plane (kind of like a float window)~~
 
 - [/]run through valgrind (proper memory management)

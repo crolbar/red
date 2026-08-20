@@ -33,6 +33,11 @@
 // will not be captured
 #define RED_ACTION_CAPTURE_FOCUS "capture_focus"
 
+// trigger an update of the frame image paths of all toplevels.
+// this will create .ppm images in /tmp with the captured frames
+// of all toplevels.
+#define RED_ACTION_RT_FI_UPDATE "rt_fi_update"
+
 // draw blank frame & stop rendering until action is send again
 #define RED_ACTION_STOP_RENDERER "stop_renderer"
 // change bind preset

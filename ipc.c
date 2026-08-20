@@ -25,15 +25,18 @@ handle_ipc_msg_fetch_toplevels(struct redstate* rs)
     int rt_idx = 0;
     dll_for_each(rs->rts, v)
     {
-        char* app_id = NULL;
-        char* title  = NULL;
+        char* app_id  = NULL;
+        char* title   = NULL;
+        char* fi_path = NULL;
         UTIL_STR_ESCAPE(v->val->app_id, app_id);
         UTIL_STR_ESCAPE(v->val->title, title);
+        UTIL_STR_ESCAPE(v->val->fi_path, fi_path);
 
         const char* fmt = "%s{"
                           "\"idx\":\"%d\","
                           "\"app_id\":\"%s\","
                           "\"title\":\"%s\","
+                          "\"fi_path\":\"%s\","
                           "\"is_focused\":%s"
                           "}";
 
@@ -44,6 +47,7 @@ handle_ipc_msg_fetch_toplevels(struct redstate* rs)
                          rt_idx,
                          app_id,
                          title,
+                         fi_path,
                          (v->val == rs->focused_rt) ? "true" : "false");
         char* str = calloc(1, n + 1);
         sprintf(str,
@@ -52,6 +56,7 @@ handle_ipc_msg_fetch_toplevels(struct redstate* rs)
                 rt_idx,
                 app_id,
                 title,
+                fi_path,
                 (v->val == rs->focused_rt) ? "true" : "false");
 
         char* t = realloc(out, len + n);
@@ -65,6 +70,10 @@ handle_ipc_msg_fetch_toplevels(struct redstate* rs)
         memcpy(out + i, str, n);
         i += n;
         len += n;
+
+        free(app_id);
+        free(title);
+        free(fi_path);
 
         rt_idx++;
     }
@@ -162,6 +171,9 @@ ipc_send_state_changes(struct redstate* rs)
         }
         if (rs->ipc_red_state_changes & RED_STATE_RT_DESTROY) {
             SEND_MSG("window closed\n");
+        }
+        if (rs->ipc_red_state_changes & RED_STATE_RT_FI) {
+            SEND_MSG("window frame images updated\n");
         }
     }
 

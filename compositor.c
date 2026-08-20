@@ -516,6 +516,7 @@ red_destroy_rt(struct redstate* rs, struct redtoplevel* rt)
 
     free(rt->app_id);
     free(rt->title);
+    free(rt->fi_path);
     free(rt);
     return 0;
 }
@@ -543,6 +544,7 @@ red_create_rt(struct redstate*   rs,
     rt->rsurf    = rsurf;
     rt->app_id   = NULL;
     rt->title    = NULL;
+    rt->fi_path  = NULL;
     rt->rsurf->w = w;
     rt->rsurf->h = h;
 
