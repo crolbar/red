@@ -561,6 +561,23 @@ fail:
     return 1;
 }
 
+int
+gl_read_tex_into(GLuint tex, uint8_t* buf, uint32_t w, uint32_t h)
+{
+    GLuint fbo;
+    CALL(glGenFramebuffers(1, &fbo));
+    CALL(glBindFramebuffer(GL_FRAMEBUFFER, fbo));
+    CALL(glFramebufferTexture2D(
+      GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0));
+    CALL(glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buf));
+    CALL(glBindTexture(GL_TEXTURE_2D, 0));
+    CALL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+    CALL(glDeleteFramebuffers(1, &fbo));
+    return 0;
+fail:
+    return 1;
+}
+
 EGLImageKHR
 init_egl_image(EGLDisplay           egl_display,
                uint32_t             width,

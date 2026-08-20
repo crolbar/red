@@ -67,3 +67,6 @@ gl_destroy_egl_img(EGLDisplay egl_display, EGLImageKHR egl_img);
 
 int
 egl_create_sync_fd(EGLDisplay egl_display);
+
+int
+gl_read_tex_into(GLuint tex, uint8_t* buf, uint32_t w, uint32_t h);

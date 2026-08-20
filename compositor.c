@@ -3,6 +3,7 @@
 #include "dll.h"
 #include "drm.h"
 #include "log.h" // IWYU pragma: keep
+#include "opengl.h"
 #include "red.h"
 #include "relative-pointer-server-protocol.h"
 #include "render.h"
@@ -868,6 +869,64 @@ red_autoscroll_handle_click(struct redstate* rs, uint32_t button, int pressed)
 
     if (button == BTN_MIDDLE && pressed)
         rs->autoscroll_point_y = rs->cursor_y;
+
+    return 0;
+}
+
+// writes rgba `buf` - with dimentions `w` and `h - to `path` in ppm format.
+int
+red_write_rgba_buf_to_ppm(char* path, uint8_t* buf, uint32_t w, uint32_t h)
+{
+    uint32_t stride = w * 4;
+    FILE*    f      = fopen(path, "wb");
+    if (!f)
+        return 1;
+
+    fprintf(f, "P6\n%d %d\n255\n", w, h);
+    for (int i = 0; i < h; i++) {
+        uint8_t out_buf[w * 3];
+        int     out_j = 0;
+        for (int j = 0; j < stride; j += 4) {
+            out_buf[out_j++] = buf[i * stride + j + 0];
+            out_buf[out_j++] = buf[i * stride + j + 1];
+            out_buf[out_j++] = buf[i * stride + j + 2];
+        }
+        fwrite(out_buf, 3, w, f);
+    }
+    fputc('\n', f);
+    fclose(f);
+    return 0;
+}
+
+// creates a ppm image of `rsurf` in `path`
+int
+red_capture_rsurf_to(struct redsurface* rsurf, char* path)
+{
+    if (!rsurf)
+        return 0;
+    if (!rsurf->gl_tex)
+        return 0;
+
+    uint32_t w   = rsurf->w;
+    uint32_t h   = rsurf->h;
+    uint8_t* buf = calloc(h * w * 4, sizeof(*buf));
+    if (gl_read_tex_into(rsurf->gl_tex, buf, w, h)) {
+        ROG_ERR("error while reading gl texture into buf");
+        return 1;
+    }
+    if (red_write_rgba_buf_to_ppm(path, buf, w, h))
+        return 1;
+    return 0;
+}
+
+int
+red_capture_focused_toplevel(struct redstate* rs)
+{
+    if (!rs->focused_rt)
+        return 0;
+
+    if (red_capture_rsurf_to(rs->focused_rt->rsurf, "./red-capture.ppm"))
+        return 1;
 
     return 0;
 }

@@ -246,6 +246,11 @@ redconfig cfg = (redconfig){
 
 
           {
+            .key = "I",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
+            A( RED_ACTION_CAPTURE_FOCUS )
+          },
+          {
             .key = "F8",
             .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
             A( RED_ACTION_SELECT_BIND_PRESET, "1" )

@@ -28,6 +28,11 @@
 #define RED_ACTION_OVERLAY_SET_X      "overlay_set_x"
 #define RED_ACTION_OVERLAY_SET_Y      "overlay_set_y"
 
+// saves the image from the currently focused toplevel into the current dir.
+// *only the toplevel surface gets captured currently, so subsurfaces or popups
+// will not be captured
+#define RED_ACTION_CAPTURE_FOCUS "capture_focus"
+
 // draw blank frame & stop rendering until action is send again
 #define RED_ACTION_STOP_RENDERER "stop_renderer"
 // change bind preset

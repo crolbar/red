@@ -253,6 +253,12 @@ redaction_overlay_set_y(struct redstate* rs, char** args, size_t args_len)
         request_redraw(rs);
     }
 }
+void
+redaction_capture_focus(struct redstate* rs, char** args, size_t args_len)
+{
+    if (red_capture_focused_toplevel(rs))
+        ROG_ERR("error while trying to capture focused toplevel");
+}
 
 int
 spawn_program(char** args, size_t args_len)
@@ -322,7 +328,7 @@ ACTIONS(
     { .action_type = RED_ACTION_OVERLAY_SET_HEIGHT, redaction_overlay_set_height},
     { .action_type = RED_ACTION_OVERLAY_SET_X, redaction_overlay_set_x},
     { .action_type = RED_ACTION_OVERLAY_SET_Y, redaction_overlay_set_y},
-
+    { .action_type = RED_ACTION_CAPTURE_FOCUS, redaction_capture_focus},
 )
 // clang-format on
 
