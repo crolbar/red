@@ -877,25 +877,35 @@ red_autoscroll_handle_click(struct redstate* rs, uint32_t button, int pressed)
     return 0;
 }
 
-// writes rgba `buf` - with dimentions `w` and `h - to `path` in ppm format.
+// writes rgba `buf` - with dimentions `in_w` and `in_h - to `path` with
+// dimentions 'w' and 'h' in ppm format.
 int
-red_write_rgba_buf_to_ppm(char* path, uint8_t* buf, uint32_t w, uint32_t h)
+red_write_rgba_buf_to_ppm(char*    path,
+                          uint8_t* buf,
+                          uint32_t in_w,
+                          uint32_t in_h,
+                          uint32_t w,
+                          uint32_t h)
 {
-    uint32_t stride = w * 4;
+    uint32_t stride = in_w * 4;
     FILE*    f      = fopen(path, "wb");
     if (!f)
         return 1;
 
     fprintf(f, "P6\n%d %d\n255\n", w, h);
+
+    uint8_t row_buf[w * 3];
     for (uint32_t i = 0; i < h; i++) {
-        uint8_t out_buf[w * 3];
-        int     out_j = 0;
-        for (uint32_t j = 0; j < stride; j += 4) {
-            out_buf[out_j++] = buf[i * stride + j + 0];
-            out_buf[out_j++] = buf[i * stride + j + 1];
-            out_buf[out_j++] = buf[i * stride + j + 2];
+        uint32_t row_i = (uint64_t)i * in_h / h;
+
+        for (uint32_t j = 0; j < w; j++) {
+            uint32_t col_j     = (uint64_t)j * in_w / w;
+            uint8_t* pixel     = &buf[row_i * stride + col_j * 4];
+            row_buf[j * 3 + 0] = pixel[0];
+            row_buf[j * 3 + 1] = pixel[1];
+            row_buf[j * 3 + 2] = pixel[2];
         }
-        fwrite(out_buf, 3, w, f);
+        fwrite(row_buf, 3, w, f);
     }
     fputc('\n', f);
     fclose(f);
@@ -903,25 +913,29 @@ red_write_rgba_buf_to_ppm(char* path, uint8_t* buf, uint32_t w, uint32_t h)
 }
 
 // creates a ppm image of `rsurf` in `path`
+// output dimentions of `w` and `h`
 int
-red_capture_rsurf_to(struct redsurface* rsurf, char* path)
+red_capture_rsurf_to(struct redsurface* rsurf,
+                     char*              path,
+                     uint32_t           w,
+                     uint32_t           h)
 {
     if (!rsurf)
         return 0;
     if (!rsurf->gl_tex)
         return 0;
 
-    uint32_t w   = rsurf->w;
-    uint32_t h   = rsurf->h;
-    uint8_t* buf = calloc(h * w * 4, sizeof(*buf));
+    uint32_t in_w = rsurf->w;
+    uint32_t in_h = rsurf->h;
+    uint8_t* buf  = calloc(in_h * in_w * 4, sizeof(*buf));
     if (!buf)
         return 1;
-    if (gl_read_tex_into(rsurf->gl_tex, buf, w, h)) {
+    if (gl_read_tex_into(rsurf->gl_tex, buf, in_w, in_h)) {
         ROG_ERR("error while reading gl texture into buf");
         free(buf);
         return 1;
     }
-    if (red_write_rgba_buf_to_ppm(path, buf, w, h)) {
+    if (red_write_rgba_buf_to_ppm(path, buf, in_w, in_h, w, h)) {
         free(buf);
         return 1;
     }
@@ -935,7 +949,10 @@ red_capture_focused_toplevel(struct redstate* rs)
     if (!rs->focused_rt)
         return 0;
 
-    if (red_capture_rsurf_to(rs->focused_rt->rsurf, "./red-capture.ppm"))
+    if (red_capture_rsurf_to(rs->focused_rt->rsurf,
+                             "./red-capture.ppm",
+                             rs->focused_rt->rsurf->w,
+                             rs->focused_rt->rsurf->h))
         return 1;
 
     return 0;

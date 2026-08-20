@@ -286,7 +286,7 @@ redaction_rt_fi_update(struct redstate* rs, char** args, size_t args_len)
         sprintf(fi_path, fmt, app_id, rt_idx);
         fi_path[l] = '\0';
 
-        if (red_capture_rsurf_to(rt->rsurf, fi_path)) {
+        if (red_capture_rsurf_to(rt->rsurf, fi_path, 640, 360)) {
             ROG_ERR("failed to capture rt: %s", app_id);
             goto loop_end;
         }

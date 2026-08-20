@@ -68,24 +68,33 @@ ShellRoot {
                             winLoader.active = false;
                         }
                     }
+                    onWheel: we => {
+                        Quickshell.execDetached({
+                            command: ["sh", "-c", `echo "focus_${we.angleDelta.y > 0 ? "prev" : "next"}" | socat - UNIX-CONNECT:"$RED_SOCKET"`]
+                        });
+                    }
                 }
 
                 focus: true
                 Keys.onPressed: event => {
                     switch (event.key) {
-                        case Qt.Key_Escape:
-                        case Qt.Key_Return:
-                            winLoader.active = false;
+                    case Qt.Key_Escape:
+                    case Qt.Key_Return:
+                        winLoader.active = false;
                         break;
-                        case Qt.Key_Tab:
-                        case Qt.Key_QuoteLeft:
-                        case Qt.Key_Right:
-                            Quickshell.execDetached({ command: ["sh", "-c", `echo "focus_next" | socat - UNIX-CONNECT:"$RED_SOCKET"`] });
+                    case Qt.Key_Tab:
+                    case Qt.Key_QuoteLeft:
+                    case Qt.Key_Right:
+                        Quickshell.execDetached({
+                            command: ["sh", "-c", `echo "focus_next" | socat - UNIX-CONNECT:"$RED_SOCKET"`]
+                        });
                         break;
-                        case Qt.Key_Backtab:
-                        case Qt.Key_AsciiTilde:
-                        case Qt.Key_Left:
-                            Quickshell.execDetached({ command: ["sh", "-c", `echo "focus_prev" | socat - UNIX-CONNECT:"$RED_SOCKET"`] });
+                    case Qt.Key_Backtab:
+                    case Qt.Key_AsciiTilde:
+                    case Qt.Key_Left:
+                        Quickshell.execDetached({
+                            command: ["sh", "-c", `echo "focus_prev" | socat - UNIX-CONNECT:"$RED_SOCKET"`]
+                        });
                         break;
                     }
                 }

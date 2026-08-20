@@ -88,4 +88,7 @@ red_autoscroll_update_timer(struct redstate* rs, uint32_t delay);
 int
 red_capture_focused_toplevel(struct redstate* rs);
 int
-red_capture_rsurf_to(struct redsurface* rsurf, char* path);
+red_capture_rsurf_to(struct redsurface* rsurf,
+                     char*              path,
+                     uint32_t           w,
+                     uint32_t           h);
