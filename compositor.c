@@ -914,12 +914,18 @@ red_capture_rsurf_to(struct redsurface* rsurf, char* path)
     uint32_t w   = rsurf->w;
     uint32_t h   = rsurf->h;
     uint8_t* buf = calloc(h * w * 4, sizeof(*buf));
+    if (!buf)
+        return 1;
     if (gl_read_tex_into(rsurf->gl_tex, buf, w, h)) {
         ROG_ERR("error while reading gl texture into buf");
+        free(buf);
         return 1;
     }
-    if (red_write_rgba_buf_to_ppm(path, buf, w, h))
+    if (red_write_rgba_buf_to_ppm(path, buf, w, h)) {
+        free(buf);
         return 1;
+    }
+    free(buf);
     return 0;
 }
 
