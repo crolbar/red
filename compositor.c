@@ -24,22 +24,16 @@ red_get_lc_x(struct redstate* rs)
     double x = rs->cursor_x;
 
     if (rs->pointer_focused_rsurf) {
-        uint32_t scale = 1;
-        // TODO: better?
-        if (rs->pointer_focused_rsurf->parent)
-            scale = red_get_scale(rs->pointer_focused_rsurf->parent);
-        else
-            scale = red_get_scale(rs->pointer_focused_rsurf);
+        if (rs->pointer_focused_rsurf)
+            x -= red_get_rsurf_x(rs->pointer_focused_rsurf);
+
+        if (red_rsurf_is_scaling(rs->pointer_focused_rsurf))
+            x /= cfg.screen_scale;
 
         // add geom of surface, because we remove it
         if (rs->pointer_focused_rsurf->xdg_toplevel &&
             rs->pointer_focused_rsurf->geom_configured)
             x += rs->pointer_focused_rsurf->geom_x;
-
-        if (rs->pointer_focused_rsurf)
-            x -= red_get_rsurf_x(rs->pointer_focused_rsurf);
-
-        x /= scale;
 
     } else {
         x /= cfg.screen_scale;
@@ -53,20 +47,15 @@ red_get_lc_y(struct redstate* rs)
     double y = rs->cursor_y;
 
     if (rs->pointer_focused_rsurf) {
-        uint32_t scale = 1;
-        if (rs->pointer_focused_rsurf->parent)
-            scale = red_get_scale(rs->pointer_focused_rsurf->parent);
-        else
-            scale = red_get_scale(rs->pointer_focused_rsurf);
+        if (rs->pointer_focused_rsurf)
+            y -= red_get_rsurf_y(rs->pointer_focused_rsurf);
+
+        if (red_rsurf_is_scaling(rs->pointer_focused_rsurf))
+            y /= cfg.screen_scale;
 
         if (rs->pointer_focused_rsurf->xdg_toplevel &&
             rs->pointer_focused_rsurf->geom_configured)
             y += rs->pointer_focused_rsurf->geom_y;
-
-        if (rs->pointer_focused_rsurf)
-            y -= red_get_rsurf_y(rs->pointer_focused_rsurf);
-
-        y /= scale;
     } else {
         y /= cfg.screen_scale;
     }
@@ -76,24 +65,32 @@ red_get_lc_y(struct redstate* rs)
 double
 red_get_rsurf_x(struct redsurface* rsurf)
 {
-    double   x     = rsurf->x;
-    uint32_t scale = red_get_scale(rsurf);
-    x *= scale;
+    double x = rsurf->x;
     if (rsurf->geom_configured) {
         x -= rsurf->geom_x;
     }
+    if (red_rsurf_is_scaling(rsurf))
+        x *= cfg.screen_scale;
     return x;
 }
 double
 red_get_rsurf_y(struct redsurface* rsurf)
 {
-    double   y     = rsurf->y;
-    uint32_t scale = red_get_scale(rsurf);
-    y *= scale;
+    double y = rsurf->y;
     if (rsurf->geom_configured) {
         y -= rsurf->geom_y;
     }
+    if (red_rsurf_is_scaling(rsurf))
+        y *= cfg.screen_scale;
     return y;
+}
+
+int
+red_rsurf_is_scaling(struct redsurface* rsurf)
+{
+    if (rsurf->parent)
+        return red_rsurf_is_scaling(rsurf->parent);
+    return rsurf->is_scaling;
 }
 
 struct redclient*
@@ -135,10 +132,10 @@ red_get_rsurf_by_wl_surf(struct redstate* rs, struct wl_resource* wl_surface)
 
 // check if point at x,y is on rsurf, using x,y,w,h as dimentions
 struct redsurface*
-red_hit_test(struct redsurface* rsurf, double x, double y, uint32_t scale)
+red_hit_test(struct redsurface* rsurf, double x, double y)
 {
-    double sx = rsurf->x * (int32_t)scale;
-    double sy = rsurf->y * (int32_t)scale;
+    double sx = red_get_rsurf_x(rsurf);
+    double sy = red_get_rsurf_y(rsurf);
     double sw = rsurf->w;
     double sh = rsurf->h;
 
@@ -155,17 +152,17 @@ red_hit_test(struct redsurface* rsurf, double x, double y, uint32_t scale)
 }
 
 struct redsurface*
-red_hit_test_r(struct redsurface* rsurf, double x, double y, uint32_t scale)
+red_hit_test_r(struct redsurface* rsurf, double x, double y)
 {
     // first go through subsurfs as they should be above
     dll_rfor_each(rsurf->subsurfs, v)
     {
         struct redsurface* r;
-        if ((r = red_hit_test_r(v->val, x, y, scale)))
+        if ((r = red_hit_test_r(v->val, x, y)))
             return r;
     }
 
-    return red_hit_test(rsurf, x, y, scale);
+    return red_hit_test(rsurf, x, y);
 }
 
 struct redsurface*
@@ -181,13 +178,11 @@ red_get_pointer_focused_rsurf(struct redstate* rs)
     struct redsurface* ret = NULL;
     dll_rfor_each(rs->layer_rsurfs, v)
     {
-        uint32_t scale = red_get_scale(v->val);
-        if ((ret = red_hit_test_r(v->val, x, y, scale)))
+        if ((ret = red_hit_test_r(v->val, x, y)))
             return ret;
     }
 
-    uint32_t scale = red_get_scale(rs->focused_rt->rsurf);
-    return red_hit_test_r(rs->focused_rt->rsurf, x, y, scale);
+    return red_hit_test_r(rs->focused_rt->rsurf, x, y);
 }
 
 int
@@ -225,10 +220,8 @@ red_is_click_on_overlay(struct redstate* rs)
     if (!rs->overlay_rt->rsurf)
         return 0;
 
-    return red_hit_test(rs->overlay_rt->rsurf,
-                        rs->cursor_x,
-                        rs->cursor_y,
-                        red_get_scale(rs->overlay_rt->rsurf)) != NULL;
+    return red_hit_test(rs->overlay_rt->rsurf, rs->cursor_x, rs->cursor_y) !=
+           NULL;
 }
 
 // return: 0 -> nothing happened, 1 -> should skip sending event
@@ -290,6 +283,12 @@ red_update_overlay_on_button(struct redstate* rs, uint32_t button, int state)
 int
 red_update_overlay_on_motion(struct redstate* rs)
 {
+    if (!rs->overlay_rt)
+        return 0;
+    struct redsurface* rsurf = rs->overlay_rt->rsurf;
+    if (!rsurf)
+        return 0;
+
     // move
     if (rs->overlay_move_mode == 1) {
         rs->overlay_rt_x =
@@ -298,10 +297,8 @@ red_update_overlay_on_motion(struct redstate* rs)
         rs->overlay_rt_y =
           (rs->cursor_y / cfg.screen_scale) - rs->overlay_move_mode_diff_y;
 
-        if (rs->overlay_rt->rsurf) {
-            rs->overlay_rt->rsurf->x = rs->overlay_rt_x;
-            rs->overlay_rt->rsurf->y = rs->overlay_rt_y;
-        }
+        rsurf->x = rs->overlay_rt_x;
+        rsurf->y = rs->overlay_rt_y;
 
         request_redraw(rs);
     }
@@ -318,11 +315,8 @@ red_update_overlay_on_motion(struct redstate* rs)
           rs->overlay_move_mode_diff_y;
         rs->overlay_rt_h = max(rs->overlay_rt_h, 0);
 
-        if (rs->overlay_rt->rsurf) {
-            rs->overlay_rt->rsurf->w = rs->overlay_rt_w;
-            rs->overlay_rt->rsurf->h = rs->overlay_rt_h;
-            red_send_toplevel_configure(rs->overlay_rt->rsurf, 0, 1);
-        }
+        red_send_toplevel_configure(
+          rsurf, rs->overlay_rt_w, rs->overlay_rt_h, 0, 1);
     }
 
     return 0;
@@ -402,7 +396,7 @@ red_rt_send_enter(struct redstate* rs, struct redtoplevel* rt)
         red_keyboard_send_enter(rt->rsurf);
 
     if (rt->rsurf && rt->rsurf->configured)
-        red_send_toplevel_configure(rt->rsurf, 1, 0);
+        red_send_toplevel_configure(rt->rsurf, 0, 0, 1, 0);
 
     if (rs->backend->is_ready_for_frame(rs->backend->d))
         red_send_pending_callbacks(rt->rsurf, time_get_now_msec());
@@ -422,7 +416,7 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
                 red_keyboard_send_leave(frt->rsurf);
 
             if (frt->rsurf && frt->rsurf->xdg_toplevel)
-                red_send_toplevel_configure(frt->rsurf, 0, 0);
+                red_send_toplevel_configure(frt->rsurf, 0, 0, 0, 0);
         }
         frt = NULL;
 
@@ -431,18 +425,17 @@ red_focus_rt(struct redstate* rs, struct redtoplevel* rt)
             if (rs->overlay_rt != rt) {
                 rs->overlay_rt->rsurf->x = rs->overlay_rt_x;
                 rs->overlay_rt->rsurf->y = rs->overlay_rt_y;
-                rs->overlay_rt->rsurf->w = rs->overlay_rt_w;
-                rs->overlay_rt->rsurf->h = rs->overlay_rt_h;
-                red_send_toplevel_configure(rs->overlay_rt->rsurf, 0, 1);
+                red_send_toplevel_configure(rs->overlay_rt->rsurf,
+                                            rs->overlay_rt_w,
+                                            rs->overlay_rt_h,
+                                            0,
+                                            1);
             } else
-            // if we are the overlay keep size normal
+            // if focus is the overlay keep size normal
+            // in send_enter dimentions will get set to whole screen
             {
-                uint32_t w = rs->backend->get_width(rs->backend->d);
-                uint32_t h = rs->backend->get_height(rs->backend->d);
                 rs->overlay_rt->rsurf->x = 0;
                 rs->overlay_rt->rsurf->y = 0;
-                rs->overlay_rt->rsurf->w = w;
-                rs->overlay_rt->rsurf->h = h;
             }
         }
 
@@ -534,19 +527,15 @@ red_create_rt(struct redstate*   rs,
     rt = calloc(1, sizeof(*rt));
     assert(rt);
 
-    uint32_t          w  = rs->backend->get_width(rs->backend->d);
-    uint32_t          h  = rs->backend->get_height(rs->backend->d);
     struct redclient* rc = red_get_client(rs, wl_client);
     assert(rc);
 
-    rt->rs       = rs;
-    rt->rc       = rc;
-    rt->rsurf    = rsurf;
-    rt->app_id   = NULL;
-    rt->title    = NULL;
-    rt->fi_path  = NULL;
-    rt->rsurf->w = w;
-    rt->rsurf->h = h;
+    rt->rs      = rs;
+    rt->rc      = rc;
+    rt->rsurf   = rsurf;
+    rt->app_id  = NULL;
+    rt->title   = NULL;
+    rt->fi_path = NULL;
 
     dll_push_tail(rs->rts, rt);
     rs->ipc_red_state_changes |= RED_STATE_RT_CREATE;

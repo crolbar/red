@@ -5,6 +5,7 @@
 #include "red.h"
 #include "render.h"
 #include <GLES3/gl3.h>
+#include <libinput.h>
 #include <unistd.h>
 
 int
@@ -121,6 +122,8 @@ render_surface(struct redstate*   rs,
         else
             return 0;
     }
+    if (rsurf->w <= 0 || rsurf->h <= 0)
+        return 0;
 
     CALL(glUseProgram(rs->program));
     if (rsurf->parent || rsurf->zwlr_layer_surface) {
@@ -130,15 +133,14 @@ render_surface(struct redstate*   rs,
 
     if (gl_bind_texture_from_surface(rsurf))
         goto fail;
-    assert(rsurf->w != 0 && rsurf->h != 0);
 
     CALL(glUniform2fv(rs->dimentions_loc,
                       3,
                       (GLfloat[]){
                         red_get_rsurf_x(rsurf),
                         red_get_rsurf_y(rsurf),
-                        rsurf->w,
-                        rsurf->h,
+                        min((uint32_t)rsurf->w, screen_width),
+                        min((uint32_t)rsurf->h, screen_height),
                         screen_width,
                         screen_height,
                       }));

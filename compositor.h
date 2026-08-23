@@ -92,3 +92,6 @@ red_capture_rsurf_to(struct redsurface* rsurf,
                      char*              path,
                      uint32_t           w,
                      uint32_t           h);
+
+int
+red_rsurf_is_scaling(struct redsurface* rsurf);

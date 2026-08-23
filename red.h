@@ -116,9 +116,10 @@ struct redsurface
     // containing subsurfaceses and xdg_popups
     dll(struct redsurface*) subsurfs;
 
+    // logical coords
     // set in:
     //   subsurf x and y
-    //   popup unscaled x and y
+    //   popup x and y
     int32_t x;
     int32_t y;
 
@@ -140,7 +141,7 @@ struct redsurface
     int     geom_configured;
 
     int32_t buffer_scale;
-    int     buffer_scale_set;
+    int     is_scaling;
 
     uint32_t commited; // red_surf_commited bitmask
 

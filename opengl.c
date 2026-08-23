@@ -159,6 +159,8 @@ gl_surface_texture_map_shm_image(struct redsurface*    rsurf,
     if (rsurf->shm_w != w || rsurf->shm_h != h) {
         CALL(glTexImage2D(
           GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, gl_fmt, GL_UNSIGNED_BYTE, data));
+        rsurf->shm_w = w;
+        rsurf->shm_h = h;
     }
     // dimentions of texture image are the same, just replace data
     else {
@@ -235,80 +237,42 @@ gl_surface_texture_map_image(struct redsurface*  rsurf,
     int32_t w = src_w;
     int32_t h = src_h;
 
-    if (rsurf->xdg_toplevel || rsurf->zwlr_layer_surface) {
-        // removing csd that has been informed by
-        // xdg_surface_set_window_geometry
-        {
-            if (rsurf->geom_configured) {
-                x = rsurf->geom_x;
-                y = rsurf->geom_y;
-                w = rsurf->geom_width;
-                h = rsurf->geom_height;
-                if (x < 0)
-                    x = 0;
+    // TODO
+    //     if (rsurf->xdg_toplevel || rsurf->zwlr_layer_surface) {
+    //         // removing csd that has been informed by
+    //         // xdg_surface_set_window_geometry
+    //         {
+    //             if (rsurf->geom_configured) {
+    //                 x = rsurf->geom_x;
+    //                 y = rsurf->geom_y;
+    //                 w = rsurf->geom_width;
+    //                 h = rsurf->geom_height;
+    //                 if (x < 0)
+    //                     x = 0;
 
-                if (y < 0)
-                    y = 0;
+    //                 if (y < 0)
+    //                     y = 0;
 
-                if (x + w > src_w)
-                    w = src_w - x;
+    //                 if (x + w > src_w)
+    //                     w = src_w - x;
 
-                if (y + h > src_h)
-                    h = src_h - y;
+    //                 if (y + h > src_h)
+    //                     h = src_h - y;
 
-                if (w <= 0 || h <= 0) {
-                    x = 0;
-                    y = 0;
-                    w = src_w;
-                    h = src_h;
-                }
-            }
-        }
-
-        // NOTE: clunky fallback, find better solution
-        if (!rsurf->buffer_scale_set && rsurf->configured)
-        // set buffer scale back to 1 if recived buffer's
-        // width and height are not fitting the full screen
-        {
-            // skip fix if rsurf is the overlay or
-            // if its dimentions match the overlay's
-            if (rsurf->xdg_toplevel) {
-                if (rsurf->rs->overlay_rt && rsurf->rs->overlay_rt->rsurf)
-                    if (rsurf->rs->overlay_rt->rsurf == rsurf) {
-                        goto after_scale_set;
-                    }
-                // if (rsurf->rs->overlay_rt)
-                if (rsurf->w == rsurf->rs->overlay_rt_w &&
-                    rsurf->h == rsurf->rs->overlay_rt_h) {
-                    goto after_scale_set;
-                }
-            }
-
-            uint32_t width =
-              rsurf->rs->backend->get_width(rsurf->rs->backend->d);
-            uint32_t height =
-              rsurf->rs->backend->get_height(rsurf->rs->backend->d);
-            if (w != (int32_t)width && h != (int32_t)height) {
-                rsurf->buffer_scale     = 1;
-                rsurf->buffer_scale_set = 1;
-                if (rsurf->xdg_toplevel)
-                    red_send_toplevel_configure(rsurf, 1, 0);
-                else if (rsurf->zwlr_layer_surface)
-                    red_send_zwlr_layer_configure(rsurf);
-            }
-        }
-    }
-after_scale_set:
+    //                 if (w <= 0 || h <= 0) {
+    //                     x = 0;
+    //                     y = 0;
+    //                     w = src_w;
+    //                     h = src_h;
+    //                 }
+    //             }
+    //         }
+    //     }
 
     if (shmbuf)
         gl_surface_texture_map_shm_image(rsurf, shmbuf, x, y, w, h);
     if (dmabuf)
         gl_surface_texture_map_egl_image(rsurf, dmabuf, x, y, w, h);
-
-    rsurf->w     = w;
-    rsurf->h     = h;
-    rsurf->shm_w = w;
-    rsurf->shm_h = h;
 
     return 0;
 fail:

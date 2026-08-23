@@ -149,9 +149,8 @@ redaction_overlay_surface(struct redstate* rs, char** args, size_t args_len)
     if (rs->overlay_rt && rs->overlay_rt->rsurf) {
         rs->overlay_rt->rsurf->x = 0;
         rs->overlay_rt->rsurf->y = 0;
-        rs->overlay_rt->rsurf->w = w;
-        rs->overlay_rt->rsurf->h = h;
-        red_send_toplevel_configure(rs->overlay_rt->rsurf, 0, 1);
+        red_send_toplevel_configure(
+          rs->overlay_rt->rsurf, rs->overlay_rt_w, rs->overlay_rt_h, 0, 1);
     }
 
     if (rs->overlay_rt == rs->focused_rt) {
@@ -181,8 +180,8 @@ redaction_overlay_set_width(struct redstate* rs, char** args, size_t args_len)
     rs->overlay_rt_w += n;
     rs->overlay_rt_w = max(rs->overlay_rt_w, 0);
     if (rs->overlay_rt && rs->overlay_rt->rsurf) {
-        rs->overlay_rt->rsurf->w = rs->overlay_rt_w;
-        red_send_toplevel_configure(rs->overlay_rt->rsurf, 0, 1);
+        red_send_toplevel_configure(
+          rs->overlay_rt->rsurf, rs->overlay_rt_w, rs->overlay_rt_h, 0, 1);
     }
 }
 void
@@ -205,8 +204,8 @@ redaction_overlay_set_height(struct redstate* rs, char** args, size_t args_len)
     rs->overlay_rt_h += n;
     rs->overlay_rt_h = max(rs->overlay_rt_h, 0);
     if (rs->overlay_rt && rs->overlay_rt->rsurf) {
-        rs->overlay_rt->rsurf->h = rs->overlay_rt_h;
-        red_send_toplevel_configure(rs->overlay_rt->rsurf, 0, 1);
+        red_send_toplevel_configure(
+          rs->overlay_rt->rsurf, rs->overlay_rt_w, rs->overlay_rt_h, 0, 1);
     }
 }
 void

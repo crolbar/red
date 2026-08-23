@@ -226,7 +226,7 @@ red_commit_handle_configure(struct redsurface* rsurf)
 {
     if (rsurf->xdg_surface) {
         if (rsurf->xdg_toplevel) {
-            red_send_toplevel_configure(rsurf, 0, 0);
+            red_send_toplevel_configure(rsurf, 0, 0, 0, 0);
         } else if (rsurf->xdg_popup) {
             red_send_popup_configure(rsurf);
         }
@@ -253,6 +253,39 @@ red_commit_handle_attach(struct redsurface* rsurf)
 
     rsurf->current_buffer = rsurf->pending_buffer;
     rsurf->pending_buffer = NULL;
+
+    if (rsurf->current_buffer) {
+        int32_t               w      = 0;
+        int32_t               h      = 0;
+        struct wl_shm_buffer* shmbuf = NULL;
+        struct dmabuf*        dmabuf = NULL;
+        if ((shmbuf = wl_shm_buffer_get(rsurf->current_buffer))) {
+            w = wl_shm_buffer_get_width(shmbuf);
+            h = wl_shm_buffer_get_height(shmbuf);
+        } else if ((dmabuf = red_get_dmabuf(rsurf->current_buffer))) {
+            w = dmabuf->width;
+            h = dmabuf->height;
+        }
+        rsurf->w = w;
+        rsurf->h = h;
+
+        // TODO: no spaghetti please
+        if (rsurf->xdg_toplevel && rsurf->is_scaling) {
+            if (w > 0 && h > 0) {
+                uint32_t logic_w =
+                  rsurf->rs->backend->get_width(rsurf->rs->backend->d) /
+                  cfg.screen_scale;
+                uint32_t logic_h =
+                  rsurf->rs->backend->get_height(rsurf->rs->backend->d) /
+                  cfg.screen_scale;
+
+                if ((uint32_t)w == logic_w || (uint32_t)h == logic_h) {
+                    rsurf->is_scaling = 0;
+                    red_send_toplevel_configure(rsurf, 0, 0, 1, 1);
+                }
+            }
+        }
+    }
 
     if (rsurf->current_buffer != NULL) {
         wl_resource_add_destroy_listener(rsurf->current_buffer,
@@ -346,9 +379,8 @@ wl_surface_set_buffer_scale(struct wl_client*   client,
     assert(rsurf);
     assert(scale > 0);
 
-    int32_t prev_scale      = rsurf->buffer_scale;
-    rsurf->buffer_scale     = scale;
-    rsurf->buffer_scale_set = 1;
+    int32_t prev_scale  = rsurf->buffer_scale;
+    rsurf->buffer_scale = scale;
 
     // if scale in changed, and surface is focused toplevel, send configure
     if (red_is_rsurf_focused(rsurf->rs, rsurf))
@@ -489,7 +521,7 @@ init_redsurface()
     rsurf->geom_configured       = 0;
     rsurf->gl_tex                = 0;
     rsurf->buffer_scale          = 1;
-    rsurf->buffer_scale_set      = 0;
+    rsurf->is_scaling            = 1; // asume client is scaling buffers
     rsurf->zwlr_layer_surface    = NULL;
     rsurf->layer_anchor          = 0;
     rsurf->layer_margin_bottom   = 0;
@@ -717,7 +749,7 @@ xdg_toplevel_set_maximized(struct wl_client*   client,
                            struct wl_resource* resource)
 {
     struct redtoplevel* rt = resource->data;
-    red_send_toplevel_configure(rt->rsurf, 1, 0);
+    red_send_toplevel_configure(rt->rsurf, 0, 0, 1, 0);
 }
 
 static void
@@ -725,7 +757,7 @@ xdg_toplevel_unset_maximized(struct wl_client*   client,
                              struct wl_resource* resource)
 {
     struct redtoplevel* rt = resource->data;
-    red_send_toplevel_configure(rt->rsurf, 1, 0);
+    red_send_toplevel_configure(rt->rsurf, 0, 0, 1, 0);
 }
 
 static void
@@ -734,7 +766,7 @@ xdg_toplevel_set_fullscreen(struct wl_client*   client,
                             struct wl_resource* output)
 {
     struct redtoplevel* rt = resource->data;
-    red_send_toplevel_configure(rt->rsurf, 1, 0);
+    red_send_toplevel_configure(rt->rsurf, 0, 0, 1, 0);
 }
 
 static void
@@ -742,7 +774,7 @@ xdg_toplevel_unset_fullscreen(struct wl_client*   client,
                               struct wl_resource* resource)
 {
     struct redtoplevel* rt = resource->data;
-    red_send_toplevel_configure(rt->rsurf, 1, 0);
+    red_send_toplevel_configure(rt->rsurf, 0, 0, 1, 0);
 }
 
 static void
@@ -750,7 +782,7 @@ xdg_toplevel_set_minimized(struct wl_client*   client,
                            struct wl_resource* resource)
 {
     struct redtoplevel* rt = resource->data;
-    red_send_toplevel_configure(rt->rsurf, 1, 0);
+    red_send_toplevel_configure(rt->rsurf, 0, 0, 1, 0);
 }
 
 static const struct xdg_toplevel_interface xdg_toplevel_implementation = {
@@ -778,20 +810,16 @@ xdg_toplevel_resource_destroy(struct wl_resource* resource)
     red_destroy_rt(rt->rs, rt);
 }
 
-// by default using screen scale set by us
-//
-// if client sets scale with set_buffer_scale
-// we use it.
 uint32_t
 red_get_scale(struct redsurface* rsurf)
 {
-    if (rsurf->buffer_scale_set)
-        return rsurf->buffer_scale;
-    return cfg.screen_scale;
+    return rsurf->buffer_scale;
 }
 
 int
 red_send_toplevel_configure(struct redsurface* rsurf,
+                            uint32_t           width,
+                            uint32_t           height,
                             int                activated,
                             int                resizing)
 {
@@ -799,6 +827,16 @@ red_send_toplevel_configure(struct redsurface* rsurf,
     ROG(
       "sendig tl configure. client: %d, rsurf: %d", rsurf->rc->wl_client, rsurf)
 #endif
+
+    // 0, 0 means fullscreen
+    if (width == 0 && height == 0) {
+        width  = rsurf->rs->backend->get_width(rsurf->rs->backend->d);
+        height = rsurf->rs->backend->get_height(rsurf->rs->backend->d);
+    }
+
+    rsurf->w = width;
+    rsurf->h = height;
+
     struct wl_array states;
     wl_array_init(&states);
     // setting maximized state as it basicly tells the client to not render csd
@@ -824,12 +862,11 @@ red_send_toplevel_configure(struct redsurface* rsurf,
         wl_array_release(&a);
     }
 
-    int32_t width  = rsurf->w;
-    int32_t height = rsurf->h;
-    // making the surface cover the whole screen
-    uint32_t scale = red_get_scale(rsurf);
-    width /= scale;
-    height /= scale;
+    if (rsurf->is_scaling) {
+        // send logical size, not buffer
+        width /= cfg.screen_scale;
+        height /= cfg.screen_scale;
+    }
 
     if (wl_resource_get_version(rsurf->xdg_toplevel) > 3)
         xdg_toplevel_send_configure_bounds(rsurf->xdg_toplevel, width, height);
@@ -2914,13 +2951,18 @@ red_send_zwlr_layer_configure(struct redsurface* rsurf)
 {
     uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
 
-    uint32_t scale = red_get_scale(rsurf);
+    uint32_t rsurf_scale = red_get_scale(rsurf);
+
     uint32_t screen_width =
       rsurf->rs->backend->get_width(rsurf->rs->backend->d);
     uint32_t screen_height =
       rsurf->rs->backend->get_height(rsurf->rs->backend->d);
-    screen_width /= scale;
-    screen_height /= scale;
+
+    uint32_t log_screen_width  = screen_width / cfg.screen_scale;
+    uint32_t log_screen_height = screen_height / cfg.screen_scale;
+
+    screen_width /= rsurf_scale;
+    screen_height /= rsurf_scale;
 
     int32_t x = 0;
     int32_t y = 0;
@@ -2929,43 +2971,43 @@ red_send_zwlr_layer_configure(struct redsurface* rsurf)
 
     switch (rsurf->layer_anchor) {
         case 0:
-            x = screen_width / 2 - rsurf->layer_width / 2;
-            y = screen_height / 2 - rsurf->layer_height / 2;
+            x = log_screen_width / 2 - rsurf->layer_width / 2;
+            y = log_screen_height / 2 - rsurf->layer_height / 2;
             w = rsurf->layer_width;
             h = rsurf->layer_height;
             break;
         case RA_TOP:
-            x = screen_width / 2 - rsurf->layer_width / 2;
+            x = log_screen_width / 2 - rsurf->layer_width / 2;
             y = 0;
             w = rsurf->layer_width;
             h = rsurf->layer_height;
             break;
         case RA_BOTTOM:
-            x = screen_width / 2 - rsurf->layer_width / 2;
-            y = screen_height - rsurf->layer_height;
+            x = log_screen_width / 2 - rsurf->layer_width / 2;
+            y = log_screen_height - rsurf->layer_height;
             w = rsurf->layer_width;
             h = rsurf->layer_height;
             break;
         case RA_LEFT:
             x = 0;
-            y = screen_height / 2 - rsurf->layer_height / 2;
+            y = log_screen_height / 2 - rsurf->layer_height / 2;
             w = rsurf->layer_width;
             h = rsurf->layer_height;
             break;
         case RA_RIGHT:
-            x = screen_width - rsurf->layer_width;
-            y = screen_height / 2 - rsurf->layer_height / 2;
+            x = log_screen_width - rsurf->layer_width;
+            y = log_screen_height / 2 - rsurf->layer_height / 2;
             w = rsurf->layer_width;
             h = rsurf->layer_height;
             break;
         case RA_RIGHT | RA_LEFT:
             x = 0;
-            y = screen_height / 2 - rsurf->layer_height / 2;
+            y = log_screen_height / 2 - rsurf->layer_height / 2;
             w = screen_width;
             h = rsurf->layer_height;
             break;
         case RA_TOP | RA_BOTTOM:
-            x = screen_width / 2 - rsurf->layer_width / 2;
+            x = log_screen_width / 2 - rsurf->layer_width / 2;
             y = 0;
             w = rsurf->layer_width;
             h = screen_height;
@@ -2977,20 +3019,20 @@ red_send_zwlr_layer_configure(struct redsurface* rsurf)
             h = rsurf->layer_height;
             break;
         case RA_TOP | RA_RIGHT:
-            x = screen_width - rsurf->layer_width;
+            x = log_screen_width - rsurf->layer_width;
             y = 0;
             w = rsurf->layer_width;
             h = rsurf->layer_height;
             break;
         case RA_BOTTOM | RA_LEFT:
             x = 0;
-            y = screen_height - rsurf->layer_height;
+            y = log_screen_height - rsurf->layer_height;
             w = rsurf->layer_width;
             h = rsurf->layer_height;
             break;
         case RA_BOTTOM | RA_RIGHT:
-            x = screen_width - rsurf->layer_width;
-            y = screen_height - rsurf->layer_height;
+            x = log_screen_width - rsurf->layer_width;
+            y = log_screen_height - rsurf->layer_height;
             w = rsurf->layer_width;
             h = rsurf->layer_height;
             break;
@@ -3001,7 +3043,7 @@ red_send_zwlr_layer_configure(struct redsurface* rsurf)
             h = screen_height;
             break;
         case RA_TOP | RA_RIGHT | RA_BOTTOM:
-            x = screen_width - rsurf->layer_width;
+            x = log_screen_width - rsurf->layer_width;
             y = 0;
             w = rsurf->layer_width;
             h = screen_height;
@@ -3014,7 +3056,7 @@ red_send_zwlr_layer_configure(struct redsurface* rsurf)
             break;
         case RA_LEFT | RA_BOTTOM | RA_RIGHT:
             x = 0;
-            y = screen_height - rsurf->layer_height;
+            y = log_screen_height - rsurf->layer_height;
             w = screen_width;
             h = rsurf->layer_height;
             break;

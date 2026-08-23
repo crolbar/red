@@ -16,6 +16,8 @@ red_send_pending_callbacks(struct redsurface* rsurf, uint32_t time_msec);
 
 int
 red_send_toplevel_configure(struct redsurface* rsurf,
+                            uint32_t           width,
+                            uint32_t           height,
                             int                activated,
                             int                resizing);
 int
