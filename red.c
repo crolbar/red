@@ -17,6 +17,7 @@
 #include "render.h"
 #include "signals.h"
 #include "time.h"
+#include "utils.h"
 #include "vt.h"
 #include "wayland.h"
 
@@ -39,6 +40,37 @@ init_auto_start_progs()
                       cfg.auto_start_progs[i].args_len);
     }
     return 0;
+}
+
+int
+init_red_binds(struct redstate* rs)
+{
+    rs->binds_len = 0;
+    rs->binds_cap = 10;
+    rs->binds     = calloc(rs->binds_cap, sizeof(*rs->binds));
+
+    for (size_t i = 0; i < cfg.bind_presets_len; i++) {
+        struct redbindpreset preset = cfg.bind_presets[i];
+        for (size_t j = 0; j < preset.binds_len; j++) {
+            struct redbindcfg cfgbind = preset.binds[j];
+            xkb_keysym_t      cfgbind_keysym =
+              xkb_keysym_from_name(cfgbind.key, XKB_KEYSYM_NO_FLAGS);
+
+            struct redbind bind = {};
+            bind.key_mods_bm  = REDBIND_CREATE_BM(cfgbind_keysym, cfgbind.mods);
+            bind.action       = cfgbind.action;
+            bind.action_len   = cfgbind.action_len;
+            bind.preset_n     = i;
+            bind.not_repeated = cfgbind.not_repeated;
+            bind.wl_client    = cfgbind.wl_client;
+
+            UTIL_ADD_BIND(rs->binds, bind, rs->binds_len, rs->binds_cap);
+        }
+    }
+
+    return 0;
+fail:
+    return 1;
 }
 
 int
@@ -169,6 +201,13 @@ main(int argc, char** argv)
     rs->overlay_move_mode                = 0;
     rs->overlay_move_mode_diff_x         = 0;
     rs->overlay_move_mode_diff_y         = 0;
+    rs->binds                            = NULL;
+    rs->binds_len                        = 0;
+    rs->binds_cap                        = 0;
+    rs->xkb_ctrl_mask                    = 0;
+    rs->xkb_shift_mask                   = 0;
+    rs->xkb_alt_mask                     = 0;
+    rs->xkb_super_mask                   = 0;
 
     struct itimerspec its = {
         .it_value    = { .tv_sec = 1, 0 },
@@ -253,8 +292,12 @@ main(int argc, char** argv)
     rs->pfds[RFD_TICK].fd     = rs->tick_timer_fd;
     rs->pfds[RFD_IPC].fd      = rs->ipc_fd;
 
-    init_env_vars();
-    init_auto_start_progs();
+    if (init_env_vars())
+        goto end;
+    if (init_auto_start_progs())
+        goto end;
+    if (init_red_binds(rs))
+        goto end;
 
     ROG_INFO("Starting loop...");
     while (!rs->should_quit) {

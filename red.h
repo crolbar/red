@@ -188,16 +188,27 @@ struct redtoplevel
     char*              fi_path; // frame image path
 };
 
-// mods is a bitmask
-typedef struct redbind
+// `sym` is keysym of xkb, `mods` is a bitmask of RED_MOD_*
+//
+// returns u64
+//
+// the 3 bits at the end of the keysym are unused, utilize them
+// as we shift the mods by 29. our mods required 4 bits at least
+// and the keysym leaves us 3, so we need u64.
+#define REDBIND_CREATE_BM(sym, mods) (uint64_t)(sym) | ((uint64_t)mods << 29)
+#define REDBIND_GET_SYM(bm)          (bm) & 0x1fffffff
+#define REDBIND_GET_MODS(bm)         ((bm) & 0x1e0000000) >> 29
+
+struct redbind
 {
-    uint8_t mods;
-    char*   key;
-    char**  action;
-    size_t  action_len;
-    bool    wl_client;
-    bool    not_repeated;
-} redbind;
+    // key + mods bitmask, first 29 bits are key, next 4 are mods
+    uint64_t key_mods_bm;
+    char**   action;
+    size_t   action_len;
+    uint32_t preset_n;
+    _Bool    wl_client;
+    _Bool    not_repeated;
+};
 
 enum red_state_change
 {
@@ -330,6 +341,14 @@ struct redstate
     xkb_mod_mask_t     xkb_mods_latched;
     xkb_mod_mask_t     xkb_mods_locked;
     xkb_layout_index_t xkb_group;
+    xkb_mod_mask_t     xkb_ctrl_mask;
+    xkb_mod_mask_t     xkb_shift_mask;
+    xkb_mod_mask_t     xkb_alt_mask;
+    xkb_mod_mask_t     xkb_super_mask;
+
+    struct redbind* binds;
+    size_t          binds_len;
+    size_t          binds_cap;
 
     struct redbuffer* queued_rb; // buffer we got queued rendering to
 

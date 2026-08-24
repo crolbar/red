@@ -1,7 +1,7 @@
 #pragma once
 
-#include "red.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define BIND_PRESETS(...)                                                      \
@@ -9,9 +9,9 @@
     .bind_presets_len = (sizeof((redbindpreset[]){ __VA_ARGS__ }) /            \
                          sizeof(((redbindpreset[]){ __VA_ARGS__ })[0])),
 #define BINDS(...)                                                             \
-    .binds     = (redbind[]){ __VA_ARGS__ },                                   \
-    .binds_len = (sizeof((redbind[]){ __VA_ARGS__ }) /                         \
-                  sizeof(((redbind[]){ __VA_ARGS__ })[0])),
+    .binds     = (redbindcfg[]){ __VA_ARGS__ },                                \
+    .binds_len = (sizeof((redbindcfg[]){ __VA_ARGS__ }) /                      \
+                  sizeof(((redbindcfg[]){ __VA_ARGS__ })[0])),
 #define A(...)                                                                 \
     .action     = (char*[]){ __VA_ARGS__, NULL },                              \
     .action_len = (sizeof((char*[]){ __VA_ARGS__ }) /                          \
@@ -56,10 +56,21 @@ typedef struct redmousecfg
 
 typedef char* envvar[2];
 
+// mods is a bitmask
+typedef struct redbindcfg
+{
+    uint8_t mods;
+    char*   key;
+    char**  action;
+    size_t  action_len;
+    bool    wl_client;
+    bool    not_repeated;
+} redbindcfg;
+
 typedef struct redbindpreset
 {
-    redbind* binds;
-    size_t   binds_len;
+    redbindcfg* binds;
+    size_t      binds_len;
 } redbindpreset;
 
 typedef struct redconfig

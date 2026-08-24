@@ -110,6 +110,15 @@ init_xkb_keyboard(struct redstate* rs)
     rs->xkb_state         = state;
     rs->xkb_keymap        = red_keymap;
 
+    rs->xkb_ctrl_mask =
+      xkb_keymap_mod_get_mask(rs->xkb_keymap, XKB_MOD_NAME_CTRL);
+    rs->xkb_shift_mask =
+      xkb_keymap_mod_get_mask(rs->xkb_keymap, XKB_MOD_NAME_SHIFT);
+    rs->xkb_alt_mask =
+      xkb_keymap_mod_get_mask(rs->xkb_keymap, XKB_MOD_NAME_MOD1);
+    rs->xkb_super_mask =
+      xkb_keymap_mod_get_mask(rs->xkb_keymap, XKB_MOD_NAME_MOD4);
+
     return 0;
 }
 
@@ -177,69 +186,69 @@ init_input(struct redstate* rs)
 
 // return 0 on no press, 1 on press
 int
-input_handle_internal(struct redstate* rs, char* key_str, int press)
+input_handle_internal(struct redstate* rs, xkb_keysym_t keysym, int press)
 {
     if (rs->is_wayland_client)
         return 0;
 
     // currently only vt switching is handled here
-    if (strcmp(key_str, "XF86Switch_VT_1") == 0) {
+    if (keysym == XKB_KEY_XF86Switch_VT_1) {
         if (press)
             return 1;
         if (vt_switch(rs, 1)) {
             return -1;
         }
         return 1;
-    } else if (strcmp(key_str, "XF86Switch_VT_2") == 0) {
+    } else if (keysym == XKB_KEY_XF86Switch_VT_2) {
         if (press)
             return 1;
         if (vt_switch(rs, 2)) {
             return -1;
         }
         return 1;
-    } else if (strcmp(key_str, "XF86Switch_VT_3") == 0) {
+    } else if (keysym == XKB_KEY_XF86Switch_VT_3) {
         if (press)
             return 1;
         if (vt_switch(rs, 3)) {
             return -1;
         }
         return 1;
-    } else if (strcmp(key_str, "XF86Switch_VT_4") == 0) {
+    } else if (keysym == XKB_KEY_XF86Switch_VT_4) {
         if (press)
             return 1;
         if (vt_switch(rs, 4)) {
             return -1;
         }
         return 1;
-    } else if (strcmp(key_str, "XF86Switch_VT_5") == 0) {
+    } else if (keysym == XKB_KEY_XF86Switch_VT_5) {
         if (press)
             return 1;
         if (vt_switch(rs, 5)) {
             return -1;
         }
         return 1;
-    } else if (strcmp(key_str, "XF86Switch_VT_6") == 0) {
+    } else if (keysym == XKB_KEY_XF86Switch_VT_6) {
         if (press)
             return 1;
         if (vt_switch(rs, 6)) {
             return -1;
         }
         return 1;
-    } else if (strcmp(key_str, "XF86Switch_VT_7") == 0) {
+    } else if (keysym == XKB_KEY_XF86Switch_VT_7) {
         if (press)
             return 1;
         if (vt_switch(rs, 7)) {
             return -1;
         }
         return 1;
-    } else if (strcmp(key_str, "XF86Switch_VT_8") == 0) {
+    } else if (keysym == XKB_KEY_XF86Switch_VT_8) {
         if (press)
             return 1;
         if (vt_switch(rs, 8)) {
             return -1;
         }
         return 1;
-    } else if (strcmp(key_str, "XF86Switch_VT_9") == 0) {
+    } else if (keysym == XKB_KEY_XF86Switch_VT_9) {
         if (press)
             return 1;
         if (vt_switch(rs, 9)) {
@@ -282,58 +291,27 @@ red_start_bind_repeater(struct redstate* rs)
 // return 0 on no bind pressed, 1 on pressed
 // if 1 returned the keypress should not be send to client
 int
-input_handle_binds(struct redstate* rs, char* key_str, int press)
+input_handle_binds(struct redstate* rs, uint64_t key_mods_bm, int press)
 {
     // stop repeated action on next release event
     if (!press && rs->repeat_action) {
         red_stop_bind_repeater(rs);
     }
 
-    redbindpreset preset = cfg.bind_presets[cfg.sel_bind_preset];
-    for (size_t i = 0; i < preset.binds_len; i++) {
-        redbind bind = preset.binds[i];
+    // redbindpreset preset = cfg.bind_presets[cfg.sel_bind_preset];
+    for (size_t i = 0; i < rs->binds_len; i++) {
+        struct redbind bind = rs->binds[i];
 
-        // client binds
+        if (bind.preset_n != cfg.sel_bind_preset)
+            continue;
+
         if (bind.wl_client && !rs->is_wayland_client)
             continue;
 
-        // key
-        if (strcmp(bind.key, key_str) != 0)
+        if (bind.key_mods_bm != key_mods_bm)
             continue;
 
-        // mods
-        {
-            if (bind.mods == RED_MOD_NO_MODS)
-                if (rs->xkb_mods_depressed != 0)
-                    continue;
-
-            xkb_mod_mask_t ctrl_mask =
-              xkb_keymap_mod_get_mask(rs->xkb_keymap, XKB_MOD_NAME_CTRL);
-            // if bind.mods has ctl then mods_depressed should also have it
-            if (!(((bind.mods & RED_MOD_CTRL) != 0) ==
-                  ((rs->xkb_mods_depressed & ctrl_mask) != 0)))
-                continue;
-
-            xkb_mod_mask_t shift_mask =
-              xkb_keymap_mod_get_mask(rs->xkb_keymap, XKB_MOD_NAME_SHIFT);
-            if (!(((bind.mods & RED_MOD_SHIFT) != 0) ==
-                  ((rs->xkb_mods_depressed & shift_mask) != 0)))
-                continue;
-
-            xkb_mod_mask_t alt_mask =
-              xkb_keymap_mod_get_mask(rs->xkb_keymap, XKB_MOD_NAME_MOD1);
-            if (!(((bind.mods & RED_MOD_ALT) != 0) ==
-                  ((rs->xkb_mods_depressed & alt_mask) != 0)))
-                continue;
-
-            xkb_mod_mask_t super_mask =
-              xkb_keymap_mod_get_mask(rs->xkb_keymap, XKB_MOD_NAME_MOD4);
-            if (!(((bind.mods & RED_MOD_SUPER) != 0) ==
-                  ((rs->xkb_mods_depressed & super_mask) != 0)))
-                continue;
-        }
-
-        // only exec action on press
+        // TODO: allow bind execution on release?
         if (!press) {
             red_stop_bind_repeater(rs);
             return 1;
@@ -354,6 +332,23 @@ input_handle_binds(struct redstate* rs, char* key_str, int press)
     return 0;
 press:
     return 1;
+}
+
+uint8_t
+xkb_mods_to_red_mods(struct redstate* rs)
+{
+    uint8_t mods = RED_MOD_NO_MODS;
+
+    if (rs->xkb_mods_depressed & rs->xkb_ctrl_mask)
+        mods |= RED_MOD_CTRL;
+    if (rs->xkb_mods_depressed & rs->xkb_shift_mask)
+        mods |= RED_MOD_SHIFT;
+    if (rs->xkb_mods_depressed & rs->xkb_alt_mask)
+        mods |= RED_MOD_ALT;
+    if (rs->xkb_mods_depressed & rs->xkb_super_mask)
+        mods |= RED_MOD_SUPER;
+
+    return mods;
 }
 
 int
@@ -388,17 +383,16 @@ input_kb_key(struct redstate* rs,
         rs->xkb_group          = group;
     }
 
-    xkb_keysym_t key = xkb_state_key_get_one_sym(rs->xkb_state, xkb_key);
-    char         key_str[64];
-    xkb_keysym_get_name(key, key_str, sizeof(key_str));
+    xkb_keysym_t keysym = xkb_state_key_get_one_sym(rs->xkb_state, xkb_key);
+    uint8_t      mods   = xkb_mods_to_red_mods(rs);
 
     if (rs->autoscroll_fd != -1)
         red_autoscroll_handle_click(rs, 0, 1);
 
-    if (input_handle_internal(rs, key_str, evdev_press))
+    if (input_handle_internal(rs, keysym, evdev_press))
         return 0;
 
-    if (input_handle_binds(rs, key_str, evdev_press))
+    if (input_handle_binds(rs, REDBIND_CREATE_BM(keysym, mods), evdev_press))
         return 0;
 
     // forward key press to client

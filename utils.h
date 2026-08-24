@@ -53,3 +53,19 @@
     _err:                                                                      \
         _err = 1;                                                              \
     } while (0)
+
+// `arr` should be `struct redbind*`, `bind` should be `struct redbind`
+// `arr_len` -> size_t of the number of elements
+// `arr_cap` -> size_t of the allocated size
+#define UTIL_ADD_BIND(arr, bind, arr_len, arr_cap)                                  \
+    do {                                                                       \
+        if ((arr_len) == (arr_cap)) {                                          \
+            size_t new_cap = (arr_cap) + 10;                                   \
+            void*  new_arr = realloc((arr), (new_cap * sizeof(*(arr))));       \
+            if (!new_arr)                                                      \
+                goto fail;                                                     \
+            (arr_cap) = new_cap;                                               \
+            (arr)     = new_arr;                                               \
+        }                                                                      \
+        (arr)[(arr_len)++] = (bind);                                           \
+    } while (0)
