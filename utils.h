@@ -57,8 +57,20 @@
 // `arr` should be `struct redbind*`, `bind` should be `struct redbind`
 // `arr_len` -> size_t of the number of elements
 // `arr_cap` -> size_t of the allocated size
-#define UTIL_ADD_BIND(arr, bind, arr_len, arr_cap)                                  \
+#define UTIL_ADD_BIND(arr, bind, arr_len, arr_cap)                             \
     do {                                                                       \
+        int bind_bm_used_idx = -1;                                             \
+        for (size_t i = 0; i < rs->binds_len; i++) {                           \
+            if (rs->binds[i].key_mods_bm == bind.key_mods_bm &&                \
+                rs->binds[i].preset_n == bind.preset_n) {                      \
+                bind_bm_used_idx = i;                                          \
+                break;                                                         \
+            }                                                                  \
+        }                                                                      \
+        if (bind_bm_used_idx != -1) {                                          \
+            rs->binds[bind_bm_used_idx] = bind;                                \
+            break;                                                             \
+        }                                                                      \
         if ((arr_len) == (arr_cap)) {                                          \
             size_t new_cap = (arr_cap) + 10;                                   \
             void*  new_arr = realloc((arr), (new_cap * sizeof(*(arr))));       \

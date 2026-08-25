@@ -371,6 +371,48 @@ ACTIONS(
 )
 // clang-format on
 
+int
+is_valid_action(char* action)
+{
+    ;
+    if (strcmp(action, RED_ACTION_QUIT) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_DEBUG) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_FOCUS_PREV) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_FOCUS_NEXT) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_SPAWN) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_CLOSE) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_STOP_RENDERER) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_FOCUS_LAST) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_FOCUS_N) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_SELECT_BIND_PRESET) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_OVERLAY_SURFACE) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_OVERLAY_SET_WIDTH) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_OVERLAY_SET_HEIGHT) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_OVERLAY_SET_X) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_OVERLAY_SET_Y) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_CAPTURE_FOCUS) == 0)
+        return 1;
+    if (strcmp(action, RED_ACTION_RT_FI_UPDATE) == 0)
+        return 1;
+
+    return 0;
+}
+
 void
 exec_action(struct redstate* rs, char** action, size_t action_len)
 {

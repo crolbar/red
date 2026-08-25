@@ -87,6 +87,72 @@ handle_ipc_msg_fetch_toplevels(struct redstate* rs)
 }
 
 char*
+handle_ipc_msg_add_bind(struct redstate* rs, char** msg, size_t msg_len)
+{
+    if (msg_len < 4)
+        return "too few arguments provided to add bind";
+
+    // 1 should always be the key
+    char*        key    = msg[1];
+    xkb_keysym_t keysym = xkb_keysym_from_name(key, XKB_KEYSYM_NO_FLAGS);
+    if (keysym == XKB_KEY_NoSymbol)
+        return "invalid key passed to add bind";
+
+    // 2 is always the modifiers
+    uint8_t mods  = RED_MOD_NO_MODS;
+    char*   start = msg[2];
+    while (*start) {
+        char* end = strchr(start, '+');
+        if (end)
+            *end = '\0';
+
+        if (strcmp(start, "RED_MOD_SHIFT") == 0)
+            mods |= RED_MOD_SHIFT;
+        else if (strcmp(start, "RED_MOD_SUPER") == 0)
+            mods |= RED_MOD_SUPER;
+        else if (strcmp(start, "RED_MOD_ALT") == 0)
+            mods |= RED_MOD_ALT;
+        else if (strcmp(start, "RED_MOD_CTRL") == 0)
+            mods |= RED_MOD_CTRL;
+        else
+            return "invalid mod passed to add bind";
+
+        if (end == NULL)
+            break;
+        *end  = '+';
+        start = end + 1;
+    }
+
+    // 3.. are action + args
+    if (!is_valid_action(msg[3]))
+        return "non valid action";
+    // TODO: free
+    size_t action_len = msg_len - 3;
+    char** action     = calloc(action_len + 1, sizeof(*action));
+    for (size_t i = 0; i < action_len; i++) {
+        char* a = malloc(strlen(msg[3 + i]) + 1);
+        strcpy(a, msg[3 + i]);
+        action[i] = a;
+    }
+    action[action_len] = NULL;
+
+    struct redbind bind = {};
+    bind.key_mods_bm    = REDBIND_CREATE_BM(keysym, mods);
+    bind.action         = action;
+    bind.action_len     = action_len;
+    // TODO: way to add to another preset?
+    bind.preset_n     = cfg.sel_bind_preset;
+    bind.not_repeated = 0;
+    bind.wl_client    = 0;
+
+    UTIL_ADD_BIND(rs->binds, bind, rs->binds_len, rs->binds_cap);
+
+    return "ok";
+fail:
+    return "failed to add bind";
+}
+
+char*
 handle_ipc_msg(struct redstate*     rs,
                struct redipcclient* ric,
                char**               msg,
@@ -117,6 +183,9 @@ handle_ipc_msg(struct redstate*     rs,
     if (strcmp(msg[0], RED_IPC_MSG_SUBSCRIBE) == 0) {
         ric->subscribed = 1;
         goto found;
+    }
+    if (strcmp(msg[0], RED_IPC_MSG_ADD_BIND) == 0) {
+        return handle_ipc_msg_add_bind(rs, msg, msg_len);
     }
 
     for (size_t i = 0; i < redactions_len; i++) {
@@ -380,6 +449,9 @@ ipc_proccess_client_msg(struct redstate* rs, int client_fd)
 
     if (should_free)
         free(back_msg);
+    for (size_t i = 0; i < len; i++)
+        free(msg[i]);
+    free(msg);
     if (n <= 0)
         goto close;
     return 0;

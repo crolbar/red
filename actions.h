@@ -59,6 +59,9 @@ typedef struct redaction
 int
 spawn_program(char** args, size_t args_len);
 
+int
+is_valid_action(char* action);
+
 // the action param is straight from the bind
 void
 exec_action(struct redstate* rs, char** action, size_t action_len);
