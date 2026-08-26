@@ -31,7 +31,7 @@
         pkg-config --cflags libdrm | tr ' ' '\n' > compile_flags.txt
       '';
     };
-    packages.${system}.default = pkgs.callPackage ./default.nix {};
+    packages.${system}.default = pkgs.callPackage ./default.nix {commit = inputs.self.shortRev or inputs.self.dirtyShortRev or "dirty";};
     nixosModules.default = import ./module.nix inputs;
   };
 }

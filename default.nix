@@ -1,4 +1,5 @@
 {
+  commit,
   lib,
   stdenv,
   pkg-config,
@@ -16,11 +17,11 @@
 }:
 stdenv.mkDerivation rec {
   pname = "red";
-  version = "v0.1";
+  version = commit;
 
   src = ./.;
 
-  makeFlags = ["PREFIX=$(out) BINS=${pname}"];
+  makeFlags = ["PREFIX=$(out) CFLAGS_REDCTL=\"-DVERSION=\\\"${commit}\\\"\""];
 
   nativeBuildInputs = [
     pkg-config

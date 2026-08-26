@@ -32,14 +32,15 @@ DEPS = wayland-server \
 		glesv2
 
 CC      ?= gcc
-CFLAGS  += -Wall -Wextra -Wno-unused-parameter \
-           $(shell pkg-config --cflags $(DEPS))
+CFLAGS  += -Wall -Wextra -Wno-unused-parameter
 CFLAGS_DEBUG = -g
 CFLAGS_RELEASE = -O2 -DNDEBUG -flto
-LDLIBS  += $(shell pkg-config --libs $(DEPS))
+CFLAGS_REDCTL = -DVERSION=\"$(shell git rev-parse --short HEAD)\"
+CFLAGGS_DEPS = $(shell pkg-config --cflags $(DEPS))
+LDLIBS += $(shell pkg-config --libs $(DEPS))
 
 PREFIX ?= /usr/local
-BINS ?= red
+BINS ?= red redctl
 
 WAYLAND_PROTOCOLS_DIR = $(shell pkg-config --variable=pkgdatadir wayland-protocols)
 WLR_PROTOCOLS_DIR = $(shell pkg-config --variable=pkgdatadir wlr-protocols)
@@ -144,17 +145,21 @@ PRO_SRC=linux-dmabuf-protocol.c \
 
 pro: $(PRO_SRC)
 
-$(BINS): $(SRC) $(PRO_SRC)
-	$(CC) $(CFLAGS) $(CFLAGS_DEBUG) -o $@ $(SRC) $(PRO_SRC) $(LDLIBS)
+red: $(SRC) $(PRO_SRC)
+	$(CC) $(CFLAGS) $(CFLAGGS_DEPS) $(CFLAGS_DEBUG) -o $@ $(SRC) $(PRO_SRC) $(LDLIBS)
+
+redctl:
+	$(CC) $(CFLAGS) $(CFLAGS_REDCTL) $(CFLAGS_DEBUG) -o $@ redctl.c
 
 release: $(SRC) $(PRO_SRC)
-	$(CC) $(CFLAGS) $(CFLAGS_RELEASE) -o $(BINS) $(SRC) $(PRO_SRC) $(LDLIBS)
+	$(CC) $(CFLAGS) $(CFLAGGS_DEPS) $(CFLAGS_RELEASE) -o red $(SRC) $(PRO_SRC) $(LDLIBS)
+	$(CC) $(CFLAGS) $(CFLAGS_REDCTL) $(CFLAGS_RELEASE) -o redctl redctl.c
 
-run: all
+run: red
 	./run.sh
 
 prof: $(SRC) $(PRO_SRC)
-	$(CC) $(CFLAGS) $(CFLAGS_DEBUG) -fno-omit-frame-pointer -o $(BINS) $(SRC) $(PRO_SRC) $(LDLIBS) -lprofiler
+	$(CC) $(CFLAGS) $(CFLAGGS_DEPS) $(CFLAGS_DEBUG) -fno-omit-frame-pointer -o $(BINS) $(SRC) $(PRO_SRC) $(LDLIBS) -lprofiler
 	./run_prof.sh
 
 install: all
@@ -163,4 +168,4 @@ install: all
 clean:
 	rm -f red *protocol.c *protocol.h *.o
 
-.PHONY: all clean red release prof
+.PHONY: all clean red redctl release prof

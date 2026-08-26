@@ -269,12 +269,6 @@ redconfig cfg = (redconfig){
 
       {BINDS(
           {
-            .key = "o",
-            .mods = RED_MOD_SUPER,
-            A( RED_ACTION_SPAWN, "ghostty" )
-          },
-
-          {
             .key = "F8",
             .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
             A( RED_ACTION_SELECT_BIND_PRESET, "0" )
