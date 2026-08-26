@@ -41,10 +41,12 @@ fail:
     return -1;
 }
 
-size_t
+int
 construct_msg(int argc, char** argv, char** out_msg)
 {
-    char*  msg     = NULL;
+    char* msg = NULL;
+    if (argc == 1)
+        return 0;
     size_t msg_len = argc - 2;
     for (int i = 1; i < argc; i++)
         msg_len += strlen(argv[i]);
@@ -93,15 +95,18 @@ main(int argc, char** argv)
     if (sock_fd == -1)
         return -1;
 
-    char*  msg     = NULL;
-    size_t msg_len = 0;
+    char* msg     = NULL;
+    int   msg_len = 0;
     if ((msg_len = construct_msg(argc, argv, &msg)) <= 0) {
-        printf("falied to construct msg");
+        if (msg_len < 0)
+            printf("falied to construct msg\n");
+        else if (msg_len == 0)
+            printf("no args provided\n");
         return 1;
     }
 
     if (write(sock_fd, msg, msg_len) == -1) {
-        printf("write error: %s", strerror(errno));
+        printf("write error: %s\n", strerror(errno));
         return 1;
     }
 
@@ -110,7 +115,7 @@ main(int argc, char** argv)
     read:
         memset(buf, 0, sizeof(buf));
         if (read(sock_fd, buf, sizeof(buf)) == -1) {
-            printf("read error: %s", strerror(errno));
+            printf("read error: %s\n", strerror(errno));
             return 1;
         }
 
