@@ -1,6 +1,7 @@
 #include <errno.h> // IWYU pragma: keep
 #include <libseat.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
 
@@ -71,6 +72,38 @@ init_red_binds(struct redstate* rs)
     return 0;
 fail:
     return 1;
+}
+
+int
+start_script()
+{
+    char* fmt = "%s/red/start.sh";
+    char* cfg = getenv("XDG_CONFIG_HOME");
+    if (!cfg) {
+        ROG_WARN("XDG_CONFIG_HOME not set!");
+        return 0;
+    }
+    int   n    = snprintf(NULL, 0, fmt, cfg);
+    char* path = malloc(n + 1);
+    if (!path) {
+        ROG_ERR("oom?");
+        return 1;
+    }
+    sprintf(path, fmt, cfg);
+
+    struct stat sb;
+    if (stat(path, &sb)) {
+        ROG_INFO("Start script not found in %s, you can "
+                 "use this to know when the compositor started up.",
+                 path);
+        free(path);
+        return 0;
+    } else
+        ROG_INFO("Starting start script: %s", path);
+
+    spawn_program((char*[]){ path, NULL }, 1);
+    free(path);
+    return 0;
 }
 
 int
@@ -297,6 +330,8 @@ main(int argc, char** argv)
     if (init_auto_start_progs())
         goto end;
     if (init_red_binds(rs))
+        goto end;
+    if (start_script())
         goto end;
 
     ROG_INFO("Starting loop...");

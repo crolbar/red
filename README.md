@@ -1,4 +1,24 @@
+# Notes
+
+- configuring the server happens in `./config.c` or through the ipc
+- startup script that runs when the compositor starts up can be placed in
+  `~/.config/red/start.sh`
+- cursor can be changed by replacing `./red_cursor.c`. more info in `./config.c`
+- ipc socket is under `RED_SOCKET`
+- valid ipc messages can be seen in `./ipc.h`. also all actions in `./actions.h`
+  are valid and can be used through the ipc
+
 # Building
+
+### Dependancies (runtime)
+
+- `seatd`
+- `wayland`
+- `libdrm`
+- `libgbm`
+- `libglvnd`
+- `libinput`
+- `libxkbcommon`
 
 ## Manual
 
@@ -15,13 +35,17 @@ make release
 - `pkg-config`
 - `wayland-protocols`
 - `wlr-protocols`
-- `wayland`
-- `libdrm`
-- `libgdm`
-- `libglvnd`
-- `libinput`
-- `libxkbcommon`
-- `seatd`
+
+## Nix
+
+Package derivation is available in `./default.nix` exposed in the flake's
+`packages.x86_64-linux.default` output.
+
+```
+nix build
+```
+
+to use it
 
 # "Alt+Tab" like Menu
 
