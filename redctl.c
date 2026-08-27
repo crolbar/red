@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/poll.h>
@@ -75,9 +76,24 @@ fail:
     return -1;
 }
 
+volatile _Bool listening = 0;
+
+void
+sighandler(int n)
+{
+    listening = 0;
+}
+
 int
 main(int argc, char** argv)
 {
+    struct sigaction sa = { 0 };
+    sa.sa_handler       = sighandler;
+    sa.sa_flags         = 0;
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGHUP, &sa, NULL);
+
     for (int i = 0; i < argc; i++) {
         if (strcmp(argv[i], "version") == 0 ||
             strcmp(argv[i], "--version") == 0) {
@@ -88,6 +104,10 @@ main(int argc, char** argv)
         if (strcmp(argv[i], "help") == 0 || strcmp(argv[i], "--help") == 0) {
             printf("help menu TODO\n");
             return 0;
+        }
+
+        if (strcmp(argv[i], "sub") == 0) {
+            listening = 1;
         }
     }
 
@@ -110,20 +130,28 @@ main(int argc, char** argv)
         return 1;
     }
 
-    {
-        char buf[248];
+    char    buf[248];
+    ssize_t len = 0;
+    do {
     read:
         memset(buf, 0, sizeof(buf));
-        if (read(sock_fd, buf, sizeof(buf)) == -1) {
+        if ((len = read(sock_fd, buf, sizeof(buf))) == -1) {
+            if (!listening)
+                goto end;
             printf("read error: %s\n", strerror(errno));
             return 1;
         }
 
         printf("%s", buf);
+        fflush(stdout);
 
         if (poll(&(struct pollfd){ sock_fd, POLLIN, 0 }, 1, 0) > 0)
             goto read;
+    } while (listening);
+end:
+    if (len > 0 && buf[len - 1] != '\n') {
         printf("\n");
+        fflush(stdout);
     }
 
     free(msg);

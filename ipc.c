@@ -182,7 +182,7 @@ handle_ipc_msg(struct redstate*     rs,
     }
     if (strcmp(msg[0], RED_IPC_MSG_SUBSCRIBE) == 0) {
         ric->subscribed = 1;
-        goto found;
+        return "listening\n";
     }
     if (strcmp(msg[0], RED_IPC_MSG_ADD_BIND) == 0) {
         return handle_ipc_msg_add_bind(rs, msg, msg_len);
