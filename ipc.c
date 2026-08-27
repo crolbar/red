@@ -114,6 +114,8 @@ handle_ipc_msg_add_bind(struct redstate* rs, char** msg, size_t msg_len)
             mods |= RED_MOD_ALT;
         else if (strcmp(start, "RED_MOD_CTRL") == 0)
             mods |= RED_MOD_CTRL;
+        else if (strcmp(start, "RED_MOD_NO_MODS") == 0)
+            mods = 0;
         else
             return "invalid mod passed to add bind";
 
