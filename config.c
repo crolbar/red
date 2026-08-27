@@ -13,6 +13,9 @@
       RED_SOCKET:
           Set by the display server.
           Pointing to the unix socked path used by the ipc.
+      RED_PARENT_WAYLAND_DISPLAY:
+          Set by the display server.
+          Pointing to the parent display server that red is running in.
 
      CURSOR:
        Cursor image is set in the `red_cursor.c` file.
@@ -114,11 +117,6 @@ redconfig cfg = (redconfig){
             .mods = RED_MOD_SUPER | RED_MOD_ALT | RED_MOD_CTRL | RED_MOD_SHIFT,
             A( RED_ACTION_QUIT )
           },
-          {
-            .key = "R",
-            .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
-            A( RED_ACTION_STOP_RENDERER )
-          },
 
           /* TOPLEVEL CONTROL */
           {
@@ -144,30 +142,15 @@ redconfig cfg = (redconfig){
           { .key = "1", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "0" ) },
           { .key = "2", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "1" ) },
           { .key = "3", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "2" ) },
-          { .key = "4", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "3" ) },
-          { .key = "5", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "4" ) },
-          { .key = "6", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "5" ) },
-          { .key = "7", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "6" ) },
-          { .key = "8", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "7" ) },
-          { .key = "9", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "8" ) },
-          { .key = "0", .mods = RED_MOD_SUPER, A( RED_ACTION_FOCUS_N, "9" ) },
           {
             .key = "semicolon",
             .mods = RED_MOD_SUPER,
             A( RED_ACTION_OVERLAY_SURFACE )
           },
-          { .key = "L", .mods = RED_MOD_SUPER | RED_MOD_CTRL | RED_MOD_SHIFT, A( RED_ACTION_OVERLAY_SET_WIDTH, "+150" ) },
-          { .key = "H", .mods = RED_MOD_SUPER | RED_MOD_CTRL | RED_MOD_SHIFT, A( RED_ACTION_OVERLAY_SET_WIDTH, "-150" ) },
-          { .key = "J", .mods = RED_MOD_SUPER | RED_MOD_CTRL | RED_MOD_SHIFT, A( RED_ACTION_OVERLAY_SET_HEIGHT, "+150" ) },
-          { .key = "K", .mods = RED_MOD_SUPER | RED_MOD_CTRL | RED_MOD_SHIFT, A( RED_ACTION_OVERLAY_SET_HEIGHT, "-150" ) },
-          { .key = "l", .mods = RED_MOD_SUPER | RED_MOD_CTRL, A( RED_ACTION_OVERLAY_SET_X, "+50" ) },
-          { .key = "h", .mods = RED_MOD_SUPER | RED_MOD_CTRL, A( RED_ACTION_OVERLAY_SET_X, "-50" ) },
-          { .key = "j", .mods = RED_MOD_SUPER | RED_MOD_CTRL, A( RED_ACTION_OVERLAY_SET_Y, "+50" ) },
-          { .key = "k", .mods = RED_MOD_SUPER | RED_MOD_CTRL, A( RED_ACTION_OVERLAY_SET_Y, "-50" ) },
 
           /* SPAWNERS */
           {
-            .key = "x",
+            .key = "Return",
             .mods = RED_MOD_SUPER,
             A( RED_ACTION_SPAWN, "foot" )
           },
@@ -178,71 +161,6 @@ redconfig cfg = (redconfig){
             A( RED_ACTION_SPAWN, "fuzzel" )
           },
           {
-            .key = "XF86AudioPlay",
-            .mods = RED_MOD_NO_MODS,
-            A( RED_ACTION_SPAWN, "brokctl", "play-pause")
-          },
-          {
-            .key = "XF86AudioNext",
-            .mods = RED_MOD_NO_MODS,
-            A( RED_ACTION_SPAWN, "brokctl", "next")
-          },
-          {
-            .key = "XF86AudioPrev",
-            .mods = RED_MOD_NO_MODS,
-            A( RED_ACTION_SPAWN, "brokctl", "previous")
-          },
-          {
-            .key = "F11",
-            .mods = RED_MOD_SUPER | RED_MOD_SHIFT | RED_MOD_ALT,
-            A( RED_ACTION_SPAWN, "bash", "-c", "~/scripts/volume md")
-          },
-          {
-            .key = "F12",
-            .mods = RED_MOD_SUPER | RED_MOD_SHIFT | RED_MOD_ALT,
-            A( RED_ACTION_SPAWN, "bash", "-c", "~/scripts/volume mu")
-          },
-          {
-            .key = "F9",
-            .mods = RED_MOD_SUPER | RED_MOD_SHIFT | RED_MOD_ALT,
-            A( RED_ACTION_SPAWN, "bash", "-c", "~/scripts/volume bd")
-          },
-          {
-            .key = "F10",
-            .mods = RED_MOD_SUPER | RED_MOD_SHIFT | RED_MOD_ALT,
-            A( RED_ACTION_SPAWN, "bash", "-c", "~/scripts/volume bu")
-          },
-          {
-            .key = "X",
-            .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
-            A( RED_ACTION_SPAWN, "ghostty" )
-          },
-          {
-            .key = "s",
-            .mods = RED_MOD_SUPER,
-            A( RED_ACTION_SPAWN, "qs", "ipc", "call", "main", "toggle", "dashboard")
-          },
-          {
-            .key = "w",
-            .mods = RED_MOD_SUPER,
-            A( RED_ACTION_SPAWN, "qs", "ipc", "call", "main", "toggle", "bar")
-          },
-          {
-            .key = "Print",
-            .mods = RED_MOD_NO_MODS,
-            A( RED_ACTION_SPAWN, "bash", "-c", "grim -g \"$(slurp)\" - | wl-copy && wl-paste -n > ~/Screenshots/Screenshot-$(date +%F_%T).png | dunstify \"Screenshot of the region taken\" -t 1000")
-          },
-          {
-            .key = "Print",
-            .mods = RED_MOD_SHIFT,
-            A( RED_ACTION_SPAWN, "bash", "-c", "grim - | wl-copy && wl-paste -n > ~/Screenshots/Screenshot-$(date +%F_%T).png | dunstify \"Screenshot of whole screen taken\" -t 1000")
-          },
-          {
-            .key = "i",
-            .mods = RED_MOD_SUPER,
-            A( RED_ACTION_SPAWN, "zoomer")
-          },
-          {
             .key = "grave",
             .mods = RED_MOD_SUPER,
             A( RED_ACTION_SPAWN, "bash", "-c", "qs -c rt_switcher ipc call main toggle")
@@ -250,6 +168,11 @@ redconfig cfg = (redconfig){
 
 
 
+          {
+            .key = "R",
+            .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
+            A( RED_ACTION_STOP_RENDERER )
+          },
           {
             .key = "I",
             .mods = RED_MOD_SUPER | RED_MOD_SHIFT,
@@ -277,9 +200,7 @@ redconfig cfg = (redconfig){
     )
 
     AUTO_START(
-        PROG("bash", "-c", "dbus-update-activation-environment --systemd DISPLAY RED_SOCKET WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_ID"),
         PROG("bash", "-c", "xwayland-satellite :1"),
-        PROG("bash", "-c", "uwsm finalize"),
         PROG("bash", "-c", "qs -c rt_switcher"),
     )
 

@@ -31,6 +31,7 @@ init_backend(struct redstate* rs)
             free(bw);
             goto fail;
         }
+        setenv("RED_PARENT_WAYLAND_DISPLAY", wayland_display, 1);
     } else {
     drm_backend:
         rs->backend            = &backend_drm;
