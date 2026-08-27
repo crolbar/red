@@ -270,7 +270,7 @@ red_commit_handle_attach(struct redsurface* rsurf)
         rsurf->h = h;
 
         // TODO: no spaghetti please
-        if (rsurf->xdg_toplevel && rsurf->is_scaling) {
+        if (rsurf->is_scaling) {
             if (w > 0 && h > 0) {
                 uint32_t logic_w =
                   rsurf->rs->backend->get_width(rsurf->rs->backend->d) /
@@ -281,7 +281,10 @@ red_commit_handle_attach(struct redsurface* rsurf)
 
                 if ((uint32_t)w == logic_w || (uint32_t)h == logic_h) {
                     rsurf->is_scaling = 0;
-                    red_send_toplevel_configure(rsurf, 0, 0, 1, 1);
+                    if (rsurf->xdg_toplevel)
+                        red_send_toplevel_configure(rsurf, 0, 0, 1, 1);
+                    else if (rsurf->zwlr_layer_surface)
+                        red_send_zwlr_layer_configure(rsurf);
                 }
             }
         }
@@ -2951,8 +2954,6 @@ red_send_zwlr_layer_configure(struct redsurface* rsurf)
 {
     uint32_t serial = wl_display_next_serial(rsurf->rs->wl_display);
 
-    uint32_t rsurf_scale = red_get_scale(rsurf);
-
     uint32_t screen_width =
       rsurf->rs->backend->get_width(rsurf->rs->backend->d);
     uint32_t screen_height =
@@ -2961,8 +2962,10 @@ red_send_zwlr_layer_configure(struct redsurface* rsurf)
     uint32_t log_screen_width  = screen_width / cfg.screen_scale;
     uint32_t log_screen_height = screen_height / cfg.screen_scale;
 
-    screen_width /= rsurf_scale;
-    screen_height /= rsurf_scale;
+    if (rsurf->is_scaling) {
+        screen_width /= cfg.screen_scale;
+        screen_height /= cfg.screen_scale;
+    }
 
     int32_t x = 0;
     int32_t y = 0;
